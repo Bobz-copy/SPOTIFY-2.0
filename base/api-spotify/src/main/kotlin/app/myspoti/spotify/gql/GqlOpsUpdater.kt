@@ -34,14 +34,21 @@ class GqlOpsUpdater(private val http: OkHttpClient, private val cache: File) {
     suspend fun refresh(current: GqlOps): GqlOps? = withContext(Dispatchers.IO) {
         val html = get("https://open.spotify.com/")
         val build = script(html, "appServerConfig")?.let { (it["buildVersion"] as? JsonPrimitive)?.content }
-        val cachedBuild = runCatching { Bridge.json.parseToJsonElement(cache.readText()).jsonObject["buildVersion"]?.jsonPrimitive?.content }.getOrNull()
-        if (build != null && build == cachedBuild) return@withContext null
         val urls = LinkedHashSet<String>()
         BUNDLE.findAll(html).forEach { urls += it.value }
         script(html, "__CDN_FILE_URLS__")?.values?.forEach { v ->
             (v as? JsonPrimitive)?.content?.takeIf { it.endsWith(".js") && it.contains("/web-player/") }?.let(urls::add)
         }
         if (urls.isEmpty()) return@withContext null
+        // Without a parseable build id, the bundle set is the cache key: otherwise
+        // build == null never matches and every launch re-downloads every bundle.
+        val bundleKey = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(urls.sorted().joinToString("\n").toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val cached = runCatching { Bridge.json.parseToJsonElement(cache.readText()).jsonObject }.getOrNull()
+        val cachedBuild = cached?.get("buildVersion")?.jsonPrimitive?.content
+        if (build != null && build == cachedBuild) return@withContext null
+        if (build == null && bundleKey == cached?.get("bundleKey")?.jsonPrimitive?.content) return@withContext null
         val found = HashMap<String, String>()
         val gate = Semaphore(6)
         coroutineScope {
@@ -52,6 +59,7 @@ class GqlOpsUpdater(private val http: OkHttpClient, private val cache: File) {
         val merged = current.names.associateWith { current.hash(it) } + found
         val json = buildJsonObject {
             build?.let { put("buildVersion", it) }
+            put("bundleKey", bundleKey)
             putJsonObject("operations") { merged.forEach { (name, hash) -> putJsonObject(name) { put("hash", hash) } } }
         }
         cache.parentFile?.mkdirs()

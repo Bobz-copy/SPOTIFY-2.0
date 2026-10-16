@@ -58,6 +58,9 @@ Details for developers: [`base/api-spotify/README.md`](base/api-spotify/README.m
 
 - [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) (MIT) — the lossless resolving idea, its community backend protocol and the gated-session flow.
 - [Spotui](https://github.com/Spotui/Spotui) (GPL-3.0) — the Kotlin port of the resolver, the signed-session verification screen and the DASH-to-FLAC remux that Myspoti builds on.
+- [SpotiFLAC Mobile](https://github.com/zarzet/SpotiFLAC-Mobile) (MIT) and its [extensions](https://github.com/zarzet/SpotiFLAC-Extension) (Apache-2.0) — the signed download sessions and the Tidal / Qobuz download requests.
+
+Full notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Disclaimer
 

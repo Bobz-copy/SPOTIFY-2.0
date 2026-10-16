@@ -248,4 +248,5 @@
     <string name="quality_sheet_title">Qualità audio</string>
     <string name="quality_now">In riproduzione: %1$s</string>
     <string name="quality_now_unknown">Non ancora nota: avvia un brano</string>
+    <string name="spotiflac_verify_in_browser">Completa la verifica nella scheda del browser che si è aperta, poi torna qui.</string>
 </resources>

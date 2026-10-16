@@ -248,4 +248,5 @@
     <string name="quality_sheet_title">Sound quality</string>
     <string name="quality_now">Playing now: %1$s</string>
     <string name="quality_now_unknown">Not known yet: start a song</string>
+    <string name="spotiflac_verify_in_browser">Solve the check in the browser tab that opened, then come back here.</string>
 </resources>

@@ -248,4 +248,5 @@
     <string name="quality_sheet_title">Qualité du son</string>
     <string name="quality_now">En cours : %1$s</string>
     <string name="quality_now_unknown">Pas encore connue : lancez un titre</string>
+    <string name="spotiflac_verify_in_browser">Résolvez la vérification dans l\'onglet du navigateur qui s\'est ouvert, puis revenez ici.</string>
 </resources>

@@ -5,6 +5,8 @@ package com.music.spotui.lossless
  * tidal-web…), written from its protocol: the extension manifest's `signedSession`
  * block and the app's signed_session runtime (bootstrap → hosted challenge →
  * grant → exchange; ZARZ-HMAC-V1 signatures; download tickets).
+ * SpotiFLAC Mobile is MIT (Copyright (c) 2026 zarzet), its extensions Apache-2.0:
+ * see THIRD_PARTY_NOTICES.md.
  */
 
 import android.content.Context
@@ -35,6 +37,10 @@ internal object ZarzSession {
     private const val SCHEME = "ZARZ-HMAC-V1"
     private const val PREFIX = "X-Zarz-"
     private const val WINDOW_SECONDS = 300L
+    private const val USER_AGENT = "SpotiFLAC-Mobile/5.1.1"
+
+    /** The grant redirects the verification page sends back to the app (spotiflac://session-grant…). */
+    val grants = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     /** A challenge page to open (the user solves it), or null when a session came back directly. */
     class Bootstrap(val challengeUrl: String?, val state: String)
@@ -47,7 +53,9 @@ internal object ZarzSession {
 
     /** GET /bootstrap: a session right away, or the challenge to solve. */
     fun bootstrap(context: Context, ext: Ext, installId: String): Bootstrap {
-        val o = JSONObject(request("GET", "$BASE/bootstrap?app_version=${enc(ext.appVersion)}&install_id=${enc(installId)}", null, emptyMap()).second)
+        val (code, text) = request("GET", "$BASE/bootstrap?app_version=${enc(ext.appVersion)}&install_id=${enc(installId)}", null, emptyMap())
+        if (code !in 200..299) throw java.io.IOException("bootstrap HTTP $code: ${text.take(120)}")
+        val o = JSONObject(text)
         if (store(context, ext, installId, o)) return Bootstrap(null, "")
         val state = randomHex(16)
         val given = o.optString("auth_url").ifBlank { o.optString("challenge_url") }
@@ -146,7 +154,8 @@ internal object ZarzSession {
             connectTimeout = 15_000
             readTimeout = 30_000
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "SpotiFLAC-Mobile")
+            // The app's own form, "SpotiFLAC-Mobile/<version>": the bare name is refused (403).
+            setRequestProperty("User-Agent", USER_AGENT)
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
             if (body != null) doOutput = true
         }

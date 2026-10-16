@@ -96,6 +96,8 @@ dependencies {
     implementation(project(":host-android"))
     // Jam: scan the invite QR code (Google code scanner, no camera permission).
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    // The SpotiFLAC verification opens in a browser tab, as SpotiFLAC Mobile does.
+    implementation("androidx.browser:browser:1.8.0")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

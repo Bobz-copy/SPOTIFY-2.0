@@ -172,6 +172,11 @@ class MainActivity : AppCompatActivity() {
     /** Spotify links (open.spotify.com/...) play their item; voice search plays its best match. */
     private fun handle(intent: Intent?) {
         intent ?: return
+        // The SpotiFLAC verification's return (spotiflac://session-grant?grant=…&state=…).
+        if (intent.data?.scheme == "spotiflac" && intent.data?.host == "session-grant") {
+            com.music.spotui.lossless.ZarzSession.grants.tryEmit(intent.data.toString())
+            return
+        }
         when (intent.action) {
             Intent.ACTION_VIEW -> {
                 val uri = spotifyUri(intent.data?.toString() ?: return) ?: return

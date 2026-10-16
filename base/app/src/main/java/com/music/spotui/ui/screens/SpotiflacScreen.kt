@@ -5,12 +5,7 @@ package com.music.spotui.ui.screens
  * and adapted to Myspoti (own theme, strings, navigation).
  */
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import app.myspoti.engine.R
 import com.music.spotui.ui.theme.AppBackground
 import kotlinx.coroutines.Dispatchers
@@ -58,14 +52,12 @@ import kotlinx.coroutines.withContext
  *
  * The app only loads the page and catches the redirect. The session is what gives
  * the lossless (FLAC) downloads their most reliable source. With a session the
- * screen shows the status; without it the WebView verification runs.
+ * screen shows the status; without it the verification opens in a browser tab.
  */
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun SpotiflacScreen(onClose: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var webView by remember { mutableStateOf<WebView?>(null) }
     var attempt by remember { mutableStateOf(0) }
     // One session per download server (Tidal, then Qobuz); verified once none is missing.
     fun missing() = com.music.spotui.lossless.ZarzSession.Ext.entries
@@ -121,12 +113,31 @@ fun SpotiflacScreen(onClose: () -> Unit) {
             if (ext == null) { verified = true; done = true }
             return@LaunchedEffect
         }
-        message = ""
+        message = res(R.string.spotiflac_verify_in_browser)
         state = boot.state
-        webView?.loadUrl(boot.challengeUrl)
+        // A browser tab, as SpotiFLAC Mobile opens it: Cloudflare's check runs in a real browser,
+        // and the page hands the grant back through spotiflac://session-grant (ZarzSession.grants).
+        runCatching {
+            androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+                .launchUrl(context, android.net.Uri.parse(boot.challengeUrl))
+        }.onFailure {
+            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(boot.challengeUrl))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
         // Never leave the user on a page that silently stalled.
         delay(180_000)
         if (!done && !verified) message = res(R.string.spotiflac_verify_timeout)
+    }
+
+    // The grant coming back from the browser tab.
+    LaunchedEffect(Unit) {
+        com.music.spotui.lossless.ZarzSession.grants.collect { link ->
+            val uri = android.net.Uri.parse(link)
+            val grant = uri.getQueryParameter("grant").orEmpty()
+            if (state.isBlank() || uri.getQueryParameter("state") != state || grant.isBlank()) {
+                message = res(R.string.spotiflac_verify_rejected)
+            } else finish(grant)
+        }
     }
 
     if (verified) {
@@ -135,37 +146,6 @@ fun SpotiflacScreen(onClose: () -> Unit) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
-                .padding(top = 40.dp, bottom = 56.dp),
-            factory = { ctx ->
-                CookieManager.getInstance().setAcceptCookie(true)
-                WebView(ctx).apply {
-                    webView = this
-                    layoutParams = android.view.ViewGroup.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                            val uri = request.url
-                            if (!uri.toString().startsWith(CALLBACK)) return false
-                            val grant = uri.getQueryParameter("grant").orEmpty()
-                            if (uri.getQueryParameter("state") != state || grant.isBlank()) {
-                                message = res(R.string.spotiflac_verify_rejected)
-                            } else {
-                                finish(grant)
-                            }
-                            return true
-                        }
-                    }
-                }
-            },
-        )
-
         if (message.isNotEmpty()) {
             Text(
                 message,

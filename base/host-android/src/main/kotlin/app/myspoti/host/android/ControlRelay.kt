@@ -85,6 +85,7 @@ internal class ControlRelay(private val view: WebView) {
                     it.headers.names().forEach { name -> out.put(name, it.header(name)) }
                     val text = it.body.string()
                     android.util.Log.d(WebPlayerHost.LOG, "relay $method ${shortPath(url)} -> ${it.code}")
+                    if (it.code >= 400) android.util.Log.d(WebPlayerHost.LOG, "relay error body: ${text.take(400)}")
                     reply(id, it.code, out.toString(), text)
                 }
             }

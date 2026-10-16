@@ -30,7 +30,10 @@ The official Spotify Web Player runs in a hidden WebView and does the actual pla
 - **Your recap**: your top tracks, artists and albums, counting Spotify, downloads and local files. It stays on your phone.
 - Official music videos, when one exists. The video plays muted, in sync with the song. The app only uses YouTube videos marked as official clips, and shows nothing when no clip exists.
 - Spotify Connect, media notification, lock screen, Bluetooth and Android Auto.
-- **Offline downloads.** Download a song, an album, a playlist or your Liked Songs, then play them without a connection. The audio comes lossless (FLAC): the recording found on Tidal, Qobuz or Amazon, matched by its exact ISRC, and resolved by [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) — its own signed servers first, then the open community backends. Each file is checked against the recording's official preview (looked up by ISRC), so a live take, a remix or a cover is rejected, and against the FLAC header, so a 30-second preview is rejected too. Files stay in Myspoti's private storage; hi-res (24-bit) is an option.
+- **Offline downloads.** Download a song, an album, a playlist or your Liked Songs, then play them without a connection. The audio comes lossless (FLAC, 16-bit or 24-bit hi-res when it exists), or as Tidal's own AAC for the smallest files: the very recording, found on Tidal (or Qobuz) by its exact ISRC, through the same signed servers as [SpotiFLAC Mobile](https://github.com/zarzet/SpotiFLAC-Mobile)'s extensions, after a one-off verification in Settings. Each file is checked against the recording's official preview (looked up by ISRC), so a live take, a remix or a cover is rejected. Files stay in Myspoti's private storage.
+- **Sound quality and Settings.** Streaming quality (Automatic, Low, Normal, High) and download quality are picked at the first start and kept in one Settings page, with data saver, battery, display and language.
+- **Connect with your headphones.** Their name shows instead of "This phone", one tap sends the sound back to the speaker, and a quality badge shows what plays now. The music pauses when headphones or Bluetooth go away.
+- English, French and Italian.
 
 ## How it works
 

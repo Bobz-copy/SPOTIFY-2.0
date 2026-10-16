@@ -1,67 +1,28 @@
 # Changelog
 
-Each release on GitHub shows its section below. The app shows it too when it offers the update.
+Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
+
+## 2.0.0-beta.5
+
+- **Encrypted downloads**: downloaded songs only play in Myspoti, on your phone.
+- **Offline queue**: the queue of downloaded songs shows what really plays next, and can be edited.
+- **Downloaded songs are no longer reported to Spotify**: no more album starting over a downloaded song.
+- **In-app updates**: download and install without leaving the app.
+- **Jam QR scan** no longer crashes; a banner tells when downloads need the SpotiFLAC verification.
+- **Security and reliability fixes** (Android Auto, library pages, logout, links, video lookups).
 
 ## 2.0.0
 
 A new engine, written from scratch, and a cleaner app on top of it.
 
-- **Lossless downloads**: the offline downloads are now FLAC. Myspoti finds the same recording on a lossless service (Tidal, Qobuz or Amazon) by the track's ISRC and takes it as it is served, never re-encoded — 16-bit CD quality, **24-bit hi-res when it exists**, or AAC re-encoded on the phone to keep them small (in Settings). Tidal (and Qobuz) come through the same signed servers as SpotiFLAC Mobile's extensions, three songs at a time and three segments per song; the smallest quality takes Tidal's own AAC as it is served. A one-off verification in Settings turns them on. A track with no lossless recording anywhere is marked unavailable.
-- **Sound quality, chosen at the start**: a first step after sign-in picks the streaming quality (Automatic, Low 24 kbit/s, Normal 96, High 160) and the download quality (off, smallest AAC 96 kbit/s, FLAC CD, FLAC hi-res). Both stay in the new **Settings** page.
-- **Connect shows your headphones**: with Bluetooth or wired headphones, their name replaces "This phone", a "This phone" row sends the sound back to the speaker, and a Bluetooth button opens the pairing settings. The quality badge opens a small page with what plays now (codec and bitrate) and the setting.
-- **Downloads ask their quality** if you want ("Ask each time"): once for a whole playlist, kept for its new songs.
-- **Liked Songs update at once** after a like or an unlike, without reloading the whole list.
-- **No more "bop" between two songs** on the phone's speaker: the sound output stays awake across the change.
-- **Downloads are encrypted**: a downloaded song only plays in Myspoti, on the phone that downloaded it. Songs downloaded before are encrypted in the background.
-- **The queue of downloaded songs is the real one**: it shows what plays next, and moving, removing or skipping songs works offline.
-- **Downloaded songs stay on the phone**: they are no longer reported to Spotify, so playing one never makes the Web Player start the album over it. They count in Myspoti's own Recap.
-- **Downloads say when the SpotiFLAC verification is missing**, with a banner that opens it.
-- **Shorter debug logs**: the copied logs keep Myspoti's own lines and crashes only.
-- **Updates install in the app**: "Update" downloads the new version with a progress bar and hands it to Android's installer; no trip to GitHub. The first time, Android asks to allow installs from Myspoti.
-- **Haptics work again**: buttons, likes and the debug icon vibrate.
-- **Solid bottom bar** as an option in Settings, Display.
-- **Settings page**: sound quality, downloads, data and battery, display and language, in one place (profile menu or Library's account menu).
-- **Italian**: Myspoti's own texts are translated too.
-- **Headphones unplugged or Bluetooth gone**: the music pauses instead of moving to the phone's speaker.
-- **Stuck ads**: an ad that blocks the player is skipped twice, then the player reloads, so the music does not stop for good.
-- **Offline listens count**: a downloaded song that plays on the phone is reported to Spotify like a streamed listen — the real play time, the context it started from — so it counts in Wrapped and the top lists. Offline listens are kept and reported once the network is back.
-
-- **New engine**: the app now talks to Spotify through its own API (`:api`), tested against the real Web Player on every change. Screens load faster: catalog, search, playlists and library come straight from Spotify's servers, in parallel, without waiting for the hidden player.
-- **Playback works again on every phone**: Spotify silently ignored play commands sent by an Android WebView. They now leave from the app itself, so songs start and the sound plays.
-- **Faster start**: the home feed, your library and Liked Songs show at once after a restart, from the last visit, then refresh. The library and Liked Songs load in the background as soon as Spotify is ready.
-- **The player closes into the mini player**: pulled down, it uncovers the page you were on, with the mini player and the tabs already in place (no more grey area).
-- **Right music videos**: a fan upload (lyrics, sped up, audio) is no longer taken for the artist's clip, even when YouTube Music files it as official. When in doubt, no clip.
-- **Home screen widget** (4x1): the current song with previous, play / pause and next.
-- **Songs no longer skipped in a partly downloaded list**: some networks (VPN, private DNS) made the app think it was offline, so only the downloaded songs played (#10). Offline, a message now says how many songs of the list are downloaded.
-- The **Account** row in Your Library opens your Spotify account page (#7).
-- **Playback goes on with the screen off**: the app no longer leaves the foreground between two songs, so Android stops freezing it after the first song.
-- **Switching accounts works**: after a logout, signing in with another account shows that account, not the previous one.
-- **Sort by** in playlists and Liked Songs: title, artist, album or duration.
-- **Hearts show at once** in playlists: the liked songs were only checked after a tap (a playlist in the check made Spotify refuse it). Lists at the top of the library and the home shortcuts load before you open them.
-- **Setup screen** after signing in: notifications, local music, Bluetooth and unrestricted battery, each with its own button.
-- **Folders in Local Files**: choose the folders shown; WhatsApp, Telegram, recordings and ringtones start hidden.
-- **Lock screen and Now Bar**: play / pause in the middle (like, previous, play, next, shuffle) and a centred app icon.
-- **New icon**: one green wave line, on the launcher, the launch screen and the status bar.
-- **Beta and release install side by side**: betas are "Myspoti Beta", releases "Myspoti", each with its own updates.
-- **Music no longer stops after a few songs**: when the player gets stuck between two songs, the next one starts by itself, and the player reloads if that is not enough.
-- **Smart shuffle** in playlists and Liked Songs (tap shuffle twice): the list shuffled, with a Spotify recommendation every three songs.
-- **Sort by plays in that order**: a sorted playlist plays and queues in the order shown; **date added** joins the sort options.
-- **Saved in** shows your folders and the playlists' covers; a folder's menu creates a playlist inside it.
-- **Home loads again by itself** after an error, with a Try again button.
-- **Spotify account pages** open in the app's language when Spotify has them in it.
-- **Foldables and wide screens**: the player keeps its controls on screen.
-- **Spotify keeps working after its updates**: the app picks up the Web Player's new operations by itself when Spotify ships a new version.
-- **No ads**: the player tells Spotify it cannot play the ad audio formats, so an ad comes with nothing to play and the next song starts within a couple of seconds. Nothing false is reported to Spotify (no ad is ever marked as heard).
-- **Podcasts and audiobooks are back**: shows, episodes, chapters, **Your Episodes** in Your Library, and **playback speed** (from the song menu) for episodes.
-- **New releases** in Search: what the artists you follow just released, then the latest releases.
-- **Browse all** shows Spotify's real categories (pages of playlists and albums), not keyword searches.
-- **Jam** in the Connect sheet: join a Jam with an invite link, share and leave. Spotify keeps starting one to Premium accounts.
-- **Your recap** (profile menu): your top tracks, artists and albums over 30 days, 12 months or all time, counting Spotify, downloads and local files. It stays on the phone.
-- **Spotify account** (profile menu): the account pages (plan, privacy, devices) open in the app, already signed in.
-- **Song menu**: **Credits**, and **Exclude from your taste profile**.
-- **More lyrics sources** (lyrics settings): Apple Music word by word, NetEase and Genius, when Spotify has no lyrics.
-- **Fixes**: your top artists and tracks, the profile and new releases no longer fail when Spotify's public API limits the app; folders keep working after a rename; playlist details save reliably; the app language works on every Android version.
-- **Removed for now**: crossfade, and Spotify's own music videos inside the player (YouTube clips still play).
+- **No ads**, with a free account: the ad audio is refused and the next song starts.
+- **New engine**: faster screens, playback that works on every phone, Spotify updates picked up by themselves.
+- **Lossless downloads** (FLAC CD or hi-res, or small AAC), encrypted, with their own offline queue.
+- **Sound quality** for streaming and downloads, and a **Settings** page.
+- **Connect** shows your headphones; music pauses when they go away.
+- **Podcasts and audiobooks**, **Jam**, **New releases**, **Browse**, **Your recap**, **widget**.
+- **Library**: sort by title, artist, album, duration or date added; smart shuffle; folders.
+- **In-app updates**, **Italian**, new icon; beta and release install side by side.
 
 ## 1.1.1
 

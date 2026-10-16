@@ -72,3 +72,8 @@
 -dontwarn org.jsoup.**
 -dontwarn com.google.re2j.**
 -dontwarn jdk.dynalink.**
+
+# ML Kit (the Jam QR scanner) creates its component registrars by reflection: without their
+# no-argument constructors it fails to start and the scan crashes.
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
+-keep class com.google.mlkit.** { *; }

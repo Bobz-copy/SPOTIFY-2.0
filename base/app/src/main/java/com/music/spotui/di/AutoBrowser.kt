@@ -122,18 +122,30 @@ class ArtworkProvider : android.content.ContentProvider() {
         private val allowedHosts = setOf("i.scdn.co", "mosaic.scdn.co", "image-cdn-ak.spotifycdn.com", "image-cdn-fa.spotifycdn.com", "thisis-images.spotifycdn.com", "seeded-session-images.scdn.co", "pickasso.spotifycdn.com")
 
         fun uriFor(url: String?): Uri? {
-            if (url.isNullOrBlank()) return null
-            val host = Uri.parse(url).host ?: return null
-            if (host !in allowedHosts) return null
+            if (url.isNullOrBlank() || !allowed(url)) return null
             return Uri.Builder().scheme("content").authority(AUTHORITY).appendPath("img").appendQueryParameter("u", url).build()
+        }
+
+        /**
+         * Only https URLs on the CDN hosts: a `file:` URL whose authority happens to be
+         * an allowed host (`file://i.scdn.co/data/data/...`) must never reach Glide,
+         * which would open the local path and hand this app's private files to any caller
+         * (the provider is exported, for Android Auto).
+         */
+        private fun allowed(url: String): Boolean {
+            val u = Uri.parse(url)
+            return u.scheme == "https" && u.host in allowedHosts
         }
     }
 
     override fun openFile(uri: Uri, mode: String): android.os.ParcelFileDescriptor? {
         val url = uri.getQueryParameter("u") ?: return null
-        val host = Uri.parse(url).host ?: return null
-        if (host !in allowedHosts) return null
-        val file = com.bumptech.glide.Glide.with(context!!).asFile().load(url).submit().get()
+        if (!allowed(url)) return null
+        // Bounded: a binder thread must not wait on the network forever.
+        val file = runCatching {
+            com.bumptech.glide.Glide.with(context!!).asFile().load(url).submit()
+                .get(15, java.util.concurrent.TimeUnit.SECONDS)
+        }.getOrNull() ?: return null
         return android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
     }
 

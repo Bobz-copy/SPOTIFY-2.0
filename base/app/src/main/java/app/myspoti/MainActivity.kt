@@ -93,6 +93,14 @@ class MainActivity : AppCompatActivity() {
         handle(intent)
     }
 
+    override fun onDestroy() {
+        // The process-wide WebView lives in this activity's root while attached:
+        // detach it, or view.parent -> root keeps the destroyed activity (and its
+        // whole view tree) alive for the rest of the playback session.
+        MyspotiRuntime.host.detach()
+        super.onDestroy()
+    }
+
     /** Spotify's login page, full screen, until the Web Player comes back signed in. */
     private fun showLogin() {
         showingLogin = true

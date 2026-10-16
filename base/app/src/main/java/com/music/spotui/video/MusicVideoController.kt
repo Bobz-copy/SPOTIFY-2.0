@@ -535,6 +535,9 @@ object MusicVideoController {
 
     private var playerScreens = 0
 
+    /** A player screen is showing: the one place a clip lookup pays off unprompted. */
+    val hasPlayerScreen: Boolean get() = playerScreens > 0
+
     /** A composed player screen still requests clip lookup after an app switch. */
     @androidx.annotation.MainThread
     fun attachPlayerScreen() { playerScreens++ }

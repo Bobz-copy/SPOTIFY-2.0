@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -286,32 +287,53 @@ class PlaybackService : MediaBrowserServiceCompat() {
     // Media browser (Android Auto).
     override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot? {
         // The service is exported (Android Auto requires it), but the library —
-        // playlists, Liked Songs, search — is only for Auto, Assistant, System UI
-        // and the app itself, not for any installed app that binds. Returning null
-        // refuses the connection.
+        // playlists, Liked Songs, search — is only for Auto, Assistant, Bluetooth,
+        // Wear, System UI, other system apps and the app itself. Any other app
+        // gets an empty root: it can still connect and use the session's
+        // play/pause controls, but browsing and search return nothing.
         val packages = runCatching { packageManager.getPackagesForUid(clientUid)?.toList() }.getOrNull().orEmpty()
         if (clientPackageName != packageName && clientPackageName !in packages) return null
-        if (clientPackageName != packageName && clientPackageName !in ALLOWED_BROWSERS) {
-            android.util.Log.w("Myspoti", "media browser refused: $clientPackageName")
-            return null
+        if (!mayBrowse(clientPackageName)) {
+            android.util.Log.w("Myspoti", "media browser: empty root for $clientPackageName")
+            return BrowserRoot(EMPTY_ROOT_ID, null)
         }
         return BrowserRoot(ROOT_ID, Bundle().apply { putBoolean("android.media.browse.SEARCH_SUPPORTED", true) })
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
+        // A client may subscribe to any id, not only the root it was given:
+        // check the caller here too.
+        if (parentId == EMPTY_ROOT_ID || !callerMayBrowse()) return result.sendResult(mutableListOf())
         val lib = library ?: return result.sendResult(mutableListOf())
         result.detach()
         scope.launch { result.sendResult(runCatching { lib.children(this@PlaybackService, parentId).toMutableList() }.getOrElse { mutableListOf() }) }
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
+        if (!callerMayBrowse()) return result.sendResult(mutableListOf())
         val lib = library ?: return result.sendResult(mutableListOf())
         result.detach()
         scope.launch { result.sendResult(runCatching { lib.search(query).toMutableList() }.getOrElse { mutableListOf() }) }
     }
 
+    /** The app itself, the listed browsers, and system apps may browse the library. */
+    private fun mayBrowse(clientPackageName: String): Boolean {
+        if (clientPackageName == packageName || clientPackageName in ALLOWED_BROWSERS) return true
+        val flags = runCatching { packageManager.getApplicationInfo(clientPackageName, 0).flags }.getOrDefault(0)
+        return (flags and ApplicationInfo.FLAG_SYSTEM) != 0
+    }
+
+    /** Whether the client behind the current onLoadChildren/onSearch call may browse. */
+    private fun callerMayBrowse(): Boolean {
+        val caller = runCatching { currentBrowserInfo }.getOrNull() ?: return false
+        val packages = runCatching { packageManager.getPackagesForUid(caller.uid)?.toList() }.getOrNull().orEmpty()
+        return caller.packageName in packages && mayBrowse(caller.packageName)
+    }
+
     companion object {
         const val ROOT_ID = "root"
+        /** Root for callers that may control playback but not browse (see onGetRoot). */
+        private const val EMPTY_ROOT_ID = "empty"
         private const val CHANNEL_ID = "playback"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_LIKE = "like"
@@ -330,7 +352,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
             "com.google.android.googlequicksearchbox", // Google Assistant
             "com.google.android.carassistant",
             "com.android.systemui",
-            "android",
+            "com.android.bluetooth", // car stereos browsing over Bluetooth AVRCP
+            "com.google.android.wearable.app", // Wear OS
+            "com.android.car.media", // Android Automotive media center
         )
 
         /** Set once by the app. */

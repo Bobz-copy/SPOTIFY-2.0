@@ -17,4 +17,12 @@ class ZarzSignatureTest {
         assertEquals("tidal-web@1.2.5", h["X-Zarz-App-Version"])
         assertEquals("extension", h["X-Zarz-Platform"])
     }
+
+    @Test fun readsTheGrantWhereverTheReturnLinkPutsIt() {
+        assertEquals("g1" to "s1", ZarzSession.parseGrant("spotiflac://session-grant?cb_version=v2grant&state=s1&grant=g1"))
+        assertEquals("g2" to "s2", ZarzSession.parseGrant("spotiflac://session-grant?state=s2#grant=g2"))
+        assertEquals("g3" to "s3", ZarzSession.parseGrant("spotiflac://session-grant?code=g3&state=s3"))
+        assertEquals("g%4" to "s4", ZarzSession.parseGrant("spotiflac://session-grant?grant=g%254&state=s4"))
+        assertEquals(null, ZarzSession.parseGrant("spotiflac://session-grant?state=s5"))
+    }
 }

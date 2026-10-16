@@ -132,11 +132,10 @@ fun SpotiflacScreen(onClose: () -> Unit) {
     // The grant coming back from the browser tab.
     LaunchedEffect(Unit) {
         com.music.spotui.lossless.ZarzSession.grants.collect { link ->
-            val uri = android.net.Uri.parse(link)
-            val grant = uri.getQueryParameter("grant").orEmpty()
-            if (state.isBlank() || uri.getQueryParameter("state") != state || grant.isBlank()) {
+            val back = com.music.spotui.lossless.ZarzSession.parseGrant(link)
+            if (back == null || state.isBlank() || back.second != state) {
                 message = res(R.string.spotiflac_verify_rejected)
-            } else finish(grant)
+            } else finish(back.first)
         }
     }
 

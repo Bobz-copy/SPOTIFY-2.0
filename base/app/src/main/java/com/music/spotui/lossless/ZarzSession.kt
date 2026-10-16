@@ -37,7 +37,6 @@ internal object ZarzSession {
     private const val SCHEME = "ZARZ-HMAC-V1"
     private const val PREFIX = "X-Zarz-"
     private const val WINDOW_SECONDS = 300L
-    private const val USER_AGENT = "SpotiFLAC-Mobile/5.1.1"
 
     /** The grant redirects the verification page sends back to the app (spotiflac://session-grant…). */
     val grants = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
@@ -53,7 +52,7 @@ internal object ZarzSession {
 
     /** GET /bootstrap: a session right away, or the challenge to solve. */
     fun bootstrap(context: Context, ext: Ext, installId: String): Bootstrap {
-        val (code, text) = request("GET", "$BASE/bootstrap?app_version=${enc(ext.appVersion)}&install_id=${enc(installId)}", null, emptyMap())
+        val (code, text) = request(ext, "GET", "$BASE/bootstrap?app_version=${enc(ext.appVersion)}&install_id=${enc(installId)}", null, emptyMap())
         if (code !in 200..299) throw java.io.IOException("bootstrap HTTP $code: ${text.take(120)}")
         val o = JSONObject(text)
         if (store(context, ext, installId, o)) return Bootstrap(null, "")
@@ -72,7 +71,7 @@ internal object ZarzSession {
     fun exchange(context: Context, ext: Ext, installId: String, grant: String) {
         val body = JSONObject().put("grant", grant).put("install_id", installId)
             .put("app_version", ext.appVersion).put("platform", PLATFORM).toString()
-        val (code, text) = request("POST", "$BASE/session/exchange", body, mapOf("Content-Type" to "application/json"))
+        val (code, text) = request(ext, "POST", "$BASE/session/exchange", body, mapOf("Content-Type" to "application/json"))
         if (code !in 200..299 || !store(context, ext, installId, JSONObject(text))) throw java.io.IOException("session exchange failed: HTTP $code")
     }
 
@@ -119,7 +118,7 @@ internal object ZarzSession {
         val bytes = (body ?: "").toByteArray(Charsets.UTF_8)
         val headers = signHeaders(s.sessionId, s.sessionSecret, ext.appVersion, method, URL(url).path, bytes, System.currentTimeMillis(), randomHex(12)) +
             extra + (if (body != null) mapOf("Content-Type" to "application/json") else emptyMap())
-        return request(method, url, body, headers)
+        return request(ext, method, url, body, headers)
     }
 
     /** ZARZ-HMAC-V1: a key rolled every 5 minutes from the secret, then the request signed with it. */
@@ -148,14 +147,14 @@ internal object ZarzSession {
         return true
     }
 
-    private fun request(method: String, url: String, body: String?, headers: Map<String, String>): Pair<Int, String> {
+    private fun request(ext: Ext, method: String, url: String, body: String?, headers: Map<String, String>): Pair<Int, String> {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 15_000
             readTimeout = 30_000
             setRequestProperty("Accept", "application/json")
-            // The app's own form, "SpotiFLAC-Mobile/<version>": the bare name is refused (403).
-            setRequestProperty("User-Agent", USER_AGENT)
+            // As SpotiFLAC Mobile's runtime: "SpotiFLAC-Mobile/<extension version>" (the bare name gets 403).
+            setRequestProperty("User-Agent", "SpotiFLAC-Mobile/${ext.appVersion}")
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
             if (body != null) doOutput = true
         }
@@ -167,6 +166,28 @@ internal object ZarzSession {
         } finally {
             conn.disconnect()
         }
+    }
+
+    /**
+     * The grant and state of a verification return link, read as SpotiFLAC Mobile reads
+     * it: `grant` (or `code`) and `state` in the query, else anywhere in the link
+     * (fragment included), else in a nested `cb` link. Null when either is missing.
+     */
+    internal fun parseGrant(text: String): Pair<String, String>? {
+        val t = text.trim()
+        if (t.isEmpty()) return null
+        fun nonEmpty(v: String?) = v?.trim()?.takeIf { it.isNotEmpty() }
+        fun query(name: String): String? = Regex("[?&]" + name + "=([^&#]*)").find(t.substringBefore('#'))?.groupValues?.get(1)
+            ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+        var grant = nonEmpty(query("grant") ?: query("code"))
+        var state = nonEmpty(query("state"))
+        val nested = nonEmpty(query("cb"))
+        if (grant == null && nested != null) parseGrant(nested)?.let { return it }
+        fun anywhere(name: String): String? = Regex("(?:^|[?&#\\s])" + name + "=([^&#\\s]+)").find(t)?.groupValues?.get(1)
+            ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+        grant = nonEmpty(grant ?: anywhere("grant") ?: anywhere("code"))
+        state = nonEmpty(state ?: anywhere("state"))
+        return if (grant != null && state != null) grant to state else null
     }
 
     internal fun parseIso(value: String): Long? = runCatching {

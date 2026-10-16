@@ -36,7 +36,8 @@ object UpdateChecker {
                 if (!r.isSuccessful) return@runCatching null
                 val text = r.body.string()
                 val list = if (isBeta) org.json.JSONArray(text).let { a -> (0 until a.length()).map { a.getJSONObject(it) } } else listOf(JSONObject(text))
-                list.filter { !it.optBoolean("draft") }
+                // Betas and releases are two apps: each one is offered its own channel only.
+                list.filter { !it.optBoolean("draft") && (!isBeta || it.optBoolean("prerelease")) }
                     .map { Release(it.getString("tag_name").removePrefix("v"), it.getString("html_url"), cleanNotes(it.optString("body"))) }
                     .reduceOrNull { best, next -> if (isNewer(next.version, best.version)) next else best }
             }

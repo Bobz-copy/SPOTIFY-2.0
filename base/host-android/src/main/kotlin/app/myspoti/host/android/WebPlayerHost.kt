@@ -147,8 +147,10 @@ class WebPlayerHost(context: Context) : BridgeHost {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val host = request.url.host.orEmpty()
                 // Stay on Spotify's own pages (player, login, consent); open nothing else.
-                return !(host.endsWith("spotify.com") || host.endsWith("spotify.net") || host.endsWith("scdn.co") ||
-                    host.endsWith("google.com") || host.endsWith("facebook.com") || host.endsWith("apple.com"))
+                // Exact or subdomain match: "evilspotify.com" must not count as Spotify.
+                val allowed = listOf("spotify.com", "spotify.net", "scdn.co", "google.com", "facebook.com", "apple.com")
+                    .any { host == it || host.endsWith(".$it") }
+                return !allowed
             }
         }
     }

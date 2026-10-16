@@ -57,17 +57,18 @@ object SpotifySync {
     }
 
     /** Creates a playlist (and adds the track when given). */
-    fun createPlaylistWithTrack(context: Context, name: String, trackId: String, onDone: (Boolean) -> Unit = {}) {
+    fun createPlaylistWithTrack(context: Context, name: String, trackId: String, folderUri: String? = null, onDone: (Boolean) -> Unit = {}) {
         if (name.isBlank()) { onDone(false); return }
         scope.launch {
             val ok = runCatching {
-                val uri = api.playlists.create(name.trim())
+                val uri = api.playlists.create(name.trim(), folderUri)
                 if (trackId.isNotBlank()) {
                     api.playlists.addTracks(uri, listOf("spotify:track:$trackId"))
                     membershipCache[uri.substringAfterLast(':')] = ConcurrentHashMap.newKeySet<String>().apply { add(trackId) }
                 }
             }.onFailure { Log.w(TAG, "create playlist '$name' failed: ${it.message}") }.isSuccess
             Api.HomeCache.libraryRoot = null
+            folderUri?.let { Api.HomeCache.folders.remove(it) }
             onDone(ok)
         }
     }

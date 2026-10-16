@@ -62,8 +62,10 @@ internal class ControlRelay(private val view: WebView) {
         headers["User-Agent"] = WebPlayerHost.DESKTOP_UA
         headers["Origin"] = "https://open.spotify.com"
         headers["Referer"] = "https://open.spotify.com/"
+        // The player's registration leaves out the ad formats (see AdBlock).
+        val sent = if (body != null && app.myspoti.spotify.bridge.AdBlock.isDeviceRegistration(method, url)) app.myspoti.spotify.bridge.AdBlock.withoutAdFormats(body) else body
         // Bytes, not a String body: OkHttp would append "; charset=utf-8" to the content type.
-        val payload = if (method == "GET" || method == "HEAD") null else (body ?: "").toByteArray().toRequestBody(null)
+        val payload = if (method == "GET" || method == "HEAD") null else (sent ?: "").toByteArray().toRequestBody(null)
         val request = Request.Builder().url(url).headers(headers.build()).method(method, payload).build()
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {

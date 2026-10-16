@@ -24,6 +24,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -86,17 +89,22 @@ fun SavedInSheet(
     val membership = remember { mutableStateMapOf<String, Boolean>() }
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    // Folders opened so far (uri to name); the last one is shown.
+    val folders = remember { androidx.compose.runtime.mutableStateListOf<Pair<String, String>>() }
+    val folder = folders.lastOrNull()
 
-    LaunchedEffect(Unit) {
-        // Only playlists the user can change: theirs and collaborative ones.
-        playlists = com.music.spotui.data.api.EditablePlaylists.load()
+    LaunchedEffect(folder?.first) {
+        // Only playlists the user can change (theirs and collaborative ones), level by level.
+        playlists = null
+        playlists = com.music.spotui.data.api.EditablePlaylists.level(folder?.first)
     }
+    androidx.activity.compose.BackHandler(enabled = folders.isNotEmpty()) { folders.removeAt(folders.lastIndex) }
 
     fun createNow() {
         val name = newName.trim().ifBlank { context.getString(R.string.my_playlist) }
         creating = false
         newName = ""
-        SpotifySync.createPlaylistWithTrack(context, name, song.spotifyTrackId)
+        SpotifySync.createPlaylistWithTrack(context, name, song.spotifyTrackId, folderUri = folder?.first)
         onDismiss()
     }
 
@@ -113,7 +121,14 @@ fun SavedInSheet(
                     .fillMaxWidth()
                     .padding(20.dp, 4.dp, 20.dp, 12.dp),
             ) {
-                Text(stringResource(R.string.add_to_playlist_saved_in_section_header), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false)) {
+                    if (folder != null) Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White,
+                        modifier = Modifier.padding(end = 12.dp).size(24.dp).clickable { folders.removeAt(folders.lastIndex) },
+                    )
+                    Text(folder?.second ?: stringResource(R.string.add_to_playlist_saved_in_section_header), color = Color.White,
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 Text(
                     stringResource(R.string.add_to_playlist_new_playlist_button_text),
                     color = SpotifyGreen,
@@ -173,7 +188,7 @@ fun SavedInSheet(
             }
 
             // ── Liked Songs ──
-            SavedInRow(
+            if (folder == null) SavedInRow(
                 name = stringResource(R.string.collection_liked_songs_title),
                 subtitle = "",
                 saved = liked,
@@ -200,6 +215,12 @@ fun SavedInSheet(
                 else -> LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
                     items(list.size) { i ->
                         val pl = list[i]
+                        if (pl.isFolder) {
+                            FolderRow(pl.name, pluralStringResource(R.plurals.add_to_playlist_folder_subtitle_playlists_count, pl.trackCount, pl.trackCount.toString())) {
+                                folders.add(pl.folderUri!! to pl.name)
+                            }
+                            return@items
+                        }
                         // Resolve membership lazily (cached per session in SpotifySync).
                         LaunchedEffect(pl.id, song.spotifyTrackId) {
                             if (membership[pl.id] == null && song.spotifyTrackId.isNotBlank()) {
@@ -243,6 +264,26 @@ fun SavedInSheet(
             }
             Spacer(modifier = Modifier.padding(10.dp))
         }
+    }
+}
+
+@Composable
+private fun FolderRow(name: String, subtitle: String, onOpen: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 8.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF333333)),
+        ) {
+            Icon(Icons.Outlined.Folder, contentDescription = null, tint = Color(0xFFB3B3B3), modifier = Modifier.size(24.dp))
+        }
+        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+            Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color(0xFFB3B3B3))
     }
 }
 

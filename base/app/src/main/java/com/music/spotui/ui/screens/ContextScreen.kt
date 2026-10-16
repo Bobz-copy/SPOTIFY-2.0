@@ -77,6 +77,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.filled.AutoAwesome
+import app.myspoti.host.android.MyspotiRuntime
 
 private val SpotifyGreen: Color get() = com.music.spotui.ui.theme.AppAccent
 private val PageBackground: Color get() = com.music.spotui.ui.theme.AppBackground
@@ -198,7 +202,33 @@ class ContextViewModel(
         SongPlayer.setSaved(p.uri, on)
     }
 
-    fun play(p: ContextPageModel, song: SongsModel) {
+    /**
+     * Smart shuffle (Spotify keeps its own for Premium): the playlist shuffled, with one of
+     * Spotify's recommendations for it after every [SmartShuffle.EVERY] songs.
+     */
+    fun playSmart(p: ContextPageModel, first: SongsModel?) {
+        viewModelScope.launch {
+            val recs = withContext(Dispatchers.IO) {
+                runCatching { MyspotiRuntime.api.playlists.recommended(p.uri, limit = 20) }.getOrDefault(emptyList())
+            }.filter { r -> p.tracks.none { "spotify:track:${it.spotifyTrackId}" == r.uri } }.map(api::songOf)
+            val shuffled = p.tracks.shuffled().let { list -> first?.let { f -> listOf(f) + (list - f) } ?: list }
+            val mixed = ArrayList<SongsModel>()
+            val more = recs.iterator()
+            shuffled.forEachIndexed { i, s ->
+                mixed += s
+                if ((i + 1) % SmartShuffle.EVERY == 0 && more.hasNext()) mixed += more.next()
+            }
+            SmartShuffle.recommended.value = recs.map { it.spotifyTrackId }.toSet()
+            // Spotify's shuffle would mix the given order again.
+            SongPlayer.setShuffle(false); state.shuffle.value = false
+            state.updateQueue(mixed)
+            val start = mixed.first()
+            SongPlayer.playSong(start.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" })
+            state.updateSongState(start.coverUri, start.title, start.singer, true, start.id, 0, start.album)
+        }
+    }
+
+    fun play(p: ContextPageModel, song: SongsModel, sort: TrackSort = TrackSort.CUSTOM) {
         // No connection (the Web Player cannot stream), or the data saver on mobile data:
         // the page's downloaded songs play from the phone.
         val app = Graph.app
@@ -213,7 +243,10 @@ class ContextViewModel(
         }
         state.updateQueue(p.tracks)
         if (p.type == "liked") SongPlayer.registerLikedSongs(p.tracks.map { it.url })
-        SongPlayer.playSong(song.url, contextUri = p.uri)
+        // Sorted by the user: Spotify plays the list in that order, not the playlist's.
+        val order = if (sort == TrackSort.CUSTOM) null else sort.apply(p.tracks).map { "spotify:track:${it.spotifyTrackId}" }
+        if (order != null) state.updateQueue(sort.apply(p.tracks))
+        SongPlayer.playSong(song.url, contextUri = p.uri, order = order)
         state.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
     }
 }
@@ -401,22 +434,39 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                         }
                     }
                     Spacer(Modifier.weight(1f))
+                    val smart = SmartShuffle.on.value == p.uri
+                    Box {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_player_shuffle),
-                        contentDescription = stringResource(R.string.play_mode_item_shuffle_title),
-                        tint = if (shuffle) SpotifyGreen else Color.White.copy(alpha = 0.8f),
+                        contentDescription = stringResource(if (smart) R.string.smart_shuffle_title else R.string.play_mode_item_shuffle_title),
+                        tint = if (shuffle || smart) SpotifyGreen else Color.White.copy(alpha = 0.8f),
                         modifier = Modifier
                             .size(26.dp)
                             .drawWithContent {
                                 drawContent()
-                                if (shuffle) drawCircle(SpotifyGreen, radius = 2.dp.toPx(),
+                                if (shuffle || smart) drawCircle(SpotifyGreen, radius = 2.dp.toPx(),
                                     center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height + 7.dp.toPx()))
                             }
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
-                            ) { playerVm.updateShuffleState(!shuffle) },
+                            ) {
+                                when {
+                                    smart -> { SmartShuffle.on.value = null; playerVm.updateShuffleState(false) }
+                                    shuffle && p.type == "playlist" -> {
+                                        SmartShuffle.on.value = p.uri
+                                        android.widget.Toast.makeText(context, context.getString(R.string.smart_shuffle_on), android.widget.Toast.LENGTH_SHORT).show()
+                                        if (isThisContext) vm.playSmart(p, p.tracks.firstOrNull { it.id == currentSongId })
+                                    }
+                                    else -> playerVm.updateShuffleState(!shuffle)
+                                }
+                            },
                     )
+                    if (smart) Icon(
+                        androidx.compose.material.icons.Icons.Default.AutoAwesome, contentDescription = null, tint = SpotifyGreen,
+                        modifier = Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp).size(11.dp),
+                    )
+                    }
                     Spacer(Modifier.width(20.dp))
                     Box(
                         contentAlignment = Alignment.Center,
@@ -426,7 +476,8 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                                 when {
                                     isThisContext && playing -> SongPlayer.pause()
                                     isThisContext -> SongPlayer.play()
-                                    p.tracks.isNotEmpty() -> vm.play(p, if (shuffle) p.tracks.random() else p.tracks.first())
+                                    p.tracks.isNotEmpty() && SmartShuffle.on.value == p.uri -> vm.playSmart(p, null)
+                                    p.tracks.isNotEmpty() -> vm.play(p, if (shuffle) p.tracks.random() else sort.apply(p.tracks).first(), sort)
                                 }
                             }
                             .clip(CircleShape)
@@ -467,7 +518,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                 isCurrent = song.id == currentSongId,
                 saved = SongPlayer.library["spotify:track:${song.spotifyTrackId}"] ?: ("spotify:track:${song.spotifyTrackId}" in saved),
                 offline = com.music.spotui.data.offline.OfflineStore.statusOf(song.spotifyTrackId),
-                onClick = { vm.play(p, song) },
+                onClick = { if (SmartShuffle.on.value == p.uri) vm.playSmart(p, song) else vm.play(p, song, sort) },
                 onMore = { menuSong = song },
             ) }
         }
@@ -570,6 +621,14 @@ private fun LikedCover(modifier: Modifier) {
 
 
 /** "Sort by" for the songs of a playlist or Liked Songs; [CUSTOM] is Spotify's own order. */
+/** Smart shuffle, per playlist (uri), for this session. */
+object SmartShuffle {
+    const val EVERY = 3
+    val on = androidx.compose.runtime.mutableStateOf<String?>(null)
+    /** The recommendations mixed into the playing list. */
+    val recommended = androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet())
+}
+
 enum class TrackSort(val label: Int) {
     CUSTOM(R.string.your_library_sort_order_custom),
     TITLE(R.string.track_sort_title),

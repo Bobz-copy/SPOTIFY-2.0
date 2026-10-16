@@ -115,11 +115,16 @@ fun HomeScreen(navController: NavController){
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     when {
                         home is Response.Loading -> Loader(SkeletonKind.Home)
-                        else -> Text(
-                            text = if (home is Response.Error) stringResource(R.string.home_error) else stringResource(R.string.home_empty),
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                        )
+                        else -> androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (home is Response.Error) stringResource(R.string.home_error) else stringResource(R.string.home_empty),
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                            )
+                            if (home is Response.Error) androidx.compose.material3.TextButton(onClick = { homeViewModel.retry() }) {
+                                Text(stringResource(R.string.home_retry), color = Color(0xFF1DB954))
+                            }
+                        }
                     }
                 }
             }

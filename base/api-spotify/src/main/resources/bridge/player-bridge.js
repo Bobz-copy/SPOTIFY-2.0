@@ -188,7 +188,11 @@
       const extra = {};
       if (Object.keys(skipTo).length) extra.skipTo = skipTo;
       if (a.positionMs) extra.seekTo = a.positionMs;
-      return need().player.play({ uri: a.contextUri }, {}, extra);
+      // A given order (sorted playlist): the context plays as one page of those songs.
+      const context = Array.isArray(a.order) && a.order.length
+        ? { uri: a.contextUri, url: 'context://' + a.contextUri + '?order=' + Date.now(), pages: [{ items: a.order.map(uri => ({ uri })) }] }
+        : { uri: a.contextUri };
+      return need().player.play(context, {}, extra);
     },
     'player.pause': () => need().player.pause(),
     'player.resume': () => need().player.resume(),

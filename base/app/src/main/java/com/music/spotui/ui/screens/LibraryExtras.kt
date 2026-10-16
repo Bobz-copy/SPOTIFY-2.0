@@ -200,6 +200,7 @@ fun FolderScreen(navController: NavController, uri: String, initialName: String)
     var entries by remember { mutableStateOf<List<LibraryEntry>?>(null) }
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
+    var newPlaylist by remember { mutableStateOf(false) }
     var generation by remember { mutableStateOf(0) }
     LaunchedEffect(uri, generation) {
         withContext(Dispatchers.IO) {
@@ -208,7 +209,19 @@ fun FolderScreen(navController: NavController, uri: String, initialName: String)
     }
     if (menu) ModalBottomSheet(onDismissRequest = { menu = false }, containerColor = SheetColor) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+            SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_playlist_new_playlist_button_text)) { menu = false; newPlaylist = true }
             SheetRow(Icons.Outlined.Edit, stringResource(R.string.context_menu_rename_folder)) { menu = false; renaming = true }
+        }
+    }
+    // A Spotify playlist created straight inside this folder.
+    if (newPlaylist) NameDialog(stringResource(R.string.create_playlist_content_description), context.getString(R.string.my_playlist),
+        stringResource(R.string.create_playlist_create_button), onDismiss = { newPlaylist = false }) { playlistName ->
+        newPlaylist = false
+        SpotifySync.createPlaylistWithTrack(context, playlistName, "", folderUri = uri) { ok ->
+            scope.launch {
+                if (ok) generation++
+                else Toast.makeText(context, context.getString(R.string.playlist_change_refused), Toast.LENGTH_SHORT).show()
+            }
         }
     }
     if (renaming) NameDialog(stringResource(R.string.context_menu_rename_folder), name, stringResource(R.string.local_rename),

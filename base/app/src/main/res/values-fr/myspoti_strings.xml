@@ -37,6 +37,7 @@
     <string name="lyrics_fullscreen">Ouvrir les paroles en plein écran</string>
     <string name="browse_all">Parcourir tout</string>
     <string name="home_error">Impossible de charger l\'accueil.\nVérifie ta connexion et réessaie.</string>
+    <string name="home_retry">Réessayer</string>
     <string name="home_empty">Rien à afficher pour le moment.</string>
     <string name="spotify_account">Compte Spotify</string>
     <string name="spotify_user">Utilisateur Spotify</string>
@@ -185,4 +186,6 @@
     <string name="local_folders_button">Dossiers</string>
     <string name="local_folders_title">Dossiers</string>
     <string name="local_folders_detail">Choisis les dossiers affichés dans Fichiers locaux. Les applis de messagerie et les enregistrements sont masqués au départ.</string>
+    <string name="smart_shuffle_title">Lecture aléatoire intelligente</string>
+    <string name="smart_shuffle_on">Aléatoire intelligent : des recommandations Spotify se glissent dans la playlist mélangée.</string>
 </resources>

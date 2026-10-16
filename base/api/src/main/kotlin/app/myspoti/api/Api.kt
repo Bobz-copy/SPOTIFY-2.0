@@ -27,7 +27,11 @@ interface Player {
     val queue: StateFlow<Queue?>
 
     /** Plays [contextUri] (playlist, album, artist, show, collection...), starting at [trackUri] or [index] if given. */
-    suspend fun play(contextUri: Uri, trackUri: Uri? = null, index: Int? = null, positionMs: Long? = null)
+    /**
+     * Plays [contextUri] from [trackUri] (or [index]). With [order], the context's songs play
+     * in that order instead of the context's own (a sorted playlist).
+     */
+    suspend fun play(contextUri: Uri, trackUri: Uri? = null, index: Int? = null, positionMs: Long? = null, order: List<Uri>? = null)
     suspend fun pause()
     suspend fun resume()
     suspend fun seek(positionMs: Long)
@@ -124,7 +128,8 @@ interface Playlists {
     /** Playlists the user may add tracks to. */
     suspend fun editable(): List<Playlist>
 
-    suspend fun create(name: String): Uri
+    /** A new playlist at the top of the library, or at the top of [folderUri]. */
+    suspend fun create(name: String, folderUri: Uri? = null): Uri
     suspend fun rename(uri: Uri, name: String)
     suspend fun setDescription(uri: Uri, description: String)
     /** Removes the playlist from the library (owners: deletes it; it can be restored for 90 days). */

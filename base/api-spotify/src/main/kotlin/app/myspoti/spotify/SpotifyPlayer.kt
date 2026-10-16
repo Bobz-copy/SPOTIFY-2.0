@@ -11,6 +11,8 @@ import app.myspoti.spotify.bridge.Bridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -25,9 +27,14 @@ import kotlinx.serialization.json.putJsonArray
 /**
  * The Web Player's own player, driven through the bridge.
  *
- * Ads: hosts refuse the ad audio, so the page skips an ad within a second. If an ad item
- * still stays current longer than [AD_GRACE_MS] (new ad host, video ad), the next real
- * track is played. Ads are never exposed in [state].
+ * Ads: hosts refuse the ad audio they know. Such an ad then stays current, buffering at
+ * 0:00, and the page never moves on by itself: after [AD_STUCK_MS] the song after the last
+ * one is played. An ad that really plays is left to its end. [adPlaying] says an ad is on;
+ * ads are never exposed in [state] (the last song stays there, buffering).
+ *
+ * Stalls: on some phones the page stops between two songs (stuck past the end, paused at
+ * the end with a next song, buffering for ever). After [STUCK_MS] the next song is played;
+ * if that does not help either, [reloadHost] reloads the page and playback resumes there.
  */
 class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScope) : Player {
     private val _state = MutableStateFlow<PlayerState?>(null)
@@ -36,7 +43,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     override val queue: StateFlow<Queue?> = _queue
 
     private var lastTrackState: PlayerState? = null
-    private var adWatch: Job? = null
+    private val _adPlaying = MutableStateFlow(false)
+    /** An ad is playing (the page plays it to its end). */
+    val adPlaying: StateFlow<Boolean> = _adPlaying
+    @Volatile private var adSince = 0L
+    @Volatile private var adState: PlayerState? = null
+    @Volatile private var pausedByUserAt = 0L
+    /** The order given to the last [play] (context uri to songs), kept for a stall restart. */
+    @Volatile private var lastOrder: Pair<Uri, List<Uri>>? = null
+
+    /** Reloads the Web Player page (set by the host); used when a stalled player does not recover. */
+    @Volatile var reloadHost: (suspend () -> Unit)? = null
 
     init {
         scope.launch {
@@ -47,36 +64,90 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 }
             }
         }
+        scope.launch { watchStalls() }
+    }
+
+    private suspend fun watchStalls() {
+        var key: String? = null
+        var since = 0L
+        var attempts = 0
+        while (true) {
+            delay(WATCH_TICK_MS)
+            val s = _state.value
+            val now = System.currentTimeMillis()
+            if (_adPlaying.value) {
+                val ad = adState
+                // A refused ad sits at 0:00, buffering; a real one plays to its end.
+                val stuck = ad != null && (ad.isBuffering || ad.speed == 0.0) && now - adSince > AD_STUCK_MS
+                if (stuck || now - adSince > AD_BREAK_MAX_MS) {
+                    bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: playing the next song")
+                    lastTrackState?.let { runCatching { playOn(it) } }
+                    adSince = now
+                }
+                key = null
+                continue
+            }
+            val reason = s?.let { stallOf(it, now, pausedByUserAt) }
+            if (s == null || reason == null) { key = null; attempts = 0; continue }
+            val k = "${s.item?.uri}|$reason"
+            if (k != key) { key = k; since = now; attempts = 0; continue }
+            if (now - since < (if (reason == "past the end") END_STUCK_MS else STUCK_MS)) continue
+            since = now
+            attempts++
+            bridge.logger?.invoke("player stalled ($reason) on ${s.item?.name}, attempt $attempts")
+            if (attempts == 1) runCatching { playOn(s) }
+            else {
+                attempts = 0
+                val reload = reloadHost ?: continue
+                runCatching {
+                    reload()
+                    withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it } } ?: return@runCatching
+                    delay(1_500)
+                    playOn(s)
+                }
+            }
+        }
+    }
+
+    /** Plays the song after [s] (or [s] again when it is the last one) in its context. */
+    private suspend fun playOn(s: PlayerState) {
+        val ctx = s.contextUri
+        val target = s.next?.takeIf { it.kind == ItemKind.TRACK }?.uri
+            ?: _queue.value?.nextUp?.firstOrNull { it.kind == ItemKind.TRACK }?.uri
+        when {
+            ctx != null && target != null -> play(ctx, trackUri = target, order = lastOrder?.takeIf { it.first == ctx }?.second)
+            target != null -> next()
+            ctx != null -> play(ctx, trackUri = s.item?.uri)
+        }
     }
 
     private fun onState(s: PlayerState?) {
         if (s?.item?.kind == ItemKind.AD) {
-            // Keep showing the last real track, buffering, while the ad is being dropped.
+            // Keep showing the last real track, buffering, while the ad plays.
+            if (!_adPlaying.value) adSince = System.currentTimeMillis()
+            adState = s
+            _adPlaying.value = true
             _state.value = lastTrackState?.copy(isBuffering = true) ?: s.copy(item = null)
-            if (adWatch?.isActive != true) adWatch = scope.launch { skipAdIfStuck(s.contextUri) }
             return
         }
-        adWatch?.cancel()
+        _adPlaying.value = false
         lastTrackState = s
         _state.value = s
     }
 
-    private suspend fun skipAdIfStuck(contextUri: Uri?) {
-        delay(AD_GRACE_MS)
-        val next = _queue.value?.nextUp?.firstOrNull { it.kind == ItemKind.TRACK } ?: return
-        if (contextUri != null) runCatching { play(contextUri, trackUri = next.uri) }
-    }
 
-    override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?) {
+    override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?, order: List<Uri>?) {
+        lastOrder = order?.let { contextUri to it }
         bridge.call("player.play", buildJsonObject {
             put("contextUri", contextUri)
+            order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
             trackUri?.let { put("trackUri", it) }
             index?.let { put("index", it) }
             positionMs?.let { put("positionMs", it) }
         })
     }
 
-    override suspend fun pause() { bridge.call("player.pause") }
+    override suspend fun pause() { pausedByUserAt = System.currentTimeMillis(); bridge.call("player.pause") }
     override suspend fun resume() { bridge.call("player.resume") }
     override suspend fun seek(positionMs: Long) { bridge.call("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
     override suspend fun next() { bridge.call("player.next") }
@@ -138,6 +209,33 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     companion object {
-        const val AD_GRACE_MS = 1_000L
+        /** A refused ad left current that long: the page will not move on by itself. */
+        const val AD_STUCK_MS = 4_000L
+        /** Longer than any ad break: the page is stuck in it. */
+        const val AD_BREAK_MAX_MS = 4 * 60_000L
+        const val STUCK_MS = 8_000L
+        /** A song over with nothing after it: where an ad was left out. Next song quickly. */
+        const val END_STUCK_MS = 1_000L
+        private const val WATCH_TICK_MS = 2_000L
+        /** Buffering longer than this on one song is a stall, not a slow network. */
+        const val BUFFERING_STALL_MS = 25_000L
+
+        /**
+         * Why [s] looks stalled at [now], or null. A song is stalled when its clock ran past
+         * its end without a new song, when it paused itself at its end with a song after it,
+         * or while it buffers too long.
+         */
+        fun stallOf(s: PlayerState, now: Long, pausedByUserAt: Long): String? {
+            val item = s.item ?: return null
+            if (item.kind != ItemKind.TRACK || item.durationMs <= 0) return null
+            if (s.isPaused) {
+                val atEnd = s.positionMs >= item.durationMs - 2_000
+                val userPaused = now - pausedByUserAt < 20_000
+                return if (atEnd && s.next != null && !userPaused) "paused at the end" else null
+            }
+            if (s.isBuffering) return if (now - s.timestampMs > BUFFERING_STALL_MS - STUCK_MS) "buffering" else null
+            val clock = s.positionMs + ((now - s.timestampMs) * s.speed).toLong()
+            return if (clock > item.durationMs + 1_500) "past the end" else null
+        }
     }
 }

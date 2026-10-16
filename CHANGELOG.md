@@ -21,8 +21,15 @@ A new engine, written from scratch, and a cleaner app on top of it.
 - **Setup screen** after signing in: notifications, local music, Bluetooth and unrestricted battery, each with its own button.
 - **Folders in Local Files**: choose the folders shown; WhatsApp, Telegram, recordings and ringtones start hidden.
 - **Lock screen and Now Bar**: play / pause in the middle (like, previous, play, next, shuffle) and a centred app icon.
+- **Music no longer stops after a few songs**: when the player gets stuck between two songs, the next one starts by itself, and the player reloads if that is not enough.
+- **Smart shuffle** in playlists (tap shuffle twice): the playlist shuffled, with a Spotify recommendation every three songs.
+- **Sort by plays in that order**: a sorted playlist plays and queues in the order shown.
+- **Saved in** shows your folders and the playlists' covers; a folder's menu creates a playlist inside it.
+- **Home loads again by itself** after an error, with a Try again button.
+- **Spotify account pages** open in the app's language when Spotify has them in it.
+- **Foldables and wide screens**: the player keeps its controls on screen.
 - **Spotify keeps working after its updates**: the app picks up the Web Player's new operations by itself when Spotify ships a new version.
-- **No ads**: the ad audio is refused, so the player skips the ad within a second, and nothing false is reported to Spotify.
+- **No ads**: the player tells Spotify it cannot play the ad audio formats, so an ad comes with nothing to play and the next song starts within a couple of seconds. Nothing false is reported to Spotify (no ad is ever marked as heard).
 - **Podcasts and audiobooks are back**: shows, episodes, chapters, **Your Episodes** in Your Library, and **playback speed** (from the song menu) for episodes.
 - **New releases** in Search: what the artists you follow just released, then the latest releases.
 - **Browse all** shows Spotify's real categories (pages of playlists and albums), not keyword searches.

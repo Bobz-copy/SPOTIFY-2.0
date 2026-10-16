@@ -37,6 +37,7 @@
     <string name="lyrics_fullscreen">Open lyrics full screen</string>
     <string name="browse_all">Browse all</string>
     <string name="home_error">Couldn\'t load Home.\nCheck your connection and try again.</string>
+    <string name="home_retry">Try again</string>
     <string name="home_empty">Nothing to show yet.</string>
     <string name="spotify_account">Spotify account</string>
     <string name="spotify_user">Spotify user</string>
@@ -185,4 +186,6 @@
     <string name="local_folders_button">Folders</string>
     <string name="local_folders_title">Folders</string>
     <string name="local_folders_detail">Choose the folders shown in Local Files. Messaging apps and recordings start hidden.</string>
+    <string name="smart_shuffle_title">Smart shuffle</string>
+    <string name="smart_shuffle_on">Smart shuffle: Spotify recommendations join the shuffled playlist.</string>
 </resources>

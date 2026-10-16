@@ -25,6 +25,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +41,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -328,7 +328,11 @@ fun PlayerScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(28.dp))
             // Media area: artwork (swipe to change track) or the music video, with
             // Spotify's "Passer à la vidéo" pill over it (black, like the official app).
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+            // Square, but never taller than what the controls leave (foldables, landscape-ish
+            // screens): otherwise play / pause ends up under the lyrics card.
+            val screen = androidx.compose.ui.platform.LocalConfiguration.current
+            val artMax = (screen.screenHeightDp - PLAYER_CONTROLS_DP).coerceAtLeast(160).dp
+            Box(modifier = Modifier.widthIn(max = artMax).fillMaxWidth().aspectRatio(1f)) {
             if (showVideo) Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize(),
@@ -1219,3 +1223,6 @@ private fun CanvasVideo(url: String, playing: Boolean, modifier: Modifier = Modi
         },
     )
 }
+
+/** Height the player needs under the artwork: top bar, title, seek bar, controls, Connect row. */
+private const val PLAYER_CONTROLS_DP = 450

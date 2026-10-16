@@ -90,8 +90,14 @@ class CdpHost private constructor(private val socket: WebSocket, private val lis
                     if (params["name"]?.jsonPrimitive?.content == BINDING) messages.tryEmit(params["payload"]!!.jsonPrimitive.content)
                 "Fetch.requestPaused" -> {
                     val requestId = params["requestId"]!!.jsonPrimitive.content
-                    val url = params["request"]!!.jsonObject["url"]!!.jsonPrimitive.content
-                    val reply = if (AdBlock.isBlocked(url)) {
+                    val request = params["request"]!!.jsonObject
+                    val url = request["url"]!!.jsonPrimitive.content
+                    val method = request["method"]?.jsonPrimitive?.content ?: "GET"
+                    val post = request["postData"]?.jsonPrimitive?.content
+                    val reply = if (post != null && AdBlock.isDeviceRegistration(method, url)) {
+                        val body = java.util.Base64.getEncoder().encodeToString(AdBlock.withoutAdFormats(post).toByteArray())
+                        buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.continueRequest"); putJsonObject("params") { put("requestId", requestId); put("postData", body) } }
+                    } else if (AdBlock.isBlocked(url)) {
                         buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.failRequest"); putJsonObject("params") { put("requestId", requestId); put("errorReason", "BlockedByClient") } }
                     } else {
                         buildJsonObject { put("id", ids.incrementAndGet()); put("method", "Fetch.continueRequest"); putJsonObject("params") { put("requestId", requestId) } }
@@ -135,6 +141,7 @@ class CdpHost private constructor(private val socket: WebSocket, private val lis
             host.send("Fetch.enable", buildJsonObject {
                 put("patterns", buildJsonArray {
                     AdBlock.blockedHosts.forEach { h -> add(buildJsonObject { put("urlPattern", "*://$h/*") }) }
+                    add(buildJsonObject { put("urlPattern", "*/track-playback/v1/devices") })
                 })
             })
             return host

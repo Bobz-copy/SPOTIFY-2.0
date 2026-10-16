@@ -413,7 +413,8 @@ object SongPlayer {
      * Play [song] (a play key "spotify:track:<id>|<text>" or "episode:<id>"). [contextUri] is
      * the list it was picked from; when null, the last list that registered this track is used.
      */
-    fun playSong(song: String, context: Context? = null, contextUri: String? = null) {
+    /** [order]: the context's track uris in the order to play them (a sorted playlist). */
+    fun playSong(song: String, context: Context? = null, contextUri: String? = null, order: List<String>? = null) {
         // Data saver on mobile data: Spotify can't stream, only downloads and Local Files play.
         if (com.music.spotui.data.DataSaver.active) {
             main.post {
@@ -428,7 +429,7 @@ object SongPlayer {
         val ctx = contextUri ?: contextRegistry[song]
         markPending(if (episodeId != null) "" else trackId, itemUri)
         command {
-            if (ctx != null) api.player.play(ctx, trackUri = itemUri)
+            if (ctx != null) api.player.play(ctx, trackUri = itemUri, order = order?.takeIf { ctx == contextUri })
             else api.player.play(itemUri)
         }
     }

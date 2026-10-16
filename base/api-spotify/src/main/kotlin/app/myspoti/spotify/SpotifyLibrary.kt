@@ -196,8 +196,10 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
         return mine().filter { it.editable || (me != null && it.owner == me) }
     }
 
-    override suspend fun create(name: String): Uri {
-        val r = bridge.service("RootlistAPI", "createPlaylist", JsonPrimitive(name), json(mapOf("before" to "start")))
+    override suspend fun create(name: String, folderUri: Uri?): Uri {
+        // "After the folder" is the first place inside it.
+        val where = if (folderUri != null) json(mapOf("after" to mapOf("uri" to folderUri))) else json(mapOf("before" to "start"))
+        val r = bridge.service("RootlistAPI", "createPlaylist", JsonPrimitive(name), where)
         return r.str("uri") ?: (r as? JsonPrimitive)?.content ?: throw GqlException("createPlaylist", "no uri")
     }
 

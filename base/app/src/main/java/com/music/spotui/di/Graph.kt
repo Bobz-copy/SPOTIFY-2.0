@@ -1,0 +1,34 @@
+package com.music.spotui.di
+
+import android.app.Application
+import app.myspoti.host.android.MyspotiRuntime
+import com.music.spotui.data.api.Api
+import com.music.spotui.ui.repository.AppRepository
+
+/** Manual replacement for Spotui's Hilt graph: app-wide singletons. */
+object Graph {
+    lateinit var app: Application
+        private set
+
+    fun init(application: Application) {
+        app = application
+        // The Spotify session: hidden Web Player + API (operation hashes refresh themselves).
+        MyspotiRuntime.start(application)
+        com.music.spotui.data.local.ListenHistory.init(application)
+        // Downloaded songs (private storage), and the downloads left unfinished last time.
+        // Supporter thank-yous (accent colour) before any screen draws.
+        com.music.spotui.data.api.SupportReminder.init(application)
+        com.music.spotui.data.offline.OfflineStore.init(application)
+        com.music.spotui.data.offline.OfflineCollections.init(application)
+        com.music.spotui.data.offline.OfflineCollections.refreshAll(application)
+        com.music.spotui.data.local.LocalPlaylists.init(application)
+        com.music.spotui.data.local.LibraryOrder.init(application)
+        com.music.spotui.data.DataSaver.init(application)
+        runCatching { com.music.spotui.data.DataSaverGlide.install(application) }
+        com.music.spotui.data.offline.OfflineDownloader.resumePending()
+    }
+
+    val api: Api by lazy { Api(app) }
+    val repository: AppRepository by lazy { AppRepository(api) }
+    val currentSongState: CurrentSongState by lazy { CurrentSongState() }
+}

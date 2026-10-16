@@ -1,0 +1,249 @@
+package app.myspoti.spotify
+
+import app.myspoti.api.Image
+import app.myspoti.api.Library
+import app.myspoti.api.LibraryFilter
+import app.myspoti.api.LibraryItem
+import app.myspoti.api.LibrarySort
+import app.myspoti.api.MediaKind
+import app.myspoti.api.Page
+import app.myspoti.api.Playlist
+import app.myspoti.api.Playlists
+import app.myspoti.api.SavedTrack
+import app.myspoti.api.Track
+import app.myspoti.api.Uri
+import app.myspoti.spotify.bridge.Bridge
+import app.myspoti.spotify.bridge.service
+import app.myspoti.spotify.gql.Gql
+import app.myspoti.spotify.gql.GqlException
+import app.myspoti.spotify.gql.SpotifyHttp
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonPrimitive
+
+private fun uris(list: List<Uri>) = json(mapOf("uris" to list))
+
+class SpotifyLibrary(private val bridge: Bridge, private val gql: Gql) : Library {
+    private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+    override val changes: SharedFlow<Unit> = _changes
+    private fun changed() { _changes.tryEmit(Unit) }
+
+    override suspend fun contains(uris: List<Uri>): List<Boolean> =
+        (bridge.call("library.contains", uris(uris) as kotlinx.serialization.json.JsonObject) as JsonArray).map { it.jsonPrimitive.boolean }
+
+    override suspend fun add(uris: List<Uri>) {
+        bridge.call("library.add", uris(uris) as kotlinx.serialization.json.JsonObject); changed()
+    }
+
+    override suspend fun remove(uris: List<Uri>) {
+        bridge.call("library.remove", uris(uris) as kotlinx.serialization.json.JsonObject); changed()
+    }
+
+    override suspend fun items(filter: LibraryFilter, sort: LibrarySort, folderUri: Uri?, offset: Int, limit: Int): Page<LibraryItem> {
+        val lib = gql.query("libraryV3", vars(
+            "filters" to listOfNotNull(filter.id),
+            "order" to sort.id,
+            "textFilter" to "",
+            "features" to listOf("LIKED_SONGS", "YOUR_EPISODES_V2", "PRERELEASES", "PRERELEASES_V2", "CLIPS", "EVENTS"),
+            "limit" to limit, "offset" to offset,
+            "flatten" to false, "expandedFolders" to emptyList<String>(),
+            "folderUri" to folderUri, "includeFoldersWhenFlattening" to true,
+        )).entity("data.me.libraryV3", "libraryV3")
+        val items = lib.list("items").mapNotNull { row ->
+            val c = card(row.at("item")) ?: return@mapNotNull null
+            val d = row.at("item.data")
+            val kind = if (d.typename() == "Folder") MediaKind.FOLDER else c.kind
+            LibraryItem(
+                uri = if (kind == MediaKind.FOLDER) stableFolderUri(c.uri) else c.uri, kind = kind, name = c.title, subtitle = c.subtitle, images = c.images,
+                pinned = row.bool("pinned") ?: false, addedAt = row.str("addedAt.isoString"),
+                count = d.int("playlistCount")?.plus(d.int("folderCount") ?: 0) ?: d.int("count"),
+            )
+        }
+        val total = lib.int("totalCount") ?: items.size
+        return Page(items, offset, total, (offset + items.size).takeIf { items.isNotEmpty() && it < total })
+    }
+
+    override suspend fun likedTracks(offset: Int, limit: Int): Page<SavedTrack> {
+        val page = gql.query("fetchLibraryTracks", vars("offset" to offset, "limit" to limit)).at("data.me.library.tracks")
+        val items = page.list("items").mapNotNull { row ->
+            val data = row.at("track.data")
+            val withUri = if (data.str("uri") == null) row.str("track._uri")?.let { u ->
+                kotlinx.serialization.json.JsonObject((data as kotlinx.serialization.json.JsonObject) + ("uri" to JsonPrimitive(u)))
+            } else data
+            track(withUri)?.let { SavedTrack(it, row.str("addedAt.isoString")) }
+        }
+        val total = page.int("totalCount") ?: items.size
+        return Page(items, offset, total, (offset + items.size).takeIf { items.isNotEmpty() && it < total })
+    }
+
+    override suspend fun pin(uri: Uri) { gql.query("pinLibraryItem", vars("pinnableItemUri" to uri)); changed() }
+    override suspend fun unpin(uri: Uri) { gql.query("unpinLibraryItem", vars("pinnableItemUri" to uri)); changed() }
+
+    /**
+     * Folders have two uri forms: `…:folder:{hash}` (stable, used by the library list and this API)
+     * and `…:folder:{hash}:{name}` in the rootlist, which changes on rename. Writes need the latter.
+     */
+    private fun stableFolderUri(uri: Uri): Uri {
+        val i = uri.indexOf(":folder:")
+        if (i < 0) return uri
+        val rest = uri.substring(i + ":folder:".length)
+        return uri.substring(0, i) + ":folder:" + rest.substringBefore(':')
+    }
+
+    private suspend fun rootlistFolderUri(uri: Uri): Uri {
+        val stable = stableFolderUri(uri)
+        fun find(items: List<JsonElement>): Uri? {
+            for (item in items) {
+                if (item.str("type") != "folder") continue
+                val u = item.str("uri") ?: continue
+                if (stableFolderUri(u) == stable) return u
+                find(item.list("items"))?.let { return it }
+            }
+            return null
+        }
+        return find(bridge.service("RootlistAPI", "getContents").list("items")) ?: throw GqlException("folder", "no folder $stable")
+    }
+
+    override suspend fun createFolder(name: String, parentFolderUri: Uri?): Uri {
+        val r = bridge.service("RootlistAPI", "createFolder", JsonPrimitive(name), json(mapOf("before" to "start")))
+        val uri = stableFolderUri(r.str("uri") ?: throw GqlException("createFolder", "no uri"))
+        if (parentFolderUri != null) moveToFolder(uri, parentFolderUri)
+        changed()
+        return uri
+    }
+
+    override suspend fun renameFolder(folderUri: Uri, name: String) {
+        bridge.service("RootlistAPI", "renameFolder", json(mapOf("uri" to rootlistFolderUri(folderUri))), JsonPrimitive(name)); changed()
+    }
+
+    override suspend fun deleteFolder(folderUri: Uri) {
+        bridge.service("RootlistAPI", "removeFolder", JsonPrimitive(rootlistFolderUri(folderUri))); changed()
+    }
+
+    /** Right after a folder's start marker is inside the folder; "start" is the top level. */
+    override suspend fun moveToFolder(uri: Uri, folderUri: Uri?) {
+        val to = json(folderUri?.let { mapOf("after" to mapOf("uri" to rootlistFolderUri(it))) } ?: mapOf("before" to "start"))
+        if (":folder:" in uri) bridge.service("RootlistAPI", "moveFolder", json(mapOf("uri" to rootlistFolderUri(uri))), to)
+        else bridge.service("RootlistAPI", "move", json(listOf(mapOf("uri" to uri))), to)
+        changed()
+    }
+}
+
+class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private val http: SpotifyHttp) : Playlists {
+    override suspend fun playlist(uri: Uri): Playlist =
+        playlist(gql.query("fetchPlaylist", vars(
+            "uri" to uri, "offset" to 0, "limit" to 1, "enableWatchFeedEntrypoint" to false, "includeEpisodeContentRatingsV2" to true,
+        )).entity("data.playlistV2", "fetchPlaylist")) ?: throw GqlException("fetchPlaylist", "bad playlist")
+
+    override suspend fun tracks(uri: Uri, offset: Int, limit: Int): Page<Track> {
+        val p = gql.query("fetchPlaylistContents", vars(
+            "uri" to uri, "offset" to offset, "limit" to limit, "includeEpisodeContentRatingsV2" to true,
+        )).entity("data.playlistV2", "fetchPlaylistContents")
+        val content = p.at("content")
+        val items = content.list("items").mapNotNull { track(it.at("itemV2.data"), it.str("uid")) }
+        val total = content.int("totalCount") ?: items.size
+        return Page(items, offset, total, (offset + limit).takeIf { it < total })
+    }
+
+    private fun rootPlaylists(root: JsonElement): List<Playlist> {
+        val out = mutableListOf<Playlist>()
+        fun walk(items: List<JsonElement>) {
+            for (item in items) when (item.str("type")) {
+                "folder" -> walk(item.list("items"))
+                else -> item.str("uri")?.takeIf { it.startsWith("spotify:playlist:") }?.let { uri ->
+                    out += Playlist(
+                        uri = uri,
+                        name = item.str("name") ?: "",
+                        description = item.str("description")?.ifBlank { null },
+                        owner = item.str("owner.displayName") ?: item.str("owner.name"),
+                        images = item.list("images").mapNotNull { i -> i.str("url")?.let { Image(it, i.int("width"), i.int("height")) } },
+                        trackCount = item.int("totalLength") ?: 0,
+                        editable = item.bool("isOwnedBySelf") ?: item.bool("canAdd") ?: false,
+                    )
+                }
+            }
+        }
+        walk(root.list("items"))
+        return out
+    }
+
+    override suspend fun mine(): List<Playlist> = rootPlaylists(bridge.service("RootlistAPI", "getContents"))
+
+    override suspend fun editable(): List<Playlist> {
+        val me = bridge.service("UserAPI", "getUser").str("username")
+        return mine().filter { it.editable || (me != null && it.owner == me) }
+    }
+
+    override suspend fun create(name: String): Uri {
+        val r = bridge.service("RootlistAPI", "createPlaylist", JsonPrimitive(name), json(mapOf("before" to "start")))
+        return r.str("uri") ?: (r as? JsonPrimitive)?.content ?: throw GqlException("createPlaylist", "no uri")
+    }
+
+    override suspend fun rename(uri: Uri, name: String) = updateDetails(uri, "name", name)
+
+    override suspend fun setDescription(uri: Uri, description: String) = updateDetails(uri, "description", description)
+
+    /** Two updates sent back to back can lose the second one: check it landed, and resend once. */
+    private suspend fun updateDetails(uri: Uri, field: String, value: String) {
+        repeat(2) {
+            bridge.service("PlaylistAPI", "updateDetails", JsonPrimitive(uri), json(mapOf(field to value)))
+            repeat(10) {
+                if (bridge.service("PlaylistAPI", "getMetadata", JsonPrimitive(uri)).str(field) == value) return
+                kotlinx.coroutines.delay(300)
+            }
+        }
+        throw GqlException("updateDetails", "$field not applied")
+    }
+
+    override suspend fun delete(uri: Uri) = unfollow(uri)
+
+    override suspend fun follow(uri: Uri) {
+        bridge.service("RootlistAPI", "add", json(listOf(uri)), json(mapOf("before" to "start")))
+    }
+
+    override suspend fun unfollow(uri: Uri) {
+        bridge.service("RootlistAPI", "remove", json(listOf(mapOf("uri" to uri))))
+    }
+
+    override suspend fun addTracks(uri: Uri, trackUris: List<Uri>) {
+        gql.query("addToPlaylist", vars(
+            "playlistItemUris" to trackUris, "playlistUri" to uri,
+            "newPosition" to mapOf("moveType" to "BOTTOM_OF_PLAYLIST", "fromUid" to null),
+        ))
+    }
+
+    override suspend fun removeTracks(uri: Uri, uids: List<String>) {
+        gql.query("removeFromPlaylist", vars("playlistUri" to uri, "uids" to uids))
+    }
+
+    override suspend fun moveTracks(uri: Uri, uids: List<String>, beforeUid: String?) {
+        val position = if (beforeUid == null) mapOf("moveType" to "BOTTOM_OF_PLAYLIST", "fromUid" to null)
+        else mapOf("moveType" to "BEFORE_UID", "fromUid" to beforeUid)
+        gql.query("moveItemsInPlaylist", vars("playlistUri" to uri, "uids" to uids, "newPosition" to position))
+    }
+
+    /** The "Recommended songs" list under an own playlist (playlistextender). */
+    override suspend fun recommended(uri: Uri, limit: Int): List<Track> {
+        val body = json(mapOf("playlistURI" to uri, "trackSkipIDs" to emptyList<String>(), "numResults" to limit)).toString()
+        val (code, text) = http.send("POST", "https://spclient.wg.spotify.com/playlistextender/extendp/", body, contentType = "application/json")
+        if (code != 200) throw app.myspoti.spotify.gql.HttpException(code, text.take(200))
+        return Bridge.json.parseToJsonElement(text).list("recommendedTracks").mapNotNull { t ->
+            val uri = t.str("originalId") ?: t.str("id")?.let { "spotify:track:$it" } ?: return@mapNotNull null
+            Track(
+                uri = uri,
+                name = t.str("name") ?: "",
+                durationMs = t.long("duration") ?: 0,
+                artists = t.list("artists").mapNotNull { a -> a.str("id")?.let { app.myspoti.api.ArtistRef("spotify:artist:$it", a.str("name") ?: "") } },
+                album = t.obj("album")?.let { a ->
+                    app.myspoti.api.AlbumRef("spotify:album:" + (a.str("id") ?: ""), a.str("name") ?: "",
+                        listOfNotNull(a.str("largeImageUrl")?.let { Image(it, 640, 640) }, a.str("imageUrl")?.let { Image(it, 300, 300) }))
+                },
+                explicit = t.bool("explicit") ?: false,
+            )
+        }
+    }
+}

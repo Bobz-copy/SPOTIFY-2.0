@@ -71,7 +71,8 @@ class SpotifyLibrary(private val bridge: Bridge, private val gql: Gql) : Library
             "flatten" to false, "expandedFolders" to emptyList<String>(),
             "folderUri" to folderUri, "includeFoldersWhenFlattening" to true,
         )).entity("data.me.libraryV3", "libraryV3")
-        val items = lib.list("items").mapNotNull { row ->
+        val rows = lib.list("items")
+        val items = rows.mapNotNull { row ->
             val c = card(row.at("item")) ?: return@mapNotNull null
             val d = row.at("item.data")
             val kind = if (d.typename() == "Folder") MediaKind.FOLDER else c.kind
@@ -82,12 +83,15 @@ class SpotifyLibrary(private val bridge: Bridge, private val gql: Gql) : Library
             )
         }
         val total = lib.int("totalCount") ?: items.size
-        return Page(items, offset, total, (offset + items.size).takeIf { items.isNotEmpty() && it < total })
+        // Advance by the raw row count: rows that do not map (unknown kinds) still
+        // occupy positions, or the next page overlaps and rows repeat.
+        return Page(items, offset, total, (offset + rows.size).takeIf { rows.isNotEmpty() && it < total })
     }
 
     override suspend fun likedTracks(offset: Int, limit: Int): Page<SavedTrack> {
         val page = gql.query("fetchLibraryTracks", vars("offset" to offset, "limit" to limit)).at("data.me.library.tracks")
-        val items = page.list("items").mapNotNull { row ->
+        val rows = page.list("items")
+        val items = rows.mapNotNull { row ->
             val data = row.at("track.data")
             val withUri = if (data.str("uri") == null) row.str("track._uri")?.let { u ->
                 kotlinx.serialization.json.JsonObject((data as kotlinx.serialization.json.JsonObject) + ("uri" to JsonPrimitive(u)))
@@ -95,7 +99,7 @@ class SpotifyLibrary(private val bridge: Bridge, private val gql: Gql) : Library
             track(withUri)?.let { SavedTrack(it, row.str("addedAt.isoString")) }
         }
         val total = page.int("totalCount") ?: items.size
-        return Page(items, offset, total, (offset + items.size).takeIf { items.isNotEmpty() && it < total })
+        return Page(items, offset, total, (offset + rows.size).takeIf { rows.isNotEmpty() && it < total })
     }
 
     override suspend fun pin(uri: Uri) { gql.query("pinLibraryItem", vars("pinnableItemUri" to uri)); changed() }

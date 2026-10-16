@@ -164,6 +164,17 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel, facet: St
         else feed.sections.map { s -> s.copy(items = s.items.filterNot { it is HomeItem.Show }) }.filter { it.items.isNotEmpty() }
     val gridSection = sections.firstOrNull()?.takeIf { it.title.isBlank() }
     val carousels = if (gridSection != null) sections.drop(1) else sections
+    // The shortcuts at the top load in the background, ready before a tap.
+    androidx.compose.runtime.LaunchedEffect(gridSection?.items?.map { it.name }) {
+        val top = gridSection?.items.orEmpty().take(8).mapNotNull { item ->
+            when (item) {
+                is HomeItem.Album -> item.id.takeIf { it.isNotBlank() }?.let { "album" to it }
+                is HomeItem.Playlist -> item.id.takeIf { it.isNotBlank() }?.let { "playlist" to it }
+                else -> null
+            }
+        }
+        if (top.isNotEmpty()) ContextViewModel.prefetchSoon(top)
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(bottom = 130.dp),

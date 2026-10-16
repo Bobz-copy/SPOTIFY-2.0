@@ -96,6 +96,18 @@ class ContextViewModel(
         private val inflight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Unit>>()
         private val prefetchScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
+        /** Pages likely to be opened next (top of the library, home shortcuts), loaded quietly. */
+        fun prefetchSoon(pages: List<Pair<String, String>>) {
+            prefetchScope.launch {
+                kotlinx.coroutines.delay(1_000)
+                // One after the other: they must not slow down what is on screen.
+                for ((type, id) in pages) {
+                    prefetch(type, id)
+                    inflight["$type:$id"]?.await()
+                }
+            }
+        }
+
         /** Start loading a page the user is about to open (first page of tracks). */
         fun prefetch(type: String, id: String) {
             if (id.isBlank() && type != "liked") return
@@ -110,7 +122,13 @@ class ContextViewModel(
                         else -> api.getPlaylistPage(id)
                     }
                     val first = flow.first { it !is Response.Loading }
-                    if (first is Response.Success) recent[key] = first
+                    if (first is Response.Success) {
+                        recent[key] = first
+                        // The hearts are known before the page opens.
+                        val p = first.data
+                        if (p.type != "liked") SongPlayer.libraryContains(
+                            p.tracks.mapNotNull { s -> s.spotifyTrackId.takeIf { it.isNotBlank() }?.let { "spotify:track:$it" } } + p.uri)
+                    }
                 } catch (t: kotlinx.coroutines.CancellationException) {
                     throw t
                 } catch (_: Throwable) {

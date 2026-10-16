@@ -49,46 +49,76 @@ import app.myspoti.engine.R
 import com.music.spotui.data.BetaLogs
 
 /**
- * Beta builds: a tiny, faint dot in the bottom-right corner. Holding it makes it grow; held
- * until full size, it opens the app's logs of the last [BetaLogs.MINUTES] minutes, ready to copy
- * into a bug report. A short touch does nothing, so it never gets in the way.
+ * Beta builds: a small bug icon in the bottom-right corner, next to the Library tab. Holding
+ * it makes it grow; held until full size, it opens the app's logs of the last
+ * [BetaLogs.MINUTES] minutes, ready to copy into a bug report. A short touch does nothing.
  */
 @Composable
 fun BetaLogButton(modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     val grow = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    Box(
+    // The full player covers the tabs: no bug icon over it.
+    if (!com.music.spotui.ui.navigation.PlayerSheet.open.value) Box(
         modifier
             .navigationBarsPadding()
-            .padding(end = 2.dp, bottom = 132.dp)
-            .size(28.dp)
+            .padding(end = 4.dp, bottom = 23.dp)
+            .size(44.dp)
             .pointerInput(Unit) {
                 detectTapGestures(onPress = {
                     val job = scope.launch {
                         grow.animateTo(1f, androidx.compose.animation.core.tween(HOLD_MS, easing = androidx.compose.animation.core.LinearEasing))
-                        Haptics.click()
+                        Haptics.confirm()
                         open = true
+                    }
+                    // Ticks that get stronger and closer while the finger stays down.
+                    val buzz = scope.launch {
+                        while (grow.value < 1f) {
+                            Haptics.ramp(grow.value)
+                            kotlinx.coroutines.delay((140 - 100 * grow.value).toLong())
+                        }
                     }
                     tryAwaitRelease()
                     job.cancel()
+                    buzz.cancel()
                     scope.launch { grow.animateTo(0f, androidx.compose.animation.core.tween(150)) }
                 })
             },
         contentAlignment = Alignment.Center,
     ) {
         val g = grow.value
-        Box(
-            Modifier
-                .size((10 + 18 * g).dp)
-                .background(Color(0xFF1DB954).copy(alpha = 0.45f + 0.5f * g), CircleShape)
-                .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (g > 0.6f) Text("log", color = Color.Black.copy(alpha = (g - 0.6f) * 2.5f), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-        }
+        BugIcon(
+            color = androidx.compose.ui.graphics.lerp(Color(0xFFB3B3B3), Color(0xFF1DB954), g),
+            modifier = Modifier.size((24 + 16 * g).dp),
+        )
     }
     if (open) LogsDialog(onDismiss = { open = false })
+}
+
+/** A plain beetle, drawn here: rounded body split in two, head, antennae, three legs a side. */
+@Composable
+private fun BugIcon(color: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val w = size.width; val h = size.height
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.09f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        val line = w * 0.09f
+        // Body.
+        drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * 0.28f, h * 0.32f),
+            size = androidx.compose.ui.geometry.Size(w * 0.44f, h * 0.58f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.22f), style = stroke)
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.36f), androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.86f), line)
+        // Head.
+        drawArc(color, 180f, 180f, false, topLeft = androidx.compose.ui.geometry.Offset(w * 0.37f, h * 0.18f),
+            size = androidx.compose.ui.geometry.Size(w * 0.26f, h * 0.26f), style = stroke)
+        // Antennae.
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.42f, h * 0.2f), androidx.compose.ui.geometry.Offset(w * 0.34f, h * 0.08f), line, androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.58f, h * 0.2f), androidx.compose.ui.geometry.Offset(w * 0.66f, h * 0.08f), line, androidx.compose.ui.graphics.StrokeCap.Round)
+        // Legs.
+        for ((y, dy) in listOf(0.45f to -0.08f, 0.6f to 0f, 0.75f to 0.08f)) {
+            drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.28f, h * y), androidx.compose.ui.geometry.Offset(w * 0.12f, h * (y + dy)), line, androidx.compose.ui.graphics.StrokeCap.Round)
+            drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.72f, h * y), androidx.compose.ui.geometry.Offset(w * 0.88f, h * (y + dy)), line, androidx.compose.ui.graphics.StrokeCap.Round)
+        }
+    }
 }
 
 private const val HOLD_MS = 900

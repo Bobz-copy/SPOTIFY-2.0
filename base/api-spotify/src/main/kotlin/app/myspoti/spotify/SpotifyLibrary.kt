@@ -32,8 +32,26 @@ class SpotifyLibrary(private val bridge: Bridge, private val gql: Gql) : Library
     override val changes: SharedFlow<Unit> = _changes
     private fun changed() { _changes.tryEmit(Unit) }
 
-    override suspend fun contains(uris: List<Uri>): List<Boolean> =
-        (bridge.call("library.contains", uris(uris) as kotlinx.serialization.json.JsonObject) as JsonArray).map { it.jsonPrimitive.boolean }
+    /**
+     * The page's LibraryAPI rejects the whole list ("Unknown URI type!") as soon as it holds a
+     * playlist: playlists are asked to the rootlist (the followed / own playlists), the rest to
+     * the library, and the answers come back in the order of [uris].
+     */
+    override suspend fun contains(uris: List<Uri>): List<Boolean> {
+        if (uris.isEmpty()) return emptyList()
+        val (lists, others) = uris.withIndex().partition { it.value.contains(":playlist:") }
+        val out = BooleanArray(uris.size)
+        if (others.isNotEmpty()) {
+            val flags = bridge.call("library.contains", uris(others.map { it.value }) as kotlinx.serialization.json.JsonObject) as JsonArray
+            others.forEachIndexed { i, v -> out[v.index] = flags.getOrNull(i)?.jsonPrimitive?.boolean == true }
+        }
+        if (lists.isNotEmpty()) {
+            val arg = JsonArray(lists.map { JsonPrimitive(it.value) })
+            val flags = bridge.service("RootlistAPI", "contains", arg) as? JsonArray
+            lists.forEachIndexed { i, v -> out[v.index] = flags?.getOrNull(i)?.jsonPrimitive?.boolean == true }
+        }
+        return out.toList()
+    }
 
     override suspend fun add(uris: List<Uri>) {
         bridge.call("library.add", uris(uris) as kotlinx.serialization.json.JsonObject); changed()

@@ -170,4 +170,19 @@
     <string name="track_sort_artist">Artist</string>
     <string name="track_sort_album">Album</string>
     <string name="track_sort_duration">Duration</string>
+    <string name="setup_title">Set up Myspoti</string>
+    <string name="setup_subtitle">Allow what you want; you can change it later in the phone settings.</string>
+    <string name="setup_notifications_title">Notifications</string>
+    <string name="setup_notifications_detail">Controls on the lock screen and in the notification shade</string>
+    <string name="setup_local_title">Local music</string>
+    <string name="setup_local_detail">Play the music files stored on the phone</string>
+    <string name="setup_bluetooth_title">Bluetooth</string>
+    <string name="setup_bluetooth_detail">Show the name of your headphones or speaker in the player</string>
+    <string name="setup_battery_title">Unrestricted battery</string>
+    <string name="setup_battery_detail">Music keeps playing with the screen off</string>
+    <string name="setup_enable">Allow</string>
+    <string name="setup_continue">Continue</string>
+    <string name="local_folders_button">Folders</string>
+    <string name="local_folders_title">Folders</string>
+    <string name="local_folders_detail">Choose the folders shown in Local Files. Messaging apps and recordings start hidden.</string>
 </resources>

@@ -17,6 +17,9 @@ A new engine, written from scratch, and a cleaner app on top of it.
 - **Playback goes on with the screen off**: the app no longer leaves the foreground between two songs, so Android stops freezing it after the first song.
 - **Switching accounts works**: after a logout, signing in with another account shows that account, not the previous one.
 - **Sort by** in playlists and Liked Songs: title, artist, album or duration.
+- **Hearts show at once** in playlists: the liked songs were only checked after a tap (a playlist in the check made Spotify refuse it). Lists at the top of the library and the home shortcuts load before you open them.
+- **Setup screen** after signing in: notifications, local music, Bluetooth and unrestricted battery, each with its own button.
+- **Folders in Local Files**: choose the folders shown; WhatsApp, Telegram, recordings and ringtones start hidden.
 - **Spotify keeps working after its updates**: the app picks up the Web Player's new operations by itself when Spotify ships a new version.
 - **No ads**: the ad audio is refused, so the player skips the ad within a second, and nothing false is reported to Spotify.
 - **Podcasts and audiobooks are back**: shows, episodes, chapters, **Your Episodes** in Your Library, and **playback speed** (from the song menu) for episodes.

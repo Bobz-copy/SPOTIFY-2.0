@@ -38,20 +38,23 @@ class MainActivity : AppCompatActivity() {
     private var showingLogin by mutableStateOf(false)
     /** Back from Spotify's login, waiting for the session: a native loading screen, not the web page. */
     private var connecting by mutableStateOf(false)
+    /** The one-time setup screen (permissions, battery) after signing in. */
+    private var setupNeeded by mutableStateOf(false)
 
     private val prefs get() = getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE)
 
-    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         signedIn = prefs.getBoolean("LoggedIn", false)
+        setupNeeded = com.music.spotui.ui.screens.Setup.needed(this)
         root = FrameLayout(this)
         val compose = ComposeView(this).apply {
             setContent {
                 SpotuiTheme {
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                         when {
+                            signedIn && setupNeeded -> com.music.spotui.ui.screens.SetupScreen(onDone = { setupNeeded = false })
                             signedIn -> App()
                             connecting -> ConnectingScreen()
                             else -> WelcomeScreen(onLogin = { showLogin() })
@@ -72,7 +75,6 @@ class MainActivity : AppCompatActivity() {
         watchSession()
         watchLoginReturn()
         watchLogout()
-        askNotifications()
         handle(intent)
     }
 
@@ -156,11 +158,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun askNotifications() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-    }
 
     /** Spotify links (open.spotify.com/...) play their item; voice search plays its best match. */
     private fun handle(intent: Intent?) {

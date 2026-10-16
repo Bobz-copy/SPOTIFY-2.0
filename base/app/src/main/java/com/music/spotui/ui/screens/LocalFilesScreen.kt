@@ -1,5 +1,7 @@
 package com.music.spotui.ui.screens
 
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.navigationBarsPadding
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -81,6 +83,12 @@ fun LocalFilesScreen(navController: NavController) {
     val playingLocal = LocalPlayer.active.value
     var adding by remember { mutableStateOf<LocalTrack?>(null) }
     adding?.let { t -> AddLocalToPlaylistSheet(t, onDismiss = { adding = null }) }
+    var choosingFolders by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    if (choosingFolders) LocalFoldersSheet(
+        onChanged = { scope.launch { tracks = LocalMusic.tracks(context) } },
+        onDismiss = { choosingFolders = false },
+    )
 
     Box(Modifier.fillMaxSize().background(AppBackground)) {
         when {
@@ -114,6 +122,10 @@ fun LocalFilesScreen(navController: NavController) {
                         Text(pluralStringResource(R.plurals.local_files_count, n, n), color = Color(0xFFB3B3B3), fontSize = 14.sp,
                             modifier = Modifier.padding(top = 4.dp))
                         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = { choosingFolders = true },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7F7F7F)),
+                            ) { Text(stringResource(R.string.local_folders_button), color = Color.White, fontSize = 13.sp) }
                             Spacer(Modifier.weight(1f))
                             Icon(painterResource(R.drawable.ic_player_shuffle), stringResource(R.string.play_mode_item_shuffle_title), tint = Color.White,
                                 modifier = Modifier.size(28.dp).pressable { tracks?.let { if (it.isNotEmpty()) LocalPlayer.play(it, it.indices.random(), shuffle = true) } })
@@ -195,6 +207,52 @@ private fun EmptyState(title: String, subtitle: String, button: String?, onClick
                 .clip(RoundedCornerShape(50)).background(Color.White).padding(horizontal = 28.dp),
         ) {
             Text(button, color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+
+/** The phone's music folders, each shown in Local Files or left out (WhatsApp audio…). */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun LocalFoldersSheet(onChanged: () -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var folders by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
+    var version by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { folders = LocalMusic.folders(context) }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF282828)) {
+        Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
+            Text(stringResource(R.string.local_folders_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 20.dp))
+            Text(stringResource(R.string.local_folders_detail), color = Color(0xFFB3B3B3), fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+            LazyColumn {
+                items(folders.size) { i ->
+                    val (folder, count) = folders[i]
+                    @Suppress("UNUSED_EXPRESSION") version
+                    val shown = !com.music.spotui.data.local.LocalFolders.isExcluded(context, folder)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            val name = folder.trimEnd('/').substringAfterLast('/').ifBlank { folder.ifBlank { "/" } }
+                            Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1)
+                            Text("$folder · ${pluralStringResource(R.plurals.local_files_count, count, count)}", color = Color(0xFF9A9A9A),
+                                fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = shown,
+                            onCheckedChange = {
+                                com.music.spotui.data.local.LocalFolders.set(context, folder, it)
+                                version++
+                                onChanged()
+                            },
+                            colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Color(0xFF1DB954)),
+                        )
+                    }
+                }
+            }
         }
     }
 }

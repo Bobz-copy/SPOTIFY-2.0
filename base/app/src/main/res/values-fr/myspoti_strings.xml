@@ -170,4 +170,19 @@
     <string name="track_sort_artist">Artiste</string>
     <string name="track_sort_album">Album</string>
     <string name="track_sort_duration">Durée</string>
+    <string name="setup_title">Configurer Myspoti</string>
+    <string name="setup_subtitle">Autorise ce que tu veux ; tu pourras changer plus tard dans les réglages du téléphone.</string>
+    <string name="setup_notifications_title">Notifications</string>
+    <string name="setup_notifications_detail">Contrôles sur l\'écran verrouillé et dans les notifications</string>
+    <string name="setup_local_title">Sons locaux</string>
+    <string name="setup_local_detail">Lire les fichiers de musique du téléphone</string>
+    <string name="setup_bluetooth_title">Bluetooth</string>
+    <string name="setup_bluetooth_detail">Afficher le nom de ton casque ou de ton enceinte dans le lecteur</string>
+    <string name="setup_battery_title">Batterie sans restriction</string>
+    <string name="setup_battery_detail">La musique continue écran éteint</string>
+    <string name="setup_enable">Autoriser</string>
+    <string name="setup_continue">Continuer</string>
+    <string name="local_folders_button">Dossiers</string>
+    <string name="local_folders_title">Dossiers</string>
+    <string name="local_folders_detail">Choisis les dossiers affichés dans Fichiers locaux. Les applis de messagerie et les enregistrements sont masqués au départ.</string>
 </resources>

@@ -105,6 +105,19 @@ fun LibraryScreen(navController: NavController) {
 
     val libraryViewModel: LibraryViewModel = viewModel()
     val entries by libraryViewModel.entries.collectAsState()
+    // The first lists of the library load in the background, ready before a tap.
+    androidx.compose.runtime.LaunchedEffect((entries as? Response.Success)?.data?.take(8)?.map { it.spotifyId }) {
+        val top = (entries as? Response.Success)?.data.orEmpty().take(8).mapNotNull { e ->
+            when {
+                e.isFolder || e.spotifyId.startsWith(LOCAL_PLAYLIST_PREFIX) -> null
+                e.spotifyId in setOf(Api.HomeCache.LOCAL_FILES_ID, Api.HomeCache.DOWNLOADS_ID, Api.HomeCache.EPISODES_ID) -> null
+                e.spotifyId == Api.HomeCache.LIKED_SONGS_ID -> "liked" to ""
+                e.isPlaylist -> "playlist" to e.spotifyId
+                else -> "album" to e.spotifyId
+            }
+        }
+        if (top.isNotEmpty()) ContextViewModel.prefetchSoon(top)
+    }
     val account by libraryViewModel.account.collectAsState()
     var showAccount by remember { mutableStateOf(false) }
     val context = LocalContext.current

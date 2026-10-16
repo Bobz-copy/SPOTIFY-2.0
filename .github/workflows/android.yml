@@ -54,6 +54,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the previous tag, for a beta's notes
 
       - uses: actions/setup-java@v6
         with:
@@ -95,7 +97,12 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           awk -v v="$VERSION" '$0 == "## " v {f=1; next} /^## / && f {exit} f' ../CHANGELOG.md > release-notes.md
-          # A beta without its own section uses the section of the version it leads to.
+          # A beta without its own section: the CHANGELOG lines added since the previous tag,
+          # else (first beta) the section of the version it leads to.
+          PREVIOUS="$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)"
+          if [ ! -s release-notes.md ] && [ "$VERSION" != "${VERSION%%-*}" ] && [ -n "$PREVIOUS" ]; then
+            git diff "$PREVIOUS" "$GITHUB_REF_NAME" -- ../CHANGELOG.md | grep '^+- ' | sed 's/^+//' > release-notes.md || true
+          fi
           [ -s release-notes.md ] || awk -v v="${VERSION%%-*}" '$0 == "## " v {f=1; next} /^## / && f {exit} f' ../CHANGELOG.md > release-notes.md
           [ -s release-notes.md ] || echo "See the commits since the previous release." > release-notes.md
           cat release-notes.md

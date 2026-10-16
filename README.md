@@ -96,7 +96,7 @@ google-chrome --user-data-dir="$HOME/.myspoti-chrome" --remote-debugging-port=92
 ./gradlew :host-cdp:test -Pcdp=http://localhost:9222
 ```
 
-Every push builds and tests on GitHub Actions. A `v*` tag publishes a signed APK in Releases, which the app checks for updates.
+Every push builds and tests on GitHub Actions. A `v*` tag publishes a signed APK in Releases; the app finds it, downloads it and installs it through Android's installer.
 
 ## Credits
 

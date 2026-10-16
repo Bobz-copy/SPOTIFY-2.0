@@ -12,11 +12,12 @@ import java.util.concurrent.TimeUnit
 /**
  * New version check against the GitHub releases of [BuildConfig.UPDATE_REPO]
  * (set by the CI build; empty in local builds, which never check).
- * At most one request every 3 hours (releases can come several a day); the app only
- * opens the release page, never installs.
+ * At most one request every 3 hours (releases can come several a day). The release's
+ * APK is downloaded and installed in the app ([AppUpdater]).
  */
 object UpdateChecker {
-    data class Release(val version: String, val pageUrl: String, val notes: String = "")
+    /** [apkUrl]: the release's signed APK; blank when the release has none (then its page opens). */
+    data class Release(val version: String, val pageUrl: String, val notes: String = "", val apkUrl: String = "")
 
     private const val INTERVAL_MS = 3 * 3_600_000L
     private val http by lazy { OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).addInterceptor(com.music.spotui.data.DataSaver.interceptor).build() }
@@ -38,13 +39,13 @@ object UpdateChecker {
                 val list = if (isBeta) org.json.JSONArray(text).let { a -> (0 until a.length()).map { a.getJSONObject(it) } } else listOf(JSONObject(text))
                 // Betas and releases are two apps: each one is offered its own channel only.
                 list.filter { !it.optBoolean("draft") && (!isBeta || it.optBoolean("prerelease")) }
-                    .map { Release(it.getString("tag_name").removePrefix("v"), it.getString("html_url"), cleanNotes(it.optString("body"))) }
+                    .map { Release(it.getString("tag_name").removePrefix("v"), it.getString("html_url"), cleanNotes(it.optString("body")), apkAsset(it)) }
                     .reduceOrNull { best, next -> if (isNewer(next.version, best.version)) next else best }
             }
         }.getOrNull()
         prefs.edit().putLong("checked_at", now)
             .putString("version", release?.version).putString("url", release?.pageUrl)
-            .putString("notes", release?.notes).apply()
+            .putString("notes", release?.notes).putString("apk", release?.apkUrl).apply()
         pending(prefs)
     }
 
@@ -53,7 +54,15 @@ object UpdateChecker {
         val version = prefs.getString("version", null) ?: return null
         val url = prefs.getString("url", null) ?: return null
         if (prefs.getString("dismissed", null) == version) return null
-        return Release(version, url, prefs.getString("notes", null).orEmpty()).takeIf { isNewer(version, BuildConfig.VERSION_NAME) }
+        return Release(version, url, prefs.getString("notes", null).orEmpty(), prefs.getString("apk", null).orEmpty()).takeIf { isNewer(version, BuildConfig.VERSION_NAME) }
+    }
+
+    /** The release's APK download link (the CI uploads one `myspoti-<version>.apk`). */
+    internal fun apkAsset(release: JSONObject): String {
+        val assets = release.optJSONArray("assets") ?: return ""
+        return (0 until assets.length()).map { assets.getJSONObject(it) }
+            .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
+            ?.optString("browser_download_url").orEmpty()
     }
 
     fun dismiss(context: Context, release: Release) {

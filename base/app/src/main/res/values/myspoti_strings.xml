@@ -249,4 +249,10 @@
     <string name="quality_now">Playing now: %1$s</string>
     <string name="quality_now_unknown">Not known yet: start a song</string>
     <string name="spotiflac_verify_in_browser">Solve the check in the browser tab that opened, then come back here.</string>
+    <string name="update_downloading">Downloading… %1$d%%</string>
+    <string name="update_installing">Installing…</string>
+    <string name="update_needs_permission">To update, allow Myspoti to install apps, then come back here.</string>
+    <string name="update_allow">Allow</string>
+    <string name="update_failed">The update failed: %1$s</string>
+    <string name="update_retry">Try again</string>
 </resources>

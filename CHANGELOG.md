@@ -12,6 +12,7 @@ A new engine, written from scratch, and a cleaner app on top of it.
 - **Downloads ask their quality** if you want ("Ask each time"): once for a whole playlist, kept for its new songs.
 - **Liked Songs update at once** after a like or an unlike, without reloading the whole list.
 - **No more "bop" between two songs** on the phone's speaker: the sound output stays awake across the change.
+- **Updates install in the app**: "Update" downloads the new version with a progress bar and hands it to Android's installer; no trip to GitHub. The first time, Android asks to allow installs from Myspoti.
 - **Haptics work again**: buttons, likes and the debug icon vibrate.
 - **Solid bottom bar** as an option in Settings, Display.
 - **Settings page**: sound quality, downloads, data and battery, display and language, in one place (profile menu or Library's account menu).

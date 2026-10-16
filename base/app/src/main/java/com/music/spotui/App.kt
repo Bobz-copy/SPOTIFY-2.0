@@ -18,7 +18,9 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -184,22 +186,66 @@ private fun UpdatePrompt() {
     }
     updateCardOpen.value = release != null
     val r = release ?: return
-    val dismiss = { com.music.spotui.data.api.UpdateChecker.dismiss(context, r); release = null }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val updater = com.music.spotui.data.api.AppUpdater
+    val state by updater.state.collectAsState()
+    val start = { scope.launch { updater.update(context, r) }; Unit }
+    // Back from the "Install unknown apps" page with the switch on: carry on by itself.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME &&
+                updater.state.value == com.music.spotui.data.api.AppUpdater.State.NeedsPermission &&
+                updater.canInstall(context)) start()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    val dismiss = { updater.reset(); com.music.spotui.data.api.UpdateChecker.dismiss(context, r); release = null }
+    val res = context.resources
+    val status = when (val s = state) {
+        is com.music.spotui.data.api.AppUpdater.State.Downloading ->
+            res.getString(app.myspoti.engine.R.string.update_downloading, (s.progress.coerceAtLeast(0f) * 100).toInt())
+        com.music.spotui.data.api.AppUpdater.State.Installing -> res.getString(app.myspoti.engine.R.string.update_installing)
+        com.music.spotui.data.api.AppUpdater.State.NeedsPermission -> res.getString(app.myspoti.engine.R.string.update_needs_permission)
+        is com.music.spotui.data.api.AppUpdater.State.Failed -> res.getString(app.myspoti.engine.R.string.update_failed, s.message)
+        com.music.spotui.data.api.AppUpdater.State.Idle -> null
+    }
+    val busy = state is com.music.spotui.data.api.AppUpdater.State.Downloading || state == com.music.spotui.data.api.AppUpdater.State.Installing
     UpdateDialog(
         version = r.version,
         notes = r.notes,
+        status = status,
+        progress = (state as? com.music.spotui.data.api.AppUpdater.State.Downloading)?.progress,
+        button = res.getString(when (state) {
+            com.music.spotui.data.api.AppUpdater.State.NeedsPermission -> app.myspoti.engine.R.string.update_allow
+            is com.music.spotui.data.api.AppUpdater.State.Failed -> app.myspoti.engine.R.string.update_retry
+            else -> app.myspoti.engine.R.string.version_sunsetting_dialog_cta_update
+        }),
         onUpdate = {
-            release = null
-            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(r.pageUrl))
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            when {
+                busy -> Unit
+                // A release without an APK: its page, as before.
+                r.apkUrl.isBlank() -> {
+                    release = null
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(r.pageUrl))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+                state == com.music.spotui.data.api.AppUpdater.State.NeedsPermission && !updater.canInstall(context) ->
+                    updater.openInstallSettings(context)
+                else -> start()
+            }
         },
-        onLater = dismiss,
+        onLater = { if (!busy) dismiss() },
     )
 }
 
 /** The update card, in the app's own style (dark sheet, green pill), not a system dialog. */
 @Composable
-private fun UpdateDialog(version: String, notes: String, onUpdate: () -> Unit, onLater: () -> Unit) {
+private fun UpdateDialog(
+    version: String, notes: String, status: String?, progress: Float?, button: String,
+    onUpdate: () -> Unit, onLater: () -> Unit,
+) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onLater) {
         androidx.compose.foundation.layout.Column(
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
@@ -233,6 +279,21 @@ private fun UpdateDialog(version: String, notes: String, onUpdate: () -> Unit, o
                 modifier = Modifier.padding(top = 16.dp).fillMaxWidth().heightIn(max = 240.dp)
                     .verticalScroll(androidx.compose.foundation.rememberScrollState()),
             )
+            // The download and install, under the notes.
+            if (status != null) androidx.compose.material3.Text(
+                status, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                fontFamily = com.music.spotui.ui.theme.AppSans, fontSize = 14.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+            )
+            if (progress != null) {
+                val bar = Modifier.padding(top = 10.dp).fillMaxWidth().height(4.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                if (progress < 0f) androidx.compose.material3.LinearProgressIndicator(
+                    modifier = bar, color = com.music.spotui.ui.theme.AppAccent, trackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.15f))
+                else androidx.compose.material3.LinearProgressIndicator(
+                    progress = { progress }, modifier = bar, color = com.music.spotui.ui.theme.AppAccent,
+                    trackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.15f), drawStopIndicator = {})
+            }
             androidx.compose.foundation.layout.Box(
                 contentAlignment = androidx.compose.ui.Alignment.Center,
                 modifier = Modifier
@@ -244,7 +305,7 @@ private fun UpdateDialog(version: String, notes: String, onUpdate: () -> Unit, o
                     .background(com.music.spotui.ui.theme.AppAccent),
             ) {
                 androidx.compose.material3.Text(
-                    androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.version_sunsetting_dialog_cta_update),
+                    button,
                     color = androidx.compose.ui.graphics.Color.Black, fontFamily = com.music.spotui.ui.theme.AppSans,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.sp,
                 )

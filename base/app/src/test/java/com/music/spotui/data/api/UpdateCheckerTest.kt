@@ -25,4 +25,11 @@ class UpdateCheckerTest {
         val body = "- **Local Files**: a folder\n  - nested [link](https://x.y)\n\n**Full Changelog**: https://github.com/a/b/compare/v1...v2"
         assertEquals("• Local Files: a folder\n  • nested link", UpdateChecker.cleanNotes(body))
     }
+    @Test fun findsTheReleaseApk() {
+        val release = org.json.JSONObject("""{"assets":[
+            {"name":"checksums.txt","browser_download_url":"https://x/c.txt"},
+            {"name":"myspoti-2.0.0-beta.4.apk","browser_download_url":"https://x/myspoti.apk"}]}""")
+        assertEquals("https://x/myspoti.apk", UpdateChecker.apkAsset(release))
+        assertEquals("", UpdateChecker.apkAsset(org.json.JSONObject("{}")))
+    }
 }

@@ -249,4 +249,10 @@
     <string name="quality_now">En cours : %1$s</string>
     <string name="quality_now_unknown">Pas encore connue : lancez un titre</string>
     <string name="spotiflac_verify_in_browser">Résolvez la vérification dans l\'onglet du navigateur qui s\'est ouvert, puis revenez ici.</string>
+    <string name="update_downloading">Téléchargement… %1$d%%</string>
+    <string name="update_installing">Installation…</string>
+    <string name="update_needs_permission">Pour mettre à jour, autorisez Myspoti à installer des applications, puis revenez ici.</string>
+    <string name="update_allow">Autoriser</string>
+    <string name="update_failed">La mise à jour a échoué : %1$s</string>
+    <string name="update_retry">Réessayer</string>
 </resources>

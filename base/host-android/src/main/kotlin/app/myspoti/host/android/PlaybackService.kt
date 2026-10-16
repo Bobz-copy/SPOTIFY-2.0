@@ -284,8 +284,19 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     // Media browser (Android Auto).
-    override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?) =
-        BrowserRoot(ROOT_ID, Bundle().apply { putBoolean("android.media.browse.SEARCH_SUPPORTED", true) })
+    override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot? {
+        // The service is exported (Android Auto requires it), but the library —
+        // playlists, Liked Songs, search — is only for Auto, Assistant, System UI
+        // and the app itself, not for any installed app that binds. Returning null
+        // refuses the connection.
+        val packages = runCatching { packageManager.getPackagesForUid(clientUid)?.toList() }.getOrNull().orEmpty()
+        if (clientPackageName != packageName && clientPackageName !in packages) return null
+        if (clientPackageName != packageName && clientPackageName !in ALLOWED_BROWSERS) {
+            android.util.Log.w("Myspoti", "media browser refused: $clientPackageName")
+            return null
+        }
+        return BrowserRoot(ROOT_ID, Bundle().apply { putBoolean("android.media.browse.SEARCH_SUPPORTED", true) })
+    }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
         val lib = library ?: return result.sendResult(mutableListOf())
@@ -311,6 +322,16 @@ class PlaybackService : MediaBrowserServiceCompat() {
         @Volatile private var current: NowPlayingInfo? = null
 
         private const val PAUSE_GRACE_MS = 60_000L
+
+        /** Packages allowed to browse the library (see onGetRoot). */
+        private val ALLOWED_BROWSERS = setOf(
+            "com.google.android.projection.gearhead", // Android Auto (phone)
+            "com.google.android.apps.automotive.templates.host", // Android Automotive OS
+            "com.google.android.googlequicksearchbox", // Google Assistant
+            "com.google.android.carassistant",
+            "com.android.systemui",
+            "android",
+        )
 
         /** Set once by the app. */
         @Volatile var controls: PlaybackControls? = null

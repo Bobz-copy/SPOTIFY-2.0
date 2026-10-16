@@ -38,8 +38,13 @@ internal object ZarzSession {
     private const val PREFIX = "X-Zarz-"
     private const val WINDOW_SECONDS = 300L
 
-    /** The grant redirects the verification page sends back to the app (spotiflac://session-grant…). */
-    val grants = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
+    /**
+     * The grant redirects the verification page sends back to the app
+     * (spotiflac://session-grant…). A StateFlow, not a SharedFlow: the value is
+     * held until the screen takes it, so a rotation (or a screen that starts
+     * collecting a moment later) cannot lose the return. The screen clears it.
+     */
+    val grants = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
     /** A challenge page to open (the user solves it), or null when a session came back directly. */
     class Bootstrap(val challengeUrl: String?, val state: String)

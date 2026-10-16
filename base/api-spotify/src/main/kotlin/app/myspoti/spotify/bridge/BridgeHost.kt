@@ -19,7 +19,7 @@ interface BridgeHost {
     /** Runs [script] in the page. Fire and forget: answers come back through [messages]. */
     suspend fun evaluate(script: String)
 
-    /** JSON strings posted by the bridge (`MyspotiHost.post` / `__mspHostPost`). */
+    /** JSON strings posted by the bridge (`MyspotiHost.postMessage` / `__mspHostPost`). */
     val messages: Flow<String>
 }
 

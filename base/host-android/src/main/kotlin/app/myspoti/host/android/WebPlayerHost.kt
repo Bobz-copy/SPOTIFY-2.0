@@ -8,7 +8,6 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -98,7 +97,7 @@ class WebPlayerHost(context: Context) : BridgeHost {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
         }
-        addJavascriptInterface(HostInterface(), "MyspotiHost")
+        exposeToPlayer("MyspotiHost") { json -> _messages.tryEmit(json) }
         webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(message: android.webkit.ConsoleMessage): Boolean {
                 if (message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ||
@@ -156,11 +155,6 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
     private fun isLoginPage(url: String?) =
         url != null && (url.contains("accounts.spotify.com") || url.contains("/login") || url.contains("challenge.spotify.com"))
-
-    private inner class HostInterface {
-        @JavascriptInterface
-        fun post(json: String) { _messages.tryEmit(json) }
-    }
 
     fun load() = main.post { view.loadUrl(PLAYER_URL) }
 

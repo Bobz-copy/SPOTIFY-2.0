@@ -1,5 +1,6 @@
 package app.myspoti.spotify.bridge
 
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,8 +33,9 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
     private val _ready = MutableStateFlow(false)
     val ready: StateFlow<Boolean> = _ready
 
-    /** `state` and `queue` messages, raw payload of each. */
-    private val _events = MutableSharedFlow<Pair<String, JsonElement>>(extraBufferCapacity = 64)
+    /** `state` and `queue` messages, raw payload of each. DROP_OLDEST: under a stall the
+     * newest state is the only one that matters; SUSPEND would drop exactly that one. */
+    private val _events = MutableSharedFlow<Pair<String, JsonElement>>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val events: SharedFlow<Pair<String, JsonElement>> = _events
 
     init {

@@ -4,11 +4,14 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import com.music.spotui.data.entity.SongsModel
+import com.music.spotui.data.preferences.isHiRes
+import com.music.spotui.data.preferences.isLosslessEnabled
+import com.music.spotui.data.preferences.isSmallDownloads
 import com.music.spotui.di.Graph
+import com.music.spotui.lossless.DashFlacRemux
+import com.music.spotui.lossless.LosslessSource
 import com.music.spotui.video.AudioAlign
 import com.music.spotui.video.InterruptibleHttp
-import com.music.spotui.video.MusicVideoController
-import com.music.spotui.video.RangeAudioDownload
 import com.music.spotui.video.YouTubeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -28,22 +31,24 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
-import org.schabi.newpipe.extractor.MediaFormat
 import java.io.File
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Downloads songs for offline listening. Spotify only gives the track (title, artist,
- * duration, ISRC); the audio comes from YouTube Music, the same way music videos are
- * found:
+ * duration, ISRC); the audio comes lossless, FlAC, resolved like SpotiFLAC does:
  *
- * 1. the YouTube Music "song" of the track (the label's "Artist - Topic" upload of the
- *    same master), else a plain "official audio" upload, duration within 3 s;
- * 2. the best audio stream as YouTube serves it (Opus or AAC, never re-encoded);
- * 3. a check against the recording's official 30 s preview (Deezer, looked up by ISRC):
- *    the two audios are aligned like a clip's soundtrack, which rejects a live take, a
- *    remix or a cover. Without a preview, only the "Topic" upload is trusted.
+ * 1. the same recording on a lossless service, matched by the exact ISRC, else by
+ *    title + artist + duration within 3 s — never a live take, a remix or a cover;
+ * 2. the most reliable source first: SpotiFLAC's own gated backend (the signing
+ *    session the user verified once), then the public Tidal community backends,
+ *    then Amazon's self-resolving endpoint. 24-bit when it exists, else CD;
+ * 3. a check against the recording's official 30 s preview (Deezer, looked up by
+ *    ISRC): the two audios are aligned, which confirms the right take. Without a
+ *    preview, only an exact ISRC match is trusted.
  *
  * Nothing that fails the check is kept: the song is marked unavailable instead.
  */
@@ -78,6 +83,21 @@ object OfflineDownloader {
 
     private class Unavailable(message: String) : Exception(message)
 
+    @Volatile private var hinted = false
+
+    /**
+     * Without the SpotiFLAC verification only the public servers are tried, and they are
+     * often down or throttled: say once per run where the reliable source is, instead of
+     * leaving a list of "no matching recording".
+     */
+    private fun hintVerification() {
+        if (hinted || com.music.spotui.data.preferences.hasSpotiflacSession(Graph.app)) return
+        hinted = true
+        scope.launch(Dispatchers.Main) {
+            android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.downloads_verify_hint, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     /** Songs queued, downloading, or whose download did not succeed (for the Downloaded list). */
     val requests: SnapshotStateMap<String, Request> = mutableStateMapOf()
@@ -107,7 +127,16 @@ object OfflineDownloader {
         if (saved.isNotEmpty()) enqueueAll(saved)
     }
 
-    fun enqueue(songs: List<SongsModel>) = enqueueAll(songs.filter { it.spotifyTrackId.isNotBlank() }.map(Request::of))
+    fun enqueue(songs: List<SongsModel>) {
+        // Downloads switched off in Settings: say so, instead of a list of failed songs.
+        if (!isLosslessEnabled(Graph.app)) {
+            scope.launch(Dispatchers.Main) {
+                android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.downloads_off_toast, android.widget.Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        enqueueAll(songs.filter { it.spotifyTrackId.isNotBlank() }.map(Request::of))
+    }
 
     private fun enqueueAll(list: List<Request>) {
         val added = synchronized(pending) {
@@ -182,6 +211,7 @@ object OfflineDownloader {
                 throw e
             } catch (e: Unavailable) {
                 Log.i(TAG, "${r.title}: ${e.message}")
+                hintVerification()
                 OfflineStatus.Unavailable
             } catch (t: Throwable) {
                 Log.w(TAG, "${r.title} failed", t)
@@ -196,11 +226,14 @@ object OfflineDownloader {
     }
 
     private suspend fun download(r: Request): OfflineTrack {
+        if (!isLosslessEnabled(Graph.app)) throw Unavailable("lossless downloads are off")
         val tmp = OfflineStore.tmpDir
-        val audioTmp = File(tmp, "${r.trackId}.part")
+        val audioTmp = File(tmp, "${r.trackId}.flacpart")
         val previewTmp = File(tmp, "${r.trackId}.preview")
         try {
             val meta = spotifyMeta(r)
+
+            // The official 30 s preview of the recording, for the alignment check.
             val previewLink = previewUrl(meta)
             val preview = previewLink?.let { url ->
                 runCatching { httpGet(url, previewTmp); previewTmp }
@@ -213,50 +246,100 @@ object OfflineDownloader {
                 }
             }
             Log.i(TAG, "${meta.title}: isrc=${meta.isrc ?: "-"} preview=${if (previewFeatures != null) "ok" else if (previewLink != null) "unusable" else "none"}")
-            // An empty search (or YouTube's "results may be inappropriate" page) is no match, not an error.
-            fun search(what: String, block: () -> YouTubeSource.Hit?): YouTubeSource.Hit? = try {
-                block()
-            } catch (e: org.schabi.newpipe.extractor.search.SearchExtractor.NothingFoundException) {
-                Log.i(TAG, "${meta.title}: $what: nothing found"); null
-            }
-            val candidates = buildList {
-                runInterruptible { search("song") { YouTubeSource.findSong(meta.title, meta.artist, meta.durationMs) } }?.let { add(it to true) }
-                runInterruptible { search("audio") { YouTubeSource.findAudio(meta.title, meta.artist, meta.durationMs) } }?.let { add(it to false) }
-            }.distinctBy { it.first.url }
-            if (candidates.isEmpty()) throw Unavailable("no YouTube match")
-            for ((hit, topic) in candidates) {
-                currentCoroutineContext().ensureActive()
-                // No preview to compare with: only the label's own upload is trusted.
-                if (previewFeatures == null && !topic) continue
-                val ext = fetchAudio(r.trackId, hit.url, audioTmp)
-                val verified = previewFeatures != null
-                if (!verified) Log.i(TAG, "${meta.title}: ${hit.name} (${hit.uploader}) kept unverified (Topic upload)")
-                if (verified) {
-                    val score = checkLock.withLock {
-                        val full = runInterruptible(Dispatchers.Default) { AudioAlign.features(AudioAlign.decode(audioTmp)) }
-                        val map = AudioAlign.align(previewFeatures!!, full)
-                        if (map.segments.isEmpty()) 0.0 else map.score
-                    }
-                    Log.i(TAG, "${meta.title}: ${hit.name} (${hit.uploader}) score ${"%.2f".format(score)}")
-                    if (score < MIN_SCORE) { audioTmp.delete(); continue }
+
+            // ── Lossless resolve: gated SpotiFLAC first, then the community backends.
+            val file = resolveAndFetch(r, meta, audioTmp) ?: throw Unavailable("no lossless match")
+            currentCoroutineContext().ensureActive()
+
+            // ── Verification before the file is kept.
+            if (previewFeatures != null) {
+                val score = checkLock.withLock {
+                    val full = runInterruptible(Dispatchers.Default) { AudioAlign.features(AudioAlign.decode(audioTmp)) }
+                    val map = AudioAlign.align(previewFeatures, full)
+                    if (map.segments.isEmpty()) 0.0 else map.score
                 }
-                val file = File(OfflineStore.audioDir, "${r.trackId}.$ext")
-                if (!audioTmp.renameTo(file)) throw IOException("could not move the file")
-                val cover = runCatching {
-                    val c = File(OfflineStore.coverDir, "${r.trackId}.jpg")
-                    httpGet(meta.coverUrl, c); c.name
-                }.getOrDefault("")
-                return OfflineTrack(
-                    trackId = r.trackId, title = meta.title, artist = meta.artist, album = meta.album,
-                    albumId = meta.albumId, durationMs = meta.durationMs, coverUrl = meta.coverUrl,
-                    file = file.name, cover = cover, source = hit.url, verified = verified,
-                    bytes = file.length(), addedAt = System.currentTimeMillis(),
-                )
+                Log.i(TAG, "${meta.title}: ${file.provider} score ${"%.2f".format(score)}")
+                if (score < MIN_SCORE) throw Unavailable("the lossless file did not match the recording's preview")
+                file.verified = true
+            } else if (!file.isrcMatched) {
+                // No preview to compare with: only an exact ISRC match is trusted.
+                throw Unavailable("no preview and no ISRC match")
             }
-            throw Unavailable(if (previewFeatures == null) "no preview and no Topic upload" else "no candidate matched the preview")
+
+            val out: File
+            if (isSmallDownloads(Graph.app)) {
+                // "Smallest": the checked FLAC becomes AAC, encoded on the phone.
+                out = File(OfflineStore.audioDir, "${r.trackId}.m4a")
+                val aacTmp = File(OfflineStore.tmpDir, "${r.trackId}.m4apart")
+                try {
+                    checkLock.withLock { runInterruptible(Dispatchers.Default) { AacTranscoder.transcode(audioTmp, aacTmp) } }
+                    if (aacTmp.length() < 10_000 || !aacTmp.renameTo(out)) throw IOException("could not encode the small file")
+                } finally {
+                    aacTmp.delete()
+                }
+            } else {
+                out = File(OfflineStore.audioDir, "${r.trackId}.flac")
+                if (!audioTmp.renameTo(out)) throw IOException("could not move the file")
+            }
+            val cover = runCatching {
+                val c = File(OfflineStore.coverDir, "${r.trackId}.jpg")
+                httpGet(meta.coverUrl, c); c.name
+            }.getOrDefault("")
+            return OfflineTrack(
+                trackId = r.trackId, title = meta.title, artist = meta.artist, album = meta.album,
+                albumId = meta.albumId, durationMs = meta.durationMs, coverUrl = meta.coverUrl,
+                file = out.name, cover = cover, source = file.provider, verified = file.verified,
+                bytes = out.length(), addedAt = System.currentTimeMillis(),
+            )
         } finally {
             audioTmp.delete(); previewTmp.delete()
         }
+    }
+
+    private class Fetched(val provider: String, val isrcMatched: Boolean) {
+        var verified = false
+    }
+
+    /** Runs the lossless resolver and saves the audio into [out]; null when nothing matched. */
+    private suspend fun resolveAndFetch(r: Request, meta: Meta, out: File): Fetched? {
+        val resolved = LosslessSource.resolve(
+            Graph.app, r.trackId,
+            LosslessSource.TrackInfo(meta.title, meta.artist, (meta.durationMs / 1000).toInt(), meta.isrc.orEmpty()),
+            preferHiRes = isHiRes(Graph.app),
+        )
+        if (resolved !is LosslessSource.Success) return null
+        val track = resolved.track
+        setStatus(r.trackId, OfflineStatus.Downloading(-1f))
+        val ok = when {
+            track.dashBase64.isNotBlank() ->
+                runInterruptible(Dispatchers.IO) {
+                    DashFlacRemux.download("data:application/dash+xml;base64,${track.dashBase64}", out)
+                }
+            else -> fetchWithProgress(r.trackId, track.url, out)
+        }
+        if (!ok || out.length() < 10_000) return null
+        checkFlacHeader(out, meta, track)
+        Log.i(TAG, "${meta.title}: saved lossless FLAC from ${track.provider} (${track.quality}-bit)")
+        return Fetched("${track.provider} ${track.quality}-bit", resolved.isrcMatched)
+    }
+
+    /**
+     * A STREAMINFO read on the saved file: anything that is not a FLAC file (an
+     * encrypted or AAC stream some backends hand out) is refused, previews trimmed by
+     * the backend are caught (the header states the real length), and a misplaced
+     * 24-bit label shows up in the log.
+     */
+    private fun checkFlacHeader(file: File, meta: Meta, track: com.music.spotui.lossless.LosslessSource.LosslessFile) {
+        val seconds = runCatching {
+            file.inputStream().use { s ->
+                val head = ByteArray(42); var off = 0
+                while (off < head.size) { val n = s.read(head, off, head.size - off); if (n < 0) break; off += n }
+                LosslessSource.flacDurationSec(head)
+            }
+        }.getOrNull() ?: throw Unavailable("the lossless source did not send a FLAC file")
+        val expected = meta.durationMs / 1000
+        if (expected > 0 && seconds < expected - 5) throw Unavailable("backed out: the file is a ${seconds}s preview")
+        Log.d(TAG, "${meta.title}: FLAC ${seconds}s header check, labelled ${track.quality}-bit")
     }
 
     private data class Meta(
@@ -307,64 +390,119 @@ object OfflineDownloader {
         }
 
     private suspend fun httpGet(url: String, out: File) = runInterruptible {
-        InterruptibleHttp.read(YouTubeSource.http.newCall(okhttp3.Request.Builder().url(url).build())) { r ->
-            if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
-            val body = r.body ?: throw IOException("empty body")
+        InterruptibleHttp.read(YouTubeSource.http.newCall(okhttp3.Request.Builder().url(url).build())) { res ->
+            if (!res.isSuccessful) throw IOException("HTTP ${res.code}")
+            val body = res.body ?: throw IOException("empty body")
             out.outputStream().use { body.byteStream().copyTo(it) }
         }
     }
 
-    /** Downloads the best audio stream of [url] into [out]; returns the file extension. */
-    private suspend fun fetchAudio(trackId: String, url: String, out: File): String {
-        var info = runInterruptible { YouTubeSource.info(url) }
-        var last: Throwable? = null
-        for (attempt in 0..1) {
-            val streams = rankAudio(info.audioStreams.mapNotNull { a ->
-                val ext = when (a.format) { MediaFormat.WEBMA_OPUS -> "webm"; MediaFormat.M4A -> "m4a"; else -> null }
-                ext?.let { AudioChoice(it, a.averageBitrate, a.content) }
-            })
-            if (streams.isEmpty()) throw Unavailable("no audio stream")
-            for (a in streams.take(2)) {
-                try {
-                    fetchWithProgress(trackId, a.url, out)
-                    val expected = if (a.bitrate > 0 && info.duration > 0) a.bitrate * 1000L / 8 * info.duration else 0L
-                    if (out.length() < 50_000 || (expected > 0 && out.length() < expected * 0.6))
-                        throw IOException("${out.length() / 1024} KB, expected ~${expected / 1024} KB")
-                    return a.ext
-                } catch (t: Throwable) {
-                    currentCoroutineContext().ensureActive()
-                    last = t
-                }
-            }
-            // Stream URLs expire or get refused (403): resolve them again once.
-            info = runInterruptible { YouTubeSource.info(url, fresh = true) }
-        }
-        throw last ?: IOException("download failed")
-    }
-
-    private suspend fun fetchWithProgress(trackId: String, url: String, out: File) {
-        val total = runCatching { url.toHttpUrl().queryParameter("clen")?.toLongOrNull() }.getOrNull()
-        val watcher = if (total != null && total > 0) scope.launch {
+    /**
+     * Downloads the FLAC URL into [out] with HTTP **Range** requests in chunks,
+     * reporting progress. The FLAC backends hand out signed CDN urls: a plain
+     * streaming GET with a browser User-Agent, retried per chunk on resets.
+     */
+    private suspend fun fetchWithProgress(trackId: String, url: String, out: File): Boolean {
+        // A quick HEAD for the size: the progress bar needs it, the CDN allows it.
+        val total = runInterruptible(Dispatchers.IO) { contentLength(url) }
+        val watcher = if (total > 0) scope.launch {
             while (isActive) {
                 setStatus(trackId, OfflineStatus.Downloading((out.length().toFloat() / total).coerceIn(0f, 1f)))
                 delay(400)
             }
         } else null
         try {
-            RangeAudioDownload.fetch(YouTubeSource.http, url, out, MusicVideoController.streamHeaders(url))
+            return runInterruptible(Dispatchers.IO) { rangedDownload(url, out, total) }
         } finally {
             watcher?.cancel()
+            setStatus(trackId, OfflineStatus.Downloading(-1f))
         }
-        setStatus(trackId, OfflineStatus.Downloading(-1f))
     }
+
+    private fun rangedDownload(url: String, out: File, knownTotal: Long): Boolean {
+        val chunk = 16L * 1024 * 1024 // 16 MB
+        var total = knownTotal
+        java.io.RandomAccessFile(out, "rw").use { output ->
+            output.setLength(0)
+            while (true) {
+                // A chunk is [start, end]; a retry resumes where the bytes stopped, never re-appends.
+                val end = if (total > 0) minOf(output.length() + chunk - 1, total - 1) else output.length() + chunk - 1
+                var done = false
+                var attempt = 0
+                while (true) {
+                    attempt++
+                    val position = output.length()
+                    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 20_000
+                        readTimeout = 60_000
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", LosslessUa)
+                        setRequestProperty("Range", "bytes=$position-$end")
+                    }
+                    try {
+                        val code = conn.responseCode
+                        // Asked past the end of a file whose size was unknown: it is complete.
+                        if (code == 416 && total <= 0 && position > 0) { done = true; break }
+                        if (code !in 200..299) throw IOException("stream HTTP $code")
+                        val full = code != 206 // server ignored Range → the whole body, from byte 0
+                        if (full) output.setLength(0)
+                        if (total <= 0) total = contentRangeTotal(conn.getHeaderField("Content-Range")) ?: -1L
+                        output.seek(output.length())
+                        val expected = if (full) -1L else end - position + 1
+                        var got = 0L
+                        conn.inputStream.use { input ->
+                            val buf = ByteArray(256 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                output.write(buf, 0, n)
+                                got += n
+                            }
+                        }
+                        if (full) done = true
+                        // A short chunk with the size still unknown is the end of the stream.
+                        else if (total <= 0 && got < expected) done = true
+                        break
+                    } catch (e: IOException) {
+                        if (attempt >= 3) throw e
+                        Log.w(TAG, "chunk at ${output.length()} failed (attempt $attempt): ${e.message}")
+                    } finally {
+                        conn.disconnect()
+                    }
+                }
+                if (done) break
+                if (total in 1..output.length()) break
+            }
+        }
+        return true
+    }
+
+    private fun contentLength(url: String): Long =
+        runCatching {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "HEAD"
+                connectTimeout = 15_000
+                readTimeout = 15_000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", LosslessUa)
+            }
+            try {
+                conn.contentLengthLong.takeIf { it > 0 } ?: -1L
+            } finally {
+                conn.disconnect()
+            }
+        }.getOrDefault(-1L)
 
     // ── Pure helpers (unit-tested) ──
 
-    data class AudioChoice(val ext: String, val bitrate: Int, val url: String)
+    /** The lossless backends expect a browser-ish User-Agent on downloads. */
+    internal const val LosslessUa =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-    /** Highest bitrate first; at equal bitrate Opus (better quality per bit) first. */
-    fun rankAudio(streams: List<AudioChoice>): List<AudioChoice> =
-        streams.sortedWith(compareByDescending<AudioChoice> { it.bitrate }.thenBy { if (it.ext == "webm") 0 else 1 })
+    /** "bytes 0-99/1234" → 1234; null when absent or "*". */
+    fun contentRangeTotal(header: String?): Long? =
+        header?.substringAfterLast('/', "")?.trim()?.toLongOrNull()?.takeIf { it > 0 }
 
     /** "US-UM7-17-03861" / "usum71703861" → "USUM71703861"; null when not an ISRC. */
     fun normalizeIsrc(raw: String): String? =

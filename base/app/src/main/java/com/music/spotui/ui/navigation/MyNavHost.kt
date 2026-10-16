@@ -160,6 +160,20 @@ fun MyNavHost(
             ContextScreen(navHostController, type = "liked", id = "")
         }
 
+        // Settings: sound quality, downloads, data, display, language.
+        page(Routes.Settings.route){
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.SettingsScreen(navHostController)
+        }
+
+        // SpotiFLAC: the verification that gives the lossless downloads their best source.
+        page(Routes.Spotiflac.route){
+            com.music.spotui.ui.screens.SpotiflacScreen(onClose = { navHostController.popBackStack() })
+        }
+
 
 
 

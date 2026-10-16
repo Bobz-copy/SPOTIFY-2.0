@@ -799,6 +799,9 @@ object SongPlayer {
             val source = if (t.uri.scheme == "file") com.music.spotui.data.local.ListenHistory.Source.DOWNLOAD
                 else com.music.spotui.data.local.ListenHistory.Source.LOCAL
             trackListen(uri, song, source, isPlaying)
+            // The offline report: a downloaded song this app really played gets its
+            // play counted on Spotify's side (Wrapped), now or once back online.
+            com.music.spotui.data.offline.WrappedSync.onLocalState(t, isPlaying, pos, dur)
         }
     }
 

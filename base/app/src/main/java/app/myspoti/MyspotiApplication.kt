@@ -19,6 +19,10 @@ class MyspotiApplication : Application() {
         // Spotify session (hidden Web Player + API), caches, downloads, data saver.
         Graph.init(this)
         SongPlayer.attachEngine(Graph.currentSongState)
+        // Headphones or Bluetooth gone: pause rather than play on the speaker.
+        com.music.spotui.di.NoisyAudio.register(this)
+        // Offline listens kept for Wrapped reporting are replayed once signed in.
+        com.music.spotui.data.offline.WrappedSync.resumePending()
         PlaybackService.library = object : MediaLibrary {
             override suspend fun children(context: Context, parentId: String): List<MediaBrowserCompat.MediaItem> =
                 AutoBrowser.children(context, parentId)

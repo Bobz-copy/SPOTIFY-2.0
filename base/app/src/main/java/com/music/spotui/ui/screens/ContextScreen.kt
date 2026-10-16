@@ -208,9 +208,13 @@ class ContextViewModel(
      */
     fun playSmart(p: ContextPageModel, first: SongsModel?) {
         viewModelScope.launch {
+            val inList = p.tracks.map { it.spotifyTrackId }.toSet()
             val recs = withContext(Dispatchers.IO) {
-                runCatching { MyspotiRuntime.api.playlists.recommended(p.uri, limit = 20) }.getOrDefault(emptyList())
-            }.filter { r -> p.tracks.none { "spotify:track:${it.spotifyTrackId}" == r.uri } }.map(api::songOf)
+                if (p.type == "liked") {
+                    // Spotify's playlist extender refuses Liked Songs: the radios of a few liked songs instead.
+                    p.tracks.shuffled().take(3).flatMap { api.getRecommendations(listOf(it.spotifyTrackId)).take(8) }
+                } else runCatching { MyspotiRuntime.api.playlists.recommended(p.uri, limit = 20) }.getOrDefault(emptyList()).map(api::songOf)
+            }.filter { it.spotifyTrackId !in inList }.distinctBy { it.spotifyTrackId }.shuffled()
             val shuffled = p.tracks.shuffled().let { list -> first?.let { f -> listOf(f) + (list - f) } ?: list }
             val mixed = ArrayList<SongsModel>()
             val more = recs.iterator()
@@ -239,6 +243,9 @@ class ContextViewModel(
             if (local.size < p.tracks.size)
                 android.widget.Toast.makeText(app, app.getString(R.string.offline_only_downloaded, local.size, p.tracks.size), android.widget.Toast.LENGTH_SHORT).show()
             com.music.spotui.di.LocalPlayer.play(local.map(com.music.spotui.data.offline.OfflineStore::toLocalTrack), at, context = p.name)
+            // The downloads play from the list the user chose: the Wrapped report
+            // starts on that context (playlist/album), like a streamed play.
+            com.music.spotui.data.offline.WrappedSync.contextUri = p.uri.takeIf { it.isNotBlank() }
             return
         }
         state.updateQueue(p.tracks)
@@ -453,7 +460,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                             ) {
                                 when {
                                     smart -> { SmartShuffle.on.value = null; playerVm.updateShuffleState(false) }
-                                    shuffle && p.type == "playlist" -> {
+                                    shuffle && (p.type == "playlist" || p.type == "liked") -> {
                                         SmartShuffle.on.value = p.uri
                                         android.widget.Toast.makeText(context, context.getString(R.string.smart_shuffle_on), android.widget.Toast.LENGTH_SHORT).show()
                                         if (isThisContext) vm.playSmart(p, p.tracks.firstOrNull { it.id == currentSongId })
@@ -634,7 +641,8 @@ enum class TrackSort(val label: Int) {
     TITLE(R.string.track_sort_title),
     ARTIST(R.string.track_sort_artist),
     ALBUM(R.string.track_sort_album),
-    DURATION(R.string.track_sort_duration);
+    DURATION(R.string.track_sort_duration),
+    ADDED(R.string.track_sort_added);
 
     fun apply(songs: List<SongsModel>): List<SongsModel> {
         val text = java.text.Collator.getInstance().apply { strength = java.text.Collator.PRIMARY }
@@ -644,6 +652,8 @@ enum class TrackSort(val label: Int) {
             ARTIST -> songs.sortedWith { a, b -> text.compare(a.singer, b.singer).takeIf { it != 0 } ?: text.compare(a.album, b.album) }
             ALBUM -> songs.sortedWith { a, b -> text.compare(a.album, b.album).takeIf { it != 0 } ?: text.compare(a.title, b.title) }
             DURATION -> songs.sortedBy { it.durationMs }
+            // Newest first; ISO 8601 dates sort as text.
+            ADDED -> songs.sortedByDescending { it.addedAt }
         }
     }
 }

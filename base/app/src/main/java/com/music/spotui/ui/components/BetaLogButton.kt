@@ -49,7 +49,7 @@ import app.myspoti.engine.R
 import com.music.spotui.data.BetaLogs
 
 /**
- * Beta builds: a small bug icon in the bottom-right corner, next to the Library tab. Holding
+ * Beta builds: a small bug icon in the very bottom-right corner, under the Library tab. Holding
  * it makes it grow; held until full size, it opens the app's logs of the last
  * [BetaLogs.MINUTES] minutes, ready to copy into a bug report. A short touch does nothing.
  */
@@ -62,13 +62,13 @@ fun BetaLogButton(modifier: Modifier = Modifier) {
     if (!com.music.spotui.ui.navigation.PlayerSheet.open.value) Box(
         modifier
             .navigationBarsPadding()
-            .padding(end = 4.dp, bottom = 23.dp)
-            .size(44.dp)
+            .padding(end = 2.dp, bottom = 2.dp)
+            .size(30.dp)
             .pointerInput(Unit) {
                 detectTapGestures(onPress = {
                     val job = scope.launch {
                         grow.animateTo(1f, androidx.compose.animation.core.tween(HOLD_MS, easing = androidx.compose.animation.core.LinearEasing))
-                        Haptics.confirm()
+                        Haptics.thud()
                         open = true
                     }
                     // Ticks that get stronger and closer while the finger stays down.
@@ -89,7 +89,7 @@ fun BetaLogButton(modifier: Modifier = Modifier) {
         val g = grow.value
         BugIcon(
             color = androidx.compose.ui.graphics.lerp(Color(0xFFB3B3B3), Color(0xFF1DB954), g),
-            modifier = Modifier.size((24 + 16 * g).dp),
+            modifier = Modifier.size((16 + 12 * g).dp),
         )
     }
     if (open) LogsDialog(onDismiss = { open = false })

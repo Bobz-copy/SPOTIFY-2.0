@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Myspoti's own texts (English default, French). -->
+<!-- Myspoti's own texts (English default, French, Italian). -->
 <resources>
     <string name="welcome_tagline">Your music, with synced lyrics and official music videos.</string>
     <string name="welcome_login">Log in with Spotify</string>
@@ -56,7 +56,7 @@
     <string name="local_files_none_subtitle">We didn\'t find any playable audio files on this device. When there are some, they\'ll show up here.</string>
     <string name="downloads_empty_title">Download to listen offline</string>
     <string name="downloads_empty_subtitle">Tap Download in a song\'s menu, or the download button of an album or playlist.</string>
-    <string name="downloads_source">Audio from YouTube Music, checked against the original recording. Kept inside Myspoti only.</string>
+    <string name="downloads_source">Lossless FLAC, checked against the original recording. Kept inside Myspoti only.</string>
     <string name="downloads_size">%1$s on this phone</string>
     <string name="download_unavailable">No matching recording found</string>
     <string name="download_retry">Try again</string>
@@ -69,7 +69,7 @@
     <string name="browse_workout">Workout</string>
     <string name="browse_dance_electronic">Dance/Electronic</string>
     <string name="language_auto">Automatic</string>
-    <string name="language_auto_detail">French on a French phone, English otherwise</string>
+    <string name="language_auto_detail">Your phone\'s language when Myspoti has it (English, French, Italian), English otherwise</string>
     <string name="language_partial_note">Other languages: Spotify\'s own labels are translated, Myspoti\'s texts stay in English.</string>
     <string name="restart_player_title">Restart the player</string>
     <string name="restart_player_detail">If the music stops responding: reloads Spotify\'s player</string>
@@ -188,4 +188,57 @@
     <string name="local_folders_detail">Choose the folders shown in Local Files. Messaging apps and recordings start hidden.</string>
     <string name="smart_shuffle_title">Smart shuffle</string>
     <string name="smart_shuffle_on">Smart shuffle: Spotify recommendations join the shuffled playlist.</string>
+    <string name="track_sort_added">Date added</string>
+    <!-- Lossless (SpotiFLAC) downloads -->
+    <string name="spotiflac_row_title">Lossless downloads (FLAC)</string>
+    <string name="spotiflac_row_on">Verified — Myspoti uses SpotiFLAC\'s own servers.</string>
+    <string name="spotiflac_row_off">Not verified — tap to solve the one-off check.</string>
+    <string name="spotiflac_verify_title">SpotiFLAC verification</string>
+    <string name="spotiflac_verify_start_failed">Could not start verification. Tap Retry or come back later.</string>
+    <string name="spotiflac_verify_timeout">Verification timed out. Tap Retry or Skip for now.</string>
+    <string name="spotiflac_verify_rejected">Verification was rejected. Tap Retry or Skip for now.</string>
+    <string name="spotiflac_session_ok">SpotiFLAC session saved</string>
+    <string name="spotiflac_session_creating">Creating secure session…</string>
+    <string name="spotiflac_session_failed">Could not finish verification. Tap Retry or Skip for now.</string>
+    <string name="spotiflac_skip">Skip for now</string>
+    <string name="retry">Retry</string>
+    <string name="spotiflac_status_title">SpotiFLAC</string>
+    <string name="spotiflac_status_verified">You are verified: downloads go through SpotiFLAC\'s own servers, the most reliable lossless source. Only this session is used — no account, nothing else stored.</string>
+    <string name="spotiflac_session_expires">Session valid until %1$s</string>
+    <string name="spotiflac_forget">Forget this session</string>
+    <string name="lossless_hires_title">Hi-res downloads (24-bit)</string>
+    <string name="lossless_hires_detail">A track saved in 24-bit hi-res when the source has it. Files are about three times bigger than CD quality.</string>
+    <string name="setup_spotiflac_title">Lossless downloads (FLAC)</string>
+    <string name="setup_spotiflac_detail">Verify once with SpotiFLAC so downloads come from its lossless servers.</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_detail">Sound quality, downloads, data, battery and language</string>
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_section_downloads">Downloads</string>
+    <string name="settings_section_data">Data and battery</string>
+    <string name="settings_section_display">Display and language</string>
+    <string name="settings_section_app">App</string>
+    <string name="quality_streaming_title">Streaming quality</string>
+    <string name="quality_streaming_detail">What the player streams over the network.</string>
+    <string name="quality_streaming_auto">Automatic</string>
+    <string name="quality_streaming_auto_detail">Adapts to your connection</string>
+    <string name="quality_streaming_low">Lowest</string>
+    <string name="quality_streaming_low_detail">24 kbit/s, the lowest possible: uses the least data</string>
+    <string name="quality_streaming_normal">Normal</string>
+    <string name="quality_streaming_normal_detail">96 kbit/s, a good balance of sound and data</string>
+    <string name="quality_streaming_high">High</string>
+    <string name="quality_download_title">Download quality</string>
+    <string name="quality_download_detail">How songs are saved for offline listening.</string>
+    <string name="quality_download_off">Off</string>
+    <string name="quality_download_off_detail">No downloads</string>
+    <string name="quality_download_cd">FLAC, CD quality</string>
+    <string name="quality_download_cd_detail">Lossless 16-bit, about 30 MB a song</string>
+    <string name="quality_download_hires">FLAC Hi-Res</string>
+    <string name="quality_download_hires_detail">24-bit when it exists, files about three times bigger</string>
+    <string name="setup_quality_title">Sound quality</string>
+    <string name="setup_quality_subtitle">Choose how Myspoti plays and saves your music. You can change it later in Settings.</string>
+    <string name="downloads_off_toast">Downloads are off. Turn them on in Settings.</string>
+    <string name="quality_streaming_high_detail">160 kbit/s, the best sound</string>
+    <string name="downloads_verify_hint">No lossless source answered. Verify SpotiFLAC once in Settings, Downloads: its servers are the reliable ones.</string>
+    <string name="quality_download_small">Smallest</string>
+    <string name="quality_download_small_detail">AAC 96 kbit/s, the lightest: about 3 MB a song</string>
 </resources>

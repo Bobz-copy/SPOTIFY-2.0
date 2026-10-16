@@ -59,4 +59,26 @@ class LiveOrderTest {
             runCatching { api.player.pause() }
         }
     }
+
+    /** Smart shuffle on Liked Songs: other songs play inside the Liked Songs order. */
+    @Test
+    fun `plays other songs inside liked songs`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val host = CdpHost.connect(System.getProperty("myspoti.cdp"))
+        val api = SpotifyApi(host, scope, language = "fr")
+        host.reload(); host.awaitLoad(); api.onPageLoaded(); api.awaitReady()
+        val liked = api.library.likedTracks(0, 5).items.map { it.track.uri }
+        val other = api.playlists.tracks("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", 0, 5).items.map { it.uri }.first { it !in liked }
+        val order = listOf(liked[0], other) + liked.drop(1)
+        try {
+            api.player.play("spotify:collection:tracks", trackUri = liked[0], order = order)
+            withTimeout(30_000) { api.player.state.first { it?.item?.uri == liked[0] && !it.isPaused } }
+            api.player.next()
+            val t = withTimeout(30_000) { api.player.state.first { it?.item != null && it.item!!.uri != liked[0] } }!!
+            println("liked then: ${t.item?.name} context ${t.contextUri}")
+            assertEquals(other, t.item?.uri)
+        } finally {
+            runCatching { api.player.pause() }
+        }
+    }
 }

@@ -32,19 +32,30 @@ object Haptics {
      * as the hold goes on, so the finger feels it is getting somewhere.
      */
     fun ramp(level: Float) {
-        val v = view?.get() ?: return
-        val vibrator = (if (Build.VERSION.SDK_INT >= 31)
-            v.context.getSystemService(android.os.VibratorManager::class.java)?.defaultVibrator
-        else @Suppress("DEPRECATION") v.context.getSystemService(android.os.Vibrator::class.java)) ?: return
+        val vibrator = vibrator() ?: return
         val l = level.coerceIn(0.05f, 1f)
+        // A plain pulse, not the TICK primitive: some phones (Samsung) play that one too
+        // faintly to feel at the start of the hold.
         runCatching {
-            if (Build.VERSION.SDK_INT >= 30 && vibrator.areAllPrimitivesSupported(android.os.VibrationEffect.Composition.PRIMITIVE_TICK)) {
-                vibrator.vibrate(android.os.VibrationEffect.startComposition()
-                    .addPrimitive(android.os.VibrationEffect.Composition.PRIMITIVE_TICK, l).compose())
+            if (vibrator.hasAmplitudeControl()) {
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot((10 + 15 * l).toLong(), (60 + 195 * l).toInt().coerceIn(1, 255)))
             } else {
-                vibrator.vibrate(android.os.VibrationEffect.createOneShot(12, (40 + 215 * l).toInt().coerceIn(1, 255)))
+                vibrator.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
             }
         }
+    }
+
+    /** A strong, unmistakable buzz: the debug button held to the end. */
+    fun thud() {
+        val vibrator = vibrator() ?: return
+        runCatching { vibrator.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_HEAVY_CLICK)) }
+    }
+
+    private fun vibrator(): android.os.Vibrator? {
+        val v = view?.get() ?: return null
+        return if (Build.VERSION.SDK_INT >= 31)
+            v.context.getSystemService(android.os.VibratorManager::class.java)?.defaultVibrator
+        else @Suppress("DEPRECATION") v.context.getSystemService(android.os.Vibrator::class.java)
     }
 
     /** A completed action (queued, removed, transferred). */

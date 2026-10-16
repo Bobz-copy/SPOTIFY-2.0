@@ -772,6 +772,10 @@ private fun AccountSheet(
 
             // Spotify's own account pages (plan, privacy, devices), signed in, in the app.
             val context = androidx.compose.ui.platform.LocalContext.current
+            AccountRow(stringResource(R.string.settings_title)) {
+                onDismiss()
+                navController.navigate(com.music.spotui.ui.navigation.Routes.Settings.route)
+            }
             AccountRow(stringResource(R.string.account_page_title) + "  \u2197") {
                 onDismiss()
                 AccountBrowser.open(context, AccountBrowser.ACCOUNT_URL)

@@ -30,7 +30,7 @@ The official Spotify Web Player runs in a hidden WebView and does the actual pla
 - **Your recap**: your top tracks, artists and albums, counting Spotify, downloads and local files. It stays on your phone.
 - Official music videos, when one exists. The video plays muted, in sync with the song. The app only uses YouTube videos marked as official clips, and shows nothing when no clip exists.
 - Spotify Connect, media notification, lock screen, Bluetooth and Android Auto.
-- **Offline downloads.** Download a song, an album, a playlist or your Liked Songs, then play them without a connection. The audio comes from YouTube Music (Opus or AAC, as YouTube serves it, never re-encoded), not from Spotify. Each file is checked against the recording's official preview (looked up by ISRC), so a live take, a remix or a cover is rejected. Files stay in Myspoti's private storage.
+- **Offline downloads.** Download a song, an album, a playlist or your Liked Songs, then play them without a connection. The audio comes lossless (FLAC): the recording found on Tidal, Qobuz or Amazon, matched by its exact ISRC, and resolved by [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) — its own signed servers first, then the open community backends. Each file is checked against the recording's official preview (looked up by ISRC), so a live take, a remix or a cover is rejected, and against the FLAC header, so a 30-second preview is rejected too. Files stay in Myspoti's private storage; hi-res (24-bit) is an option.
 
 ## How it works
 
@@ -50,9 +50,14 @@ Details for developers: [`base/api-spotify/README.md`](base/api-spotify/README.m
 
 ## Not included
 
-- No DRM circumvention.
-- No Spotify audio download or decryption. Offline downloads come from YouTube Music, not from Spotify or any other paid service.
-- No altered listening events.
+- No DRM circumvention. No Amazon stream decryption.
+- No Spotify audio download. Offline downloads are resolved from lossless catalogues through the open-backends community of SpotiFLAC; a track with no lossless source is simply marked unavailable.
+- Downloaded songs played on the phone are reported to Spotify as if Spotify had streamed them, although their audio did not come from Spotify (play time as measured on the phone; sent later when offline). Spotify counts them like streamed listens, in Wrapped and in artists' play counts, and may treat such reports as artificial streaming. No ad is marked as heard.
+
+## Credits
+
+- [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) (MIT) — the lossless resolving idea, its community backend protocol and the gated-session flow.
+- [Spotui](https://github.com/Spotui/Spotui) (GPL-3.0) — the Kotlin port of the resolver, the signed-session verification screen and the DASH-to-FLAC remux that Myspoti builds on.
 
 ## Disclaimer
 

@@ -162,7 +162,7 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
             "uri" to uri, "offset" to offset, "limit" to limit, "includeEpisodeContentRatingsV2" to true,
         )).entity("data.playlistV2", "fetchPlaylistContents")
         val content = p.at("content")
-        val items = content.list("items").mapNotNull { track(it.at("itemV2.data"), it.str("uid")) }
+        val items = content.list("items").mapNotNull { track(it.at("itemV2.data"), it.str("uid"))?.copy(addedAt = it.str("addedAt.isoString")) }
         val total = content.int("totalCount") ?: items.size
         return Page(items, offset, total, (offset + limit).takeIf { it < total })
     }

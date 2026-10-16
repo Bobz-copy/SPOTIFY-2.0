@@ -55,6 +55,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     /** Reloads the Web Player page (set by the host); used when a stalled player does not recover. */
     @Volatile var reloadHost: (suspend () -> Unit)? = null
 
+    /** Streaming quality ("auto", "low", "normal", "high", "very_high"), kept for every page load. */
+    @Volatile var audioQuality: String = "auto"
+        private set
+
     init {
         scope.launch {
             bridge.events.collect { (type, payload) ->
@@ -65,12 +69,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             }
         }
         scope.launch { watchStalls() }
+        // A reloaded page starts on "auto": the chosen quality is set again.
+        scope.launch { bridge.ready.collect { if (it && audioQuality != "auto") applyAudioQuality() } }
     }
 
     private suspend fun watchStalls() {
         var key: String? = null
         var since = 0L
         var attempts = 0
+        var adAttempts = 0
         while (true) {
             delay(WATCH_TICK_MS)
             val s = _state.value
@@ -80,13 +87,31 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 // A refused ad sits at 0:00, buffering; a real one plays to its end.
                 val stuck = ad != null && (ad.isBuffering || ad.speed == 0.0) && now - adSince > AD_STUCK_MS
                 if (stuck || now - adSince > AD_BREAK_MAX_MS) {
-                    bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: playing the next song")
-                    lastTrackState?.let { runCatching { playOn(it) } }
-                    adSince = now
+                    adAttempts++
+                    val last = lastTrackState
+                    // Playing on can land on the same refused ad again: after a few tries the
+                    // page itself is reloaded, which drops the ad break.
+                    if (adRecovery(adAttempts) == "next") {
+                        bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: playing the next song (attempt $adAttempts)")
+                        last?.let { runCatching { playOn(it) } }
+                    } else {
+                        adAttempts = 0
+                        bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: reloading the player")
+                        val reload = reloadHost
+                        if (reload != null) runCatching {
+                            reload()
+                            withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it } } ?: return@runCatching
+                            delay(1_500)
+                            last?.let { playOn(it) }
+                        } else last?.let { runCatching { playOn(it) } }
+                    }
+                    adSince = System.currentTimeMillis()
                 }
                 key = null
                 continue
             }
+            // A song really playing again: the ad break is over.
+            if (s != null && !s.isPaused && !s.isBuffering) adAttempts = 0
             val reason = s?.let { stallOf(it, now, pausedByUserAt) }
             if (s == null || reason == null) { key = null; attempts = 0; continue }
             val k = "${s.item?.uri}|$reason"
@@ -202,6 +227,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         bridge.call("volume.set", buildJsonObject { put("level", level.coerceIn(0.0, 1.0)) })
     }
 
+    /** Sets the streaming quality now (when the page is up) and on every later page load. */
+    suspend fun setAudioQuality(level: String) {
+        audioQuality = level
+        if (bridge.ready.value) applyAudioQuality()
+    }
+
+    private suspend fun applyAudioQuality() {
+        runCatching { bridge.call("player.setAudioQuality", buildJsonObject { put("level", audioQuality) }) }
+            .onFailure { bridge.logger?.invoke("audio quality $audioQuality not set: ${it.message}") }
+    }
+
     /** Pulls the state once, e.g. right after the bridge is ready. */
     suspend fun refresh() {
         onState(playerState(bridge.call("player.state") as? JsonObject))
@@ -219,6 +255,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         private const val WATCH_TICK_MS = 2_000L
         /** Buffering longer than this on one song is a stall, not a slow network. */
         const val BUFFERING_STALL_MS = 25_000L
+        /** Stuck ads skipped by playing on before the page is reloaded. */
+        const val AD_SKIPS_BEFORE_RELOAD = 2
+
+        /** What the [attempt]-th try on a stuck ad does: "next" (play on) or "reload". */
+        fun adRecovery(attempt: Int): String = if (attempt <= AD_SKIPS_BEFORE_RELOAD) "next" else "reload"
 
         /**
          * Why [s] looks stalled at [now], or null. A song is stalled when its clock ran past

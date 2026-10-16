@@ -6,6 +6,14 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 A new engine, written from scratch, and a cleaner app on top of it.
 
+- **Lossless downloads**: the offline downloads are now FLAC. Myspoti finds the same recording on a lossless service (Tidal, Qobuz or Amazon) by the track's ISRC and takes it as it is served, never re-encoded — 16-bit CD quality, **24-bit hi-res when it exists**, or AAC re-encoded on the phone to keep them small (in Settings). The matching is done the way [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) does it, with SpotiFLAC's own signed servers first. A one-off verification (a quick invisible check) turns it on after sign-in. A track with no lossless recording anywhere is marked unavailable.
+- **Sound quality, chosen at the start**: a first step after sign-in picks the streaming quality (Automatic, Low 24 kbit/s, Normal 96, High 160) and the download quality (off, smallest AAC 96 kbit/s, FLAC CD, FLAC hi-res). Both stay in the new **Settings** page.
+- **Settings page**: sound quality, downloads, data and battery, display and language, in one place (profile menu or Library's account menu).
+- **Italian**: Myspoti's own texts are translated too.
+- **Headphones unplugged or Bluetooth gone**: the music pauses instead of moving to the phone's speaker.
+- **Stuck ads**: an ad that blocks the player is skipped twice, then the player reloads, so the music does not stop for good.
+- **Offline listens count**: a downloaded song that plays on the phone is reported to Spotify like a streamed listen — the real play time, the context it started from — so it counts in Wrapped and the top lists. Offline listens are kept and reported once the network is back.
+
 - **New engine**: the app now talks to Spotify through its own API (`:api`), tested against the real Web Player on every change. Screens load faster: catalog, search, playlists and library come straight from Spotify's servers, in parallel, without waiting for the hidden player.
 - **Playback works again on every phone**: Spotify silently ignored play commands sent by an Android WebView. They now leave from the app itself, so songs start and the sound plays.
 - **Faster start**: the home feed, your library and Liked Songs show at once after a restart, from the last visit, then refresh. The library and Liked Songs load in the background as soon as Spotify is ready.
@@ -21,9 +29,11 @@ A new engine, written from scratch, and a cleaner app on top of it.
 - **Setup screen** after signing in: notifications, local music, Bluetooth and unrestricted battery, each with its own button.
 - **Folders in Local Files**: choose the folders shown; WhatsApp, Telegram, recordings and ringtones start hidden.
 - **Lock screen and Now Bar**: play / pause in the middle (like, previous, play, next, shuffle) and a centred app icon.
+- **New icon**: one green wave line, on the launcher, the launch screen and the status bar.
+- **Beta and release install side by side**: betas are "Myspoti Beta", releases "Myspoti", each with its own updates.
 - **Music no longer stops after a few songs**: when the player gets stuck between two songs, the next one starts by itself, and the player reloads if that is not enough.
-- **Smart shuffle** in playlists (tap shuffle twice): the playlist shuffled, with a Spotify recommendation every three songs.
-- **Sort by plays in that order**: a sorted playlist plays and queues in the order shown.
+- **Smart shuffle** in playlists and Liked Songs (tap shuffle twice): the list shuffled, with a Spotify recommendation every three songs.
+- **Sort by plays in that order**: a sorted playlist plays and queues in the order shown; **date added** joins the sort options.
 - **Saved in** shows your folders and the playlists' covers; a folder's menu creates a playlist inside it.
 - **Home loads again by itself** after an error, with a Try again button.
 - **Spotify account pages** open in the app's language when Spotify has them in it.

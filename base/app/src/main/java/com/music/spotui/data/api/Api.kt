@@ -107,6 +107,7 @@ class Api constructor(
             explicit = t.explicit,
             durationMs = t.durationMs.toInt(),
             albumId = t.album?.uri?.substringAfterLast(':').orEmpty(),
+            addedAt = t.addedAt.orEmpty(),
         )
     }
 
@@ -474,7 +475,7 @@ class Api constructor(
         var offset = 0
         while (true) {
             val page = api.library.likedTracks(offset, 50)
-            out += page.items.map { songOf(it.track) }
+            out += page.items.map { songOf(it.track).copy(addedAt = it.addedAt.orEmpty()) }
             onPage(out.toList())
             offset = page.nextOffset ?: break
         }

@@ -23,6 +23,8 @@ data class Track(
     val playable: Boolean = true,
     /** Position in a playlist; needed to remove or move this exact row. */
     val uid: String? = null,
+    /** When it was added to the playlist (ISO 8601), for playlist rows. */
+    val addedAt: String? = null,
 )
 
 data class Album(

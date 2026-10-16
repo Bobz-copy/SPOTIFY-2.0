@@ -168,6 +168,10 @@ object OfflineStore {
     /** Negative, so it never collides with a MediaStore id (Local Files). */
     fun localIdOf(trackId: String): Long = -1L - (trackId.hashCode().toLong() and 0x7fffffffL)
 
+    /** The downloaded track a local id plays, or null for files outside the downloads. */
+    fun byLocalId(id: Long): OfflineTrack? =
+        tracks.values.firstOrNull { localIdOf(it.trackId) == id }
+
     private fun readIndex(): List<OfflineTrack> = runCatching {
         val a = JSONArray(indexFile.readText())
         (0 until a.length()).mapNotNull { runCatching { OfflineTrack.fromJson(a.getJSONObject(it)) }.getOrNull() }

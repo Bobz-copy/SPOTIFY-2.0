@@ -24,4 +24,10 @@ class StallTest {
     @Test fun `paused mid-song`() = assertNull(SpotifyPlayer.stallOf(state(50_000, 0, paused = true), 60_000, 0))
     @Test fun `buffering for long`() = assertEquals("buffering", SpotifyPlayer.stallOf(state(0, 0, buffering = true), 20_000, 0))
     @Test fun `buffering a moment`() = assertNull(SpotifyPlayer.stallOf(state(0, 0, buffering = true), 5_000, 0))
+
+    @Test fun `a stuck ad is skipped twice, then the page reloads`() {
+        assertEquals("next", SpotifyPlayer.adRecovery(1))
+        assertEquals("next", SpotifyPlayer.adRecovery(2))
+        assertEquals("reload", SpotifyPlayer.adRecovery(3))
+    }
 }

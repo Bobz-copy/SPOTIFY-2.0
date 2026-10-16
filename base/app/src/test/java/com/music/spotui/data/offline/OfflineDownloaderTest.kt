@@ -1,20 +1,15 @@
 package com.music.spotui.data.offline
 
-import com.music.spotui.data.offline.OfflineDownloader.AudioChoice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OfflineDownloaderTest {
-    @Test fun rankAudioPrefersHighestBitrateThenOpus() {
-        val ranked = OfflineDownloader.rankAudio(listOf(
-            AudioChoice("m4a", 48, "a"),
-            AudioChoice("m4a", 128, "b"),
-            AudioChoice("webm", 160, "c"),
-            AudioChoice("webm", 128, "d"),
-        ))
-        assertEquals(listOf("c", "d", "b", "a"), ranked.map { it.url })
+    @Test fun contentRangeTotalReadsTheFullSize() {
+        assertEquals(1234L, OfflineDownloader.contentRangeTotal("bytes 0-99/1234"))
+        assertNull(OfflineDownloader.contentRangeTotal("bytes 0-99/*"))
+        assertNull(OfflineDownloader.contentRangeTotal(null))
     }
 
     @Test fun normalizeIsrcAcceptsDashesAndCase() {

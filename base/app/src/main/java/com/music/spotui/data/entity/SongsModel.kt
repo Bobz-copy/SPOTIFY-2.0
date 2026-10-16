@@ -19,6 +19,8 @@ data class SongsModel(
     val durationMs : Int = 0,
     // Spotify album id of the track, when known (opens the album page by id).
     val albumId : String = "",
+    // When it was added to the playlist or to Liked Songs (ISO 8601), for "Sort by date added".
+    val addedAt : String = "",
 ){
     constructor() : this(-1 ,"" ,"" ,"" ,"" ,"", "")
 }

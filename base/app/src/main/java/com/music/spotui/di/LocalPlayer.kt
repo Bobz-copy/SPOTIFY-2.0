@@ -54,6 +54,8 @@ object LocalPlayer {
         if (!active.value) return
         active.value = false
         exo?.let { it.stop(); it.clearMediaItems() }
+        // Whatever this run played gets closed honestly (Wrapped reporting).
+        com.music.spotui.data.offline.WrappedSync.finish()
     }
 
     fun resume() { exo?.play() }

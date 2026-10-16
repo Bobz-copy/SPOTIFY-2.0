@@ -29,6 +29,8 @@ sealed class Routes(
     object NewReleases : Routes(0, "NewReleases", "newreleases")
     object Episodes : Routes(0, "Episodes", "episodes")
     object Recap : Routes(0, "Recap", "recap")
+    object Spotiflac : Routes(0, "SpotiFLAC", "spotiflac")
+    object Settings : Routes(0, "Settings", "settings")
 }
 
 /** Builds a Browse-category route carrying the search genre and a display title. */

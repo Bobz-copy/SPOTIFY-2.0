@@ -40,6 +40,8 @@ class MainActivity : AppCompatActivity() {
     private var connecting by mutableStateOf(false)
     /** The one-time setup screen (permissions, battery) after signing in. */
     private var setupNeeded by mutableStateOf(false)
+    /** SpotiFLAC verification, opened from the setup screen or the settings. */
+    private var showSpotiflac by mutableStateOf(false)
 
     private val prefs get() = getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE)
 
@@ -54,7 +56,11 @@ class MainActivity : AppCompatActivity() {
                 SpotuiTheme {
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                         when {
-                            signedIn && setupNeeded -> com.music.spotui.ui.screens.SetupScreen(onDone = { setupNeeded = false })
+                            showSpotiflac -> com.music.spotui.ui.screens.SpotiflacScreen(onClose = { showSpotiflac = false })
+                            signedIn && setupNeeded -> com.music.spotui.ui.screens.SetupScreen(
+                                onDone = { setupNeeded = false },
+                                onSpotiflac = { showSpotiflac = true },
+                            )
                             signedIn -> App()
                             connecting -> ConnectingScreen()
                             else -> WelcomeScreen(onLogin = { showLogin() })

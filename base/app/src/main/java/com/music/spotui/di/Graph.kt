@@ -14,6 +14,8 @@ object Graph {
         app = application
         // The Spotify session: hidden Web Player + API (operation hashes refresh themselves).
         MyspotiRuntime.start(application)
+        // The streaming quality the user chose, set on the player at every page load.
+        com.music.spotui.data.preferences.applyStreamingQuality(com.music.spotui.data.preferences.getStreamingQuality(application))
         com.music.spotui.data.local.ListenHistory.init(application)
         // Downloaded songs (private storage), and the downloads left unfinished last time.
         // Supporter thank-yous (accent colour) before any screen draws.

@@ -407,7 +407,6 @@ private fun HomeFeedCard(item: HomeItem, onClick: () -> Unit) {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
 private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> Unit) {
-    val energy by app.myspoti.power.EnergySettings.state.collectAsStateWithLifecycle()
     val name = com.music.spotui.data.api.ProfileCache.name.orEmpty()
     val avatar = com.music.spotui.data.api.ProfileCache.imageUrl
     // Opened in full: half-open, the sheet and its list both moved under the finger.
@@ -428,31 +427,14 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
                     com.music.spotui.ui.components.SupporterBadge(Modifier.padding(start = 10.dp))
             }
             androidx.compose.material3.HorizontalDivider(color = Color(0xFF3E3E3E), modifier = Modifier.padding(vertical = 8.dp))
-            EnergyOptionRow(
-                label = stringResource(R.string.energy_saver_title),
-                detail = stringResource(R.string.energy_saver_summary),
-                checked = energy.manualSaver,
-                onChecked = app.myspoti.power.EnergySettings::setSaver,
-            )
-            EnergyOptionRow(
-                label = stringResource(R.string.data_saver_title),
-                detail = stringResource(R.string.data_saver_summary),
-                checked = com.music.spotui.data.DataSaver.enabled,
-                onChecked = com.music.spotui.data.DataSaver::set,
-            )
-            EnergyOptionRow(
-                label = stringResource(R.string.settings_amoled_theme),
-                detail = stringResource(R.string.settings_amoled_theme_subtitle),
-                checked = energy.blackPreference,
-                onChecked = app.myspoti.power.EnergySettings::setBlackBackground,
-            )
-            EnergyOptionRow(
-                label = stringResource(R.string.settings_item_canvas_title),
-                detail = stringResource(if (energy.policy.saverEnabled) R.string.energy_saver_summary else R.string.video_settings_canvas_subtitle),
-                checked = energy.canvasEnabled && !energy.policy.saverEnabled,
-                enabled = !energy.policy.saverEnabled,
-                onChecked = app.myspoti.power.EnergySettings::setCanvasEnabled,
-            )
+            // Sound quality, downloads, data, battery, display: one page.
+            androidx.compose.foundation.layout.Column(
+                Modifier.fillMaxWidth().clickable { onOpen(com.music.spotui.ui.navigation.Routes.Settings.route) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(stringResource(R.string.settings_title), color = Color.White, fontSize = 16.sp)
+                Text(stringResource(R.string.settings_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            }
             // In-app recap: every listen on this phone, Spotify, downloads and local files.
             androidx.compose.foundation.layout.Column(
                 Modifier.fillMaxWidth().clickable { onOpen(com.music.spotui.ui.navigation.Routes.Recap.route) }
@@ -471,33 +453,7 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
                 Text(stringResource(R.string.account_page_title), color = Color.White, fontSize = 16.sp)
                 Text(stringResource(R.string.account_page_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
-            LanguageRow()
-            // Battery optimization off = music and Connect keep going with the screen off.
             val ctx = androidx.compose.ui.platform.LocalContext.current
-            var exempt by remember { androidx.compose.runtime.mutableStateOf(app.myspoti.power.BatteryExemption.isExempt(ctx)) }
-            androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                exempt = app.myspoti.power.BatteryExemption.isExempt(ctx)
-            }
-            EnergyOptionRow(
-                label = stringResource(R.string.background_playback_title),
-                detail = stringResource(if (exempt) R.string.background_playback_on else R.string.background_playback_off),
-                checked = exempt,
-                onChecked = {
-                    if (exempt) ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                    else app.myspoti.power.BatteryExemption.request(ctx)
-                },
-            )
-            // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
-            androidx.compose.foundation.layout.Column(
-                Modifier.fillMaxWidth().clickable {
-                    onDismiss()
-                    app.myspoti.host.android.MyspotiRuntime.host.reload()
-                }.padding(horizontal = 20.dp, vertical = 10.dp),
-            ) {
-                Text(stringResource(R.string.restart_player_title), color = Color.White, fontSize = 16.sp)
-                Text(stringResource(R.string.restart_player_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
-            }
-            if (com.music.spotui.data.offline.OfflineStore.tracks.isNotEmpty()) RemoveDownloadsRow()
             // Donations (Ko-fi): always here, never in the way.
             androidx.compose.foundation.layout.Column(
                 Modifier.fillMaxWidth().clickable { com.music.spotui.data.api.SupportReminder.open(ctx) }
@@ -550,103 +506,3 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
 }
 
 
-/** "App language": Automatic (French or English) or any language with Spotify's labels. */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun LanguageRow() {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    val current = remember { com.music.spotui.data.AppLanguage.current(ctx) }
-    var picking by remember { androidx.compose.runtime.mutableStateOf(false) }
-    val auto = stringResource(R.string.language_auto)
-    fun label(tag: String) = if (tag == com.music.spotui.data.AppLanguage.SYSTEM) auto else com.music.spotui.data.AppLanguage.nativeName(tag)
-    androidx.compose.foundation.layout.Column(
-        Modifier.fillMaxWidth().clickable { picking = true }.padding(horizontal = 20.dp, vertical = 10.dp),
-    ) {
-        Text(stringResource(R.string.settings_item_app_language_title), color = Color.White, fontSize = 16.sp)
-        Text(label(current), color = Color(0xFFB3B3B3), fontSize = 12.sp)
-    }
-    if (picking) androidx.compose.material3.ModalBottomSheet(
-        onDismissRequest = { picking = false },
-        containerColor = Color(0xFF282828),
-    ) {
-        androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-            item {
-                Text(stringResource(R.string.settings_item_app_language_title), color = Color.White, fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                Text(stringResource(R.string.language_partial_note), color = Color(0xFFB3B3B3), fontSize = 12.sp,
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
-            }
-            items(com.music.spotui.data.AppLanguage.AVAILABLE.size) { i ->
-                val tag = com.music.spotui.data.AppLanguage.AVAILABLE[i]
-                val selected = tag == current
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable {
-                        picking = false
-                        if (!selected) {
-                            com.music.spotui.data.AppLanguage.apply(ctx, tag)
-                            // Screens take the new language when the activity is rebuilt.
-                            generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }
-                                .filterIsInstance<android.app.Activity>().firstOrNull()?.recreate()
-                        }
-                    }.padding(horizontal = 20.dp, vertical = 8.dp),
-                ) {
-                    androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
-                        Text(label(tag), color = if (selected) com.music.spotui.ui.theme.AppAccent else Color.White, fontSize = 16.sp)
-                        if (tag == com.music.spotui.data.AppLanguage.SYSTEM)
-                            Text(stringResource(R.string.language_auto_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
-                    }
-                    if (selected) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Check, null, tint = com.music.spotui.ui.theme.AppAccent)
-                }
-            }
-        }
-    }
-}
-
-/** "Remove all downloads", with the space they take; asks first, like the official app. */
-@Composable
-private fun RemoveDownloadsRow() {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var ask by remember { androidx.compose.runtime.mutableStateOf(false) }
-    val size = android.text.format.Formatter.formatShortFileSize(ctx, com.music.spotui.data.offline.OfflineStore.totalBytes())
-    androidx.compose.foundation.layout.Column(
-        Modifier.fillMaxWidth().clickable { ask = true }.padding(horizontal = 20.dp, vertical = 10.dp),
-    ) {
-        Text(stringResource(R.string.settings_item_remove_downloads_title), color = Color.White, fontSize = 16.sp)
-        Text(stringResource(R.string.downloads_size, size), color = Color(0xFFB3B3B3), fontSize = 12.sp)
-    }
-    if (ask) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { ask = false },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.settings_storage_remove_downloads_dialog_title), color = Color.White) },
-        text = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_description), color = Color(0xFFB3B3B3)) },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                ask = false
-                com.music.spotui.data.offline.OfflineDownloader.removeAll()
-            }) { Text(stringResource(R.string.playlist_entity_remove_download_dialog_positive_button), color = com.music.spotui.ui.theme.AppAccent) }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = { ask = false }) {
-                Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White)
-            }
-        },
-    )
-}
-
-
-
-@Composable
-private fun EnergyOptionRow(label: String, detail: String, checked: Boolean,
-    enabled: Boolean = true, onChecked: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)
-            .toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChecked)
-            .padding(horizontal = 20.dp, vertical = 10.dp)) {
-        androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
-            Text(label, color = Color.White, fontSize = 16.sp)
-            Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp)
-        }
-        androidx.compose.material3.Switch(checked = checked, enabled = enabled, onCheckedChange = null)
-    }
-}

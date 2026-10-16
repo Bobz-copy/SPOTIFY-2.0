@@ -202,6 +202,18 @@
     'player.setShuffle': a => need().player.setShuffle(!!a.on),
     'player.setRepeat': a => need().player.setRepeat(a.mode),
     'player.setSpeed': a => need().player.setSpeed(a.speed),
+    // Streaming quality, as the desktop app's setting: "auto", "low", "normal", "high",
+    // "very_high". The page's own player (PlayerSDK.harmony) picks the files with it.
+    'player.setAudioQuality': async a => {
+      const sdk = need().resolve('PlayerSDK');
+      const harmony = sdk && sdk.harmony;
+      // The page's own streamer first: the public entry refuses while Spotify Connect
+      // calls another device the active one ("remote player"), yet this page plays.
+      const target = [harmony && harmony._streamer, harmony]
+        .find(t => t && typeof t.setMediaPlaybackQuality === 'function');
+      if (!target) throw new Error('no audio quality setting');
+      return !!(await target.setMediaPlaybackQuality({ audio: a.level }));
+    },
     'queue.add': a => need().player.addToQueue(a.uris.map(uri => ({ uri }))),
     'queue.remove': a => need().player.removeFromQueue(a.items),
     'queue.clear': () => need().player.clearQueue(),

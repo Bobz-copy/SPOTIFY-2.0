@@ -46,6 +46,8 @@ object LosslessSource {
         val provider: String,
         /** Bit depth the source claims (the STREAMINFO after a remux tells the truth). */
         val quality: Int,
+        /** An AAC file served as it is (Tidal's LOW / HIGH), not a FLAC. */
+        val aac: Boolean = false,
     )
 
     sealed interface Result
@@ -64,6 +66,8 @@ object LosslessSource {
         spotifyId: String,
         info: TrackInfo = TrackInfo(),
         preferHiRes: Boolean = false,
+        /** The "smallest" quality: Tidal's own AAC first, as SpotiFLAC asks for LOW / HIGH. */
+        small: Boolean = false,
     ): Result = withContext(Dispatchers.IO) {
         // Qobuz's own catalogue search finds the ISRC quickly and does not depend on the
         // community backends; the Tidal id does (their search), and they are often down.
@@ -73,7 +77,10 @@ object LosslessSource {
         //    session, as SpotiFLAC Mobile's tidal-web extension does: the most reliable source.
         //    Tidal's own public API finds the exact ISRC.
         if (verified(ZarzSession.Ext.TIDAL)) {
-            tidalIdForIsrc(info.isrc)?.let { id -> zarzTidal(context, id, info, preferHiRes)?.let { return@withContext it } }
+            tidalIdForIsrc(info.isrc)?.let { id ->
+                if (small) zarzTidalAac(context, id)?.let { return@withContext it }
+                zarzTidal(context, id, info, preferHiRes)?.let { return@withContext it }
+            }
         }
         // 2. Qobuz the same way (qobuz-web), found by ISRC in Qobuz's own catalogue.
         val qobuz = qobuzIdForIsrc(info.isrc)
@@ -152,6 +159,38 @@ object LosslessSource {
         }
         return null
     }
+
+    /**
+     * Tidal's own AAC (LOW = 96 kbit/s, else HIGH = 320), one file as Tidal serves it:
+     * the small download, without a FLAC to fetch and re-encode on the phone.
+     */
+    private fun zarzTidalAac(context: Context, tidalId: String): Result? {
+        for (q in listOf("LOW", "HIGH")) {
+            try {
+                val ticket = ZarzSession.ticket(context, ZarzSession.Ext.TIDAL, "tid", "track", tidalId)
+                val o = ZarzSession.signedJson(context, ZarzSession.Ext.TIDAL, "POST", "/dl/tid",
+                    JSONObject().put("id", tidalId).put("quality", q), mapOf("X-Zarz-Ticket" to ticket))
+                val data = o.optJSONObject("data") ?: continue
+                if (data.optString("assetPresentation").equals("PREVIEW", true)) continue
+                val url = aacManifestUrl(data.optString("manifest")) ?: continue
+                return Success(LosslessFile(url, "", "Tidal AAC ${if (q == "LOW") 96 else 320}", 16, aac = true), isrcMatched = true)
+            } catch (e: ZarzSession.VerifyRequired) {
+                com.music.spotui.data.preferences.clearSpotiflacSession(context, ZarzSession.Ext.TIDAL.appVersion)
+                return null
+            } catch (e: Exception) {
+                Log.w(TAG, "zarz tidal aac $q: ${e.message}")
+            }
+        }
+        return null
+    }
+
+    /** The one file of a Tidal AAC manifest (BTS JSON, mimeType audio/mp4); null for anything else. */
+    internal fun aacManifestUrl(manifestB64: String): String? = runCatching {
+        val m = JSONObject(String(java.util.Base64.getMimeDecoder().decode(manifestB64), Charsets.UTF_8))
+        val urls = m.optJSONArray("urls") ?: return null
+        if (urls.length() != 1 || !m.optString("mimeType").contains("mp4")) return null
+        urls.optString(0).takeIf { it.startsWith("http") }
+    }.getOrNull()
 
     /** Tidal's public API: the track carrying this exact ISRC (the web player's own token). */
     internal fun tidalIdForIsrc(isrc: String): String? {

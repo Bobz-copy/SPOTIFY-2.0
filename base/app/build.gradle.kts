@@ -99,6 +99,8 @@ dependencies {
     // The SpotiFLAC verification opens in a browser tab, as SpotiFLAC Mobile does.
     implementation("androidx.browser:browser:1.8.0")
     testImplementation("junit:junit:4.13.2")
+    // The real org.json in unit tests (android.jar only has stubs).
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     implementation(libs.androidx.core.ktx)

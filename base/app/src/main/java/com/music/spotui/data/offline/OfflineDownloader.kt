@@ -26,6 +26,7 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
@@ -83,6 +84,9 @@ object OfflineDownloader {
     }
 
     private class Unavailable(message: String) : Exception(message)
+
+    /** Two AAC encodes at once at most: the CPU stays free for the rest of the app. */
+    private val encodeSlots = kotlinx.coroutines.sync.Semaphore(2)
 
     @Volatile private var hinted = false
 
@@ -255,7 +259,8 @@ object OfflineDownloader {
             Log.i(TAG, "${meta.title}: isrc=${meta.isrc ?: "-"} preview=${if (previewFeatures != null) "ok" else if (previewLink != null) "unusable" else "none"}")
 
             // ── Lossless resolve: gated SpotiFLAC first, then the community backends.
-            val file = resolveAndFetch(r, meta, audioTmp, quality == com.music.spotui.data.preferences.DownloadQuality.HI_RES)
+            val file = resolveAndFetch(r, meta, audioTmp, quality == com.music.spotui.data.preferences.DownloadQuality.HI_RES,
+                small = quality == com.music.spotui.data.preferences.DownloadQuality.SMALL)
                 ?: throw Unavailable("no lossless match")
             currentCoroutineContext().ensureActive()
 
@@ -275,12 +280,17 @@ object OfflineDownloader {
             }
 
             val out: File
-            if (quality == com.music.spotui.data.preferences.DownloadQuality.SMALL) {
+            if (file.aac) {
+                // Tidal's own AAC: already small, kept as it was served.
+                out = File(OfflineStore.audioDir, "${r.trackId}.m4a")
+                if (!audioTmp.renameTo(out)) throw IOException("could not move the file")
+            } else if (quality == com.music.spotui.data.preferences.DownloadQuality.SMALL) {
                 // "Smallest": the checked FLAC becomes AAC, encoded on the phone.
                 out = File(OfflineStore.audioDir, "${r.trackId}.m4a")
                 val aacTmp = File(OfflineStore.tmpDir, "${r.trackId}.m4apart")
                 try {
-                    checkLock.withLock { runInterruptible(Dispatchers.Default) { AacTranscoder.transcode(audioTmp, aacTmp) } }
+                    // Not under checkLock: encoding is long, the other downloads must not queue behind it.
+                    encodeSlots.withPermit { runInterruptible(Dispatchers.Default) { AacTranscoder.transcode(audioTmp, aacTmp) } }
                     if (aacTmp.length() < 10_000 || !aacTmp.renameTo(out)) throw IOException("could not encode the small file")
                 } finally {
                     aacTmp.delete()
@@ -304,22 +314,23 @@ object OfflineDownloader {
         }
     }
 
-    private class Fetched(val provider: String, val isrcMatched: Boolean) {
+    private class Fetched(val provider: String, val isrcMatched: Boolean, val aac: Boolean = false) {
         var verified = false
     }
 
-    /** Runs the lossless resolver and saves the audio into [out]; null when nothing matched. */
     /** This download's quality: the one chosen when it started, else Settings (CD when Settings says "ask"). */
     private fun qualityOf(r: Request): com.music.spotui.data.preferences.DownloadQuality =
         com.music.spotui.data.preferences.DownloadQuality.saved(r.quality)
             ?: com.music.spotui.data.preferences.DownloadQuality.saved(com.music.spotui.data.preferences.getDownloadQuality(Graph.app).name)
             ?: com.music.spotui.data.preferences.DownloadQuality.CD
 
-    private suspend fun resolveAndFetch(r: Request, meta: Meta, out: File, hiRes: Boolean): Fetched? {
+    /** Runs the resolver and saves the audio into [out]; null when nothing matched. */
+    private suspend fun resolveAndFetch(r: Request, meta: Meta, out: File, hiRes: Boolean, small: Boolean = false): Fetched? {
         val resolved = LosslessSource.resolve(
             Graph.app, r.trackId,
             LosslessSource.TrackInfo(meta.title, meta.artist, (meta.durationMs / 1000).toInt(), meta.isrc.orEmpty()),
             preferHiRes = hiRes,
+            small = small,
         )
         if (resolved !is LosslessSource.Success) return null
         val track = resolved.track
@@ -332,6 +343,10 @@ object OfflineDownloader {
             else -> fetchWithProgress(r.trackId, track.url, out)
         }
         if (!ok || out.length() < 10_000) return null
+        if (track.aac) {
+            Log.i(TAG, "${meta.title}: saved ${track.provider}")
+            return Fetched(track.provider, resolved.isrcMatched, aac = true)
+        }
         checkFlacHeader(out, meta, track)
         Log.i(TAG, "${meta.title}: saved lossless FLAC from ${track.provider} (${track.quality}-bit)")
         return Fetched("${track.provider} ${track.quality}-bit", resolved.isrcMatched)

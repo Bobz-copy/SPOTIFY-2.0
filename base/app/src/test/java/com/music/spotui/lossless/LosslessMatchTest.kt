@@ -84,4 +84,13 @@ class FlacDurationTest {
         // Spotify gave no ISRC: nothing can match it.
         assertFalse(LosslessSource.isrcMatches("USUM71703861", ""))
     }
+
+    @Test
+    fun readsTheOneFileOfAnAacManifest() {
+        fun b64(s: String) = java.util.Base64.getEncoder().encodeToString(s.toByteArray())
+        assertEquals("https://cdn/x.mp4", LosslessSource.aacManifestUrl(b64("""{"mimeType":"audio/mp4","codecs":"mp4a.40.5","urls":["https://cdn/x.mp4"]}""")))
+        // A FLAC or a DASH manifest is not the small AAC file.
+        assertNull(LosslessSource.aacManifestUrl(b64("""{"mimeType":"audio/flac","urls":["https://cdn/x.flac"]}""")))
+        assertNull(LosslessSource.aacManifestUrl(b64("<MPD></MPD>")))
+    }
 }

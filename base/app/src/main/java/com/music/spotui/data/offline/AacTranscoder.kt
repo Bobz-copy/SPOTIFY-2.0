@@ -160,6 +160,11 @@ object AacTranscoder {
      */
     internal fun toPcm16(buf: ByteBuffer, encoding: Int, inChannels: Int, outChannels: Int, step: Int = 1): ByteArray {
         val b = buf.slice().order(ByteOrder.nativeOrder())
+        // The usual case (CD FLAC, 16-bit stereo): the decoder's bytes are already what the encoder takes.
+        if (step == 1 && inChannels == outChannels &&
+            encoding != android.media.AudioFormat.ENCODING_PCM_FLOAT && encoding != android.media.AudioFormat.ENCODING_PCM_32BIT &&
+            encoding != android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED
+        ) return ByteArray(b.remaining()).also { b.get(it) }
         val bytesPerSample = when (encoding) {
             android.media.AudioFormat.ENCODING_PCM_FLOAT, android.media.AudioFormat.ENCODING_PCM_32BIT -> 4
             android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3

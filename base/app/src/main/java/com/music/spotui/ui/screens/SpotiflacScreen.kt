@@ -60,7 +60,8 @@ fun SpotiflacScreen(onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     var attempt by remember { mutableStateOf(0) }
     // One session per download server (Tidal, then Qobuz); verified once none is missing.
-    fun missing() = com.music.spotui.lossless.ZarzSession.Ext.entries
+    // Tidal only: the best source, and a single page to solve (Qobuz would need its own).
+    fun missing() = listOf(com.music.spotui.lossless.ZarzSession.Ext.TIDAL)
         .firstOrNull { com.music.spotui.data.preferences.getSpotiflacSession(context, it.appVersion) == null }
     var ext by remember { mutableStateOf(missing()) }
     var verified by remember { mutableStateOf(ext == null) }

@@ -18,6 +18,7 @@ import android.util.Log
 internal object DashFlacRemux {
     private const val TAG = "DashFlacRemux"
     private const val UA = "SpotiFLAC"
+    private const val PARALLEL_SEGMENTS = 3
 
     /** [trackUrl] is either a `data:application/dash+xml;base64,…` URI or the MPD text itself. */
     fun download(streamUrl: String, outFile: java.io.File): Boolean = runCatching {
@@ -39,9 +40,16 @@ internal object DashFlacRemux {
             out.write((streamInfo.size ushr 8) and 0xFF)
             out.write(streamInfo.size and 0xFF)
             out.write(streamInfo)
-            for (n in startNumber until startNumber + segCount) {
-                val seg = httpBytes(mediaTmpl.replace("\$Number$", n.toString())) ?: return false
-                writeMdatPayloads(seg, out)
+            // Three segments in flight at once (SpotiFLAC's transfer policy), written in order.
+            val pool = java.util.concurrent.Executors.newFixedThreadPool(PARALLEL_SEGMENTS)
+            try {
+                val numbers = (startNumber until startNumber + segCount).toList()
+                for (batch in numbers.chunked(PARALLEL_SEGMENTS * 2)) {
+                    val parts = batch.map { n -> pool.submit<ByteArray?> { httpBytes(mediaTmpl.replace("\$Number$", n.toString())) } }
+                    for (p in parts) writeMdatPayloads(p.get() ?: return false, out)
+                }
+            } finally {
+                pool.shutdownNow()
             }
         }
         Log.d(TAG, "tidal DASH remuxed to FLAC ($segCount segments)")

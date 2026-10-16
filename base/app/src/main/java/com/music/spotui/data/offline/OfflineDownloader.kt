@@ -179,7 +179,8 @@ object OfflineDownloader {
     /** Removes the song: the file if downloaded, else its download. */
     fun remove(trackId: String) {
         cancel(trackId)
-        OfflineStore.remove(trackId)
+        // File deletion on the IO scope, not the (UI) caller's thread.
+        scope.launch { OfflineStore.remove(trackId) }
     }
 
     fun removeAll() {
@@ -187,8 +188,8 @@ object OfflineDownloader {
         ids.forEach { running.remove(it)?.cancel() }
         running.values.forEach { it.cancel() }
         requests.clear()
-        OfflineCollections.removeAll()
-        OfflineStore.removeAll()
+        // Deleting a large library can take a while: IO scope, not the caller.
+        scope.launch { OfflineCollections.removeAll(); OfflineStore.removeAll() }
     }
 
     private fun savePending() {
@@ -215,7 +216,9 @@ object OfflineDownloader {
             val outcome: OfflineStatus? = try {
                 setStatus(r.trackId, OfflineStatus.Downloading(-1f))
                 val t = download(r)
-                withContext(Dispatchers.Main) { OfflineStore.add(t); requests.remove(r.trackId) }
+                // Already on the IO scope: the index rewrite stays off the main thread.
+                OfflineStore.add(t)
+                withContext(Dispatchers.Main) { requests.remove(r.trackId) }
                 null
             } catch (e: CancellationException) {
                 throw e

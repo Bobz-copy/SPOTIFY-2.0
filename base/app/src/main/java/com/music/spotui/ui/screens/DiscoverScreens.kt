@@ -183,9 +183,14 @@ private fun formatMinutes(min: Long) = if (min >= 60) "${min / 60} h ${min % 60}
 fun RecapScreen(navController: NavController) {
     val periods = listOf(R.string.recap_month to 30L, R.string.recap_year to 365L, R.string.recap_all to 36_500L)
     var period by remember { mutableStateOf(1) }
-    val recap = remember(period) {
-        ListenHistory.recap(System.currentTimeMillis() - periods[period].second * 86_400_000L)
+    // Off the main thread: the history file grows with every listen, and reading
+    // and ranking it during composition janked the screen open.
+    val loaded by produceState<ListenHistory.Recap?>(null, period) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            ListenHistory.recap(System.currentTimeMillis() - periods[period].second * 86_400_000L)
+        }
     }
+    val recap = loaded ?: ListenHistory.Recap(0, 0, emptyMap(), emptyList(), emptyList(), emptyList())
     Column(Modifier.fillMaxSize().background(Background).statusBarsPadding()) {
         ScreenHeader(stringResource(R.string.recap_title), navController)
         LazyColumn(contentPadding = PaddingValues(bottom = 130.dp)) {

@@ -10,8 +10,26 @@ object SessionActions {
     /** True from a logout until the next sign-in: the activity shows the login page, then starts over. */
     val signedOut: StateFlow<Boolean> = _signedOut
 
-    /** Signs out of Spotify in the Web Player; the login page shows next. */
-    fun logout() {
+    /**
+     * Signs out and drops everything tied to the account, so the next account on
+     * this phone starts clean: prefs and in-memory caches, the saved screens,
+     * the listen history (the Recap), the SpotiFLAC download sessions, and the
+     * Web Player's cookies, Web storage and cache (in the host).
+     */
+    fun logout(context: android.content.Context) {
+        val app = context.applicationContext
+        app.getSharedPreferences("myspoti_prefs", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("LoggedIn", false).remove("CurrentAccountName").apply()
+        com.music.spotui.data.api.Api.HomeCache.clear()
+        com.music.spotui.data.api.Api.LikedCache.tracks = null
+        com.music.spotui.data.api.ProfileCache.clearSession()
+        SongPlayer.clearSession()
+        listOf("PlaybackState", "LibraryCache", "RecentItems", "LikedSongs",
+            "LikedSongsFromSpotify", "LikedAlbums", "FollowedArtists").forEach { name ->
+            app.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        }
+        com.music.spotui.data.local.ListenHistory.clear()
+        com.music.spotui.data.preferences.clearSpotiflacSessions(app)
         _signedOut.value = true
         MyspotiRuntime.host.logout()
     }

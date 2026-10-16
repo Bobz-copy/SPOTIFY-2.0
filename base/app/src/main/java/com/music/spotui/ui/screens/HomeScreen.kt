@@ -486,18 +486,7 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
                     .fillMaxWidth()
                     .clickable {
                         onDismiss()
-                        val app = com.music.spotui.di.Graph.app
-                        app.getSharedPreferences("myspoti_prefs", android.content.Context.MODE_PRIVATE)
-                            .edit().putBoolean("LoggedIn", false).remove("CurrentAccountName").apply()
-                        com.music.spotui.data.api.Api.HomeCache.clear()
-                        com.music.spotui.data.api.Api.LikedCache.tracks = null
-                        com.music.spotui.data.api.ProfileCache.clearSession()
-                        com.music.spotui.di.SongPlayer.clearSession()
-                        listOf("PlaybackState", "LibraryCache", "RecentItems", "LikedSongs",
-                            "LikedSongsFromSpotify", "LikedAlbums", "FollowedArtists").forEach { name ->
-                            app.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().apply()
-                        }
-                        com.music.spotui.di.SessionActions.logout()
+                        com.music.spotui.di.SessionActions.logout(com.music.spotui.di.Graph.app)
                     }
                     .padding(horizontal = 20.dp, vertical = 14.dp),
             )

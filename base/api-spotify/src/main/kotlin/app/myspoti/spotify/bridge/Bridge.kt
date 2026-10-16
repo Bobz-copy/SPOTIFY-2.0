@@ -12,10 +12,10 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -38,14 +38,20 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
 
     init {
         scope.launch {
-            host.messages.collect { raw -> handle(raw) }
+            // A message the bridge did not write (another script, a future page) must never
+            // end this collector: it runs on the main thread, where a throw kills the app.
+            host.messages.collect { raw ->
+                runCatching { handle(raw) }.onFailure { logger?.invoke("page message dropped: ${it.message}") }
+            }
         }
     }
 
     private fun handle(raw: String) {
-        val msg = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return
+        val msg = runCatching { json.parseToJsonElement(raw) }.getOrNull() as? JsonObject ?: return
+        // Lenient reads: a field of an unexpected type counts as missing.
+        fun field(name: String) = msg[name] as? JsonPrimitive
+        val type = field("type")?.contentOrNull
         logger?.let { log ->
-            val type = msg["type"]?.jsonPrimitive?.content
             if (type == "state") {
                 val s = msg["state"] as? JsonObject
                 log("page state: " + (s?.get("track") as? JsonObject)?.get("name") + " paused=" + s?.get("isPaused") + " buffering=" + s?.get("isBuffering"))
@@ -53,13 +59,13 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
                 // Results are logged by call(); never write their values (tokens) here.
             } else if (type != "queue") log("page $type: " + raw.take(300))
         }
-        when (msg["type"]?.jsonPrimitive?.content) {
+        when (type) {
             "ready" -> _ready.value = true
             "result" -> {
-                val id = msg["id"]?.jsonPrimitive?.int ?: return
+                val id = field("id")?.intOrNull ?: return
                 val waiter = pending.remove(id) ?: return
-                if (msg["ok"]?.jsonPrimitive?.boolean == true) waiter.complete(msg["value"] ?: JsonNull)
-                else waiter.completeExceptionally(BridgeException(msg["error"]?.jsonPrimitive?.content ?: "bridge error"))
+                if (field("ok")?.booleanOrNull == true) waiter.complete(msg["value"] ?: JsonNull)
+                else waiter.completeExceptionally(BridgeException(field("error")?.contentOrNull ?: "bridge error"))
             }
             "state" -> _events.tryEmit("state" to (msg["state"] ?: JsonNull))
             "queue" -> _events.tryEmit("queue" to (msg["queue"] ?: JsonNull))

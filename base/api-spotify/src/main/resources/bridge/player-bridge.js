@@ -7,8 +7,8 @@
  *
  * Host -> page: window.Myspoti.call(id, method, args)  (also returns a Promise)
  * Page -> host: one JSON string per message, sent to the first host channel found:
- *   - window.MyspotiHost.post(json)   Android @JavascriptInterface
- *   - window.__mspHostPost(json)      CDP Runtime.addBinding
+ *   - window.MyspotiHost.postMessage(json)  Android web message listener (open.spotify.com only)
+ *   - window.__mspHostPost(json)            CDP Runtime.addBinding
  * Messages: {type: "ready"} | {type: "state", state} | {type: "queue", queue}
  *         | {type: "result", id, ok, value | error} | {type: "error", error}
  *
@@ -27,7 +27,7 @@
   const post = msg => {
     const json = JSON.stringify(msg);
     try {
-      if (window.MyspotiHost && window.MyspotiHost.post) return window.MyspotiHost.post(json);
+      if (window.MyspotiHost && typeof window.MyspotiHost.postMessage === 'function') return window.MyspotiHost.postMessage(json);
       if (typeof window.__mspHostPost === 'function') return window.__mspHostPost(json);
     } catch (e) { /* host gone: nothing to report to */ }
   };

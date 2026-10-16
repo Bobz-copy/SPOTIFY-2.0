@@ -2,7 +2,6 @@ package app.myspoti.host.android
 
 import android.os.Handler
 import android.os.Looper
-import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import okhttp3.Call
 import okhttp3.Callback
@@ -26,7 +25,7 @@ import java.util.concurrent.TimeUnit
  * reproduces the silence, and removing it restores playback.
  *
  * The page's `fetch` is wrapped at document start. Matching requests go through
- * [MyspotiNet.send], which repeats them with OkHttp using the page's own headers (its token,
+ * `MyspotiNet.postMessage` ([exposeToPlayer]), which repeats them with OkHttp using the page's own headers (its token,
  * client token, connection id), then hands the response back to the page.
  */
 internal class ControlRelay(private val view: WebView) {
@@ -37,7 +36,7 @@ internal class ControlRelay(private val view: WebView) {
         .build()
 
     fun install() {
-        view.addJavascriptInterface(this, "MyspotiNet")
+        view.exposeToPlayer("MyspotiNet", ::onMessage)
         val documentStart = androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)
         if (documentStart) androidx.webkit.WebViewCompat.addDocumentStartJavaScript(view, SCRIPT, setOf("https://open.spotify.com"))
         android.util.Log.d(WebPlayerHost.LOG, "control relay installed (document start: $documentStart)")
@@ -46,14 +45,20 @@ internal class ControlRelay(private val view: WebView) {
     /** Fallback for WebViews without document-start scripts; harmless when already installed. */
     fun injectNow() = view.evaluateJavascript(SCRIPT, null)
 
-    @JavascriptInterface
-    fun send(id: Int, url: String, method: String, headersJson: String, body: String?) {
+    /** `{id, url, method, headers, body}` from the page's wrapped `fetch`. */
+    private fun onMessage(json: String) {
+        val m = runCatching { JSONObject(json) }.getOrNull() ?: return
+        val id = m.optInt("id", -1).takeIf { it >= 0 } ?: return
+        val body = if (m.isNull("body")) null else m.optString("body")
+        send(id, m.optString("url"), m.optString("method", "GET"), m.optJSONObject("headers") ?: JSONObject(), body)
+    }
+
+    private fun send(id: Int, url: String, method: String, given: JSONObject, body: String?) {
         if (!isRelayed(url)) {
             reply(id, 0, "{}", "")
             return
         }
         val headers = Headers.Builder()
-        val given = runCatching { JSONObject(headersJson) }.getOrDefault(JSONObject())
         given.keys().forEach { key ->
             // OkHttp sets the transport headers itself.
             if (key.lowercase() !in setOf("host", "content-length", "connection", "accept-encoding", "x-requested-with"))
@@ -150,7 +155,7 @@ internal class ControlRelay(private val view: WebView) {
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
                   pending.set(id, { resolve, reject });
-                  window.MyspotiNet.send(id, url, method, JSON.stringify(headers), body == null ? null : body);
+                  window.MyspotiNet.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body }));
                 });
               };
             })();

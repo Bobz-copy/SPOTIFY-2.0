@@ -91,11 +91,27 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Every start may be a startForegroundService() (playback, a headset button or the
+        // notification's dismissal through MediaButtonReceiver, another app): Android kills the
+        // app unless startForeground() follows, paused or not. A paused player then leaves the
+        // foreground after PAUSE_GRACE_MS, as after any pause.
+        val info = current
+        startForegroundSafely(build(info), always = true)
         MediaButtonReceiver.handleIntent(session, intent)
-        // Started for playback: Android needs the foreground notification right away.
-        current?.let { show(it) } ?: startForegroundSafely(build(null))
+        if (info != null) show(info)
+        // The paused notification was swiped away: leave the foreground with it.
+        if (info?.playing != true && isStop(intent)) {
+            handler.removeCallbacks(leaveForeground)
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            foreground = false
+        }
         return START_NOT_STICKY
     }
+
+    private fun isStop(intent: Intent?): Boolean =
+        intent?.action == Intent.ACTION_MEDIA_BUTTON &&
+            androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_KEY_EVENT, android.view.KeyEvent::class.java)
+                ?.keyCode == android.view.KeyEvent.KEYCODE_MEDIA_STOP
 
     override fun onDestroy() {
         instance = null
@@ -201,8 +217,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun startForegroundSafely(notification: Notification) {
-        if (foreground) {
+    /** [always]: call startForeground() even when already in the foreground (a new foreground start). */
+    private fun startForegroundSafely(notification: Notification, always: Boolean = false) {
+        if (foreground && !always) {
             runCatching { NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification) }
             return
         }

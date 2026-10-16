@@ -58,7 +58,7 @@ The same file runs in the Android WebView and in desktop Chrome over CDP.
 | Direction | Android | Desktop (CDP) |
 |---|---|---|
 | Host → page | `evaluateJavascript("Myspoti.call(id, method, args)")` | `Runtime.evaluate`, same call |
-| Page → host | `@JavascriptInterface MyspotiHost.post(json)` | `Runtime.addBinding("__mspHostPost")` |
+| Page → host | `MyspotiHost.postMessage(json)` (web message listener, open.spotify.com only) | `Runtime.addBinding("__mspHostPost")` |
 
 `Myspoti.call` also returns a Promise, but hosts should rely on the `result` message:
 Android's `evaluateJavascript` does not wait for Promises.

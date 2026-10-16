@@ -29,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
 object SongPlayer {
     private const val SPOTIFY_TRACK_PREFIX = "spotify:track:"
     private const val PENDING_MS = 6000L
+    /** After a local file starts, engine states this recent still predate the pause. */
+    private const val LOCAL_GRACE_MS = 2500L
     private const val TAG = "MspPlayer"
     private const val LIKED_CONTEXT = "spotify:collection:tracks"
 
@@ -255,7 +257,7 @@ object SongPlayer {
     private fun applyState(s: PlayerState?) {
         if (s == null) return
         stateSeen = true
-        if (LocalPlayer.active.value) return
+        if (LocalPlayer.active.value && engineWhileLocal(s)) return
         if (resumeWhenReady) {
             resumeWhenReady = false
             // The Web Player restored the last session paused: play what was tapped.
@@ -783,8 +785,40 @@ object SongPlayer {
 
     /** A local file starts: Spotify pauses (wherever it plays). */
     fun pauseEngineForLocal() {
+        localStartedAt = SystemClock.elapsedRealtime()
+        engineUriBeforeLocal = _nowPlaying.value.uri
+        engineRepaused = false
         if (playing) command { api.player.pause() }
         playing = false
+        // The local player keeps the output open itself; the engine's states, which
+        // would close the silent stream, are ignored while it plays.
+        SpeakerKeepAlive.set(false)
+    }
+
+    private var localStartedAt = 0L
+    /** What the engine played when the local file started (to tell a pause that did not take from a takeover). */
+    private var engineUriBeforeLocal = ""
+    private var engineRepaused = false
+
+    /**
+     * The engine reports playing while a local file plays. Two streams must never play
+     * at once: a pause that did not take (the engine was not ready) is sent once more;
+     * anything else is Spotify taking over (a Connect "play on this phone", a resume from
+     * another device), and the local player yields. True when the state is to be ignored.
+     */
+    private fun engineWhileLocal(s: PlayerState): Boolean {
+        if (s.isPaused) return true
+        // The page's last states from before the pause reached it.
+        if (SystemClock.elapsedRealtime() - localStartedAt < LOCAL_GRACE_MS) return true
+        if (s.item?.uri == engineUriBeforeLocal && !engineRepaused) {
+            engineRepaused = true
+            Log.i(TAG, "engine still playing under a local file: pausing it again")
+            command { api.player.pause() }
+            return true
+        }
+        Log.i(TAG, "engine started playing: the local player yields")
+        LocalPlayer.stop()
+        return false
     }
 
     /** The local player's track / state, shown like any other (player, mini player, notification). */
@@ -805,9 +839,6 @@ object SongPlayer {
             val source = if (t.uri.scheme == "file") com.music.spotui.data.local.ListenHistory.Source.DOWNLOAD
                 else com.music.spotui.data.local.ListenHistory.Source.LOCAL
             trackListen(uri, song, source, isPlaying)
-            // The offline report: a downloaded song this app really played gets its
-            // play counted on Spotify's side (Wrapped), now or once back online.
-            com.music.spotui.data.offline.WrappedSync.onLocalState(t, isPlaying, pos, dur)
         }
     }
 

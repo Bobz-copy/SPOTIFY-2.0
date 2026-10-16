@@ -79,9 +79,6 @@ fun DownloadsScreen(navController: NavController) {
     fun play(index: Int, shuffle: Boolean = false) {
         if (tracks.isEmpty()) return
         LocalPlayer.play(tracks.map(OfflineStore::toLocalTrack), index, shuffle = shuffle, context = title)
-        // The whole Downloaded list has no Spotify context of its own: each listen
-        // reports under the track's album.
-        com.music.spotui.data.offline.WrappedSync.contextUri = null
     }
 
     Box(Modifier.fillMaxSize().background(AppBackground)) {

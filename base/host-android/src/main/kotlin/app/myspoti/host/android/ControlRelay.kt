@@ -68,7 +68,6 @@ internal class ControlRelay(private val view: WebView) {
         headers["Origin"] = "https://open.spotify.com"
         headers["Referer"] = "https://open.spotify.com/"
         val built = headers.build()
-        captureCredentials(url, built)
         // The player's registration leaves out the ad formats (see AdBlock).
         val sent = if (body != null && app.myspoti.spotify.bridge.AdBlock.isDeviceRegistration(method, url)) app.myspoti.spotify.bridge.AdBlock.withoutAdFormats(body) else body
         // Bytes, not a String body: OkHttp would append "; charset=utf-8" to the content type.
@@ -100,28 +99,6 @@ internal class ControlRelay(private val view: WebView) {
     }
 
     private fun shortPath(url: String) = url.substringBefore('?').substringAfter(".com").replace(Regex("[0-9a-f]{20,}"), "…")
-
-    /**
-     * Keeps the player's own credentials so the app's playback reports can use
-     * them (see [RelayCredentials]): the device id from the reported paths, the
-     * cluster host from the URL, and the auth headers the player itself sent.
-     */
-    private fun captureCredentials(url: String, headers: Headers) {
-        try {
-            val c = RelayCredentials
-            Regex("/track-playback/v1/devices/([0-9a-fA-F]{32,64})/?").find(url)?.groupValues?.get(1)
-                ?.let { if (c.deviceId.isBlank()) c.deviceId = it.lowercase() }
-            Regex("/connect-state/v1/player/command/from/([0-9a-fA-F]{32,64})").find(url)?.groupValues?.get(1)
-                ?.let { c.deviceId = it.lowercase() }
-            val host = Regex("https://([a-z0-9.-]+\\.spotify\\.com)/").find(url)?.groupValues?.get(1)
-            if (host != null && host.contains("spclient")) c.clusterHost = host
-            headers["authorization"]?.takeIf { it.isNotBlank() && it.startsWith("Bearer ", true) }
-                ?.let { c.authorization = it } // the latest token the page sent; never an empty one
-            headers["client-token"]?.takeIf { it.isNotBlank() }?.let { c.clientToken = it }
-            if (c.ready()) c.seenAt = System.currentTimeMillis()
-        } catch (_: Exception) {
-        }
-    }
 
     companion object {
         private val RELAYED = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/(connect-state|track-playback)/v1/")

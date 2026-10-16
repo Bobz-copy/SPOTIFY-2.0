@@ -106,8 +106,9 @@ object AppUpdater {
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
             setSize(apk.length())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            // User action stays required (the default): without the
+            // UPDATE_PACKAGES_WITHOUT_USER_ACTION permission a NOT_REQUIRED flag
+            // would be ignored anyway; the confirmation is the user's last check.
         }
         val id = installer.createSession(params)
         installer.openSession(id).use { session ->

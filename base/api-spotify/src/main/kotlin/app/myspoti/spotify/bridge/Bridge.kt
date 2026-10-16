@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -88,7 +88,13 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
             logger?.invoke("call #$id $method ${args.toString().take(200)}")
             host.evaluate("window.Myspoti && window.Myspoti.call($id, ${json.encodeToString(JsonElement.serializer(), kotlinx.serialization.json.JsonPrimitive(method))}, $args).catch(() => {})")
             return try {
-                withTimeout(timeoutMs) { waiter.await() }.also {
+                // withTimeoutOrNull, not withTimeout: a timeout must surface as a
+                // BridgeException, not as a CancellationException — callers in plain
+                // launch {} blocks would otherwise end silently, indistinguishable
+                // from the caller itself being cancelled (which still throws).
+                val result = withTimeoutOrNull(timeoutMs) { waiter.await() }
+                    ?: throw BridgeException("timeout after $timeoutMs ms: $method")
+                result.also {
                     val shown = if (method == "token.get") "(token hidden)" else it.toString().take(200)
                     logger?.invoke("call #$id $method ok in ${System.currentTimeMillis() - started} ms: $shown")
                 }

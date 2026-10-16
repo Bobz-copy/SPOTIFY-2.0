@@ -328,7 +328,10 @@ object SongPlayer {
         }
         val mv = com.music.spotui.video.MusicVideoController
         mv.onAudioBuffering(isBuffering, song.spotifyTrackId)
-        if (!isBuffering && playing && mv.inForeground && (app.myspoti.power.EnergySettings.state.value.policy.allowBackgroundLookups || mv.wantVideo) && song.spotifyTrackId.isNotBlank())
+        // Clip lookup only where it can pay off: video wanted, or the player screen
+        // is up (toggle then is instant). Looking up every track by default cost
+        // searches and full-audio alignment downloads for users who never watch.
+        if (!isBuffering && playing && mv.inForeground && (mv.wantVideo || mv.hasPlayerScreen) && song.spotifyTrackId.isNotBlank())
             com.music.spotui.video.MusicVideoController.prepare(song.spotifyTrackId, song.title, song.singer, durationMs)
         if (!isBuffering && playing && mv.inForeground && app.myspoti.power.EnergySettings.state.value.policy.allowBackgroundLookups) {
             com.music.spotui.data.api.LyricsApi.prefetch(lyricsTrack(song))

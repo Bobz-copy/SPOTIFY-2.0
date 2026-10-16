@@ -85,7 +85,9 @@ class MainActivity : AppCompatActivity() {
         watchSession()
         watchLoginReturn()
         watchLogout()
-        handle(intent)
+        // Only on a fresh start: on recreation (theme, locale, process restore)
+        // the same intent would play its link again. New links arrive in onNewIntent.
+        if (savedInstanceState == null) handle(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -202,7 +204,7 @@ class MainActivity : AppCompatActivity() {
 
     /** `https://open.spotify.com/intl-fr/album/{id}?si=…` -> `spotify:album:{id}`. */
     private fun spotifyUri(link: String): String? {
-        val m = Regex("open\\.spotify\\.com/(?:intl-[a-z-]+/)?(track|album|playlist|artist|show|episode)/([A-Za-z0-9]{22})").find(link) ?: return null
+        val m = Regex("(?:open|www|play)\\.spotify\\.com/(?:intl-[a-z-]+/)?(track|album|playlist|artist|show|episode)/([A-Za-z0-9]{22})").find(link) ?: return null
         return "spotify:${m.groupValues[1]}:${m.groupValues[2]}"
     }
 }

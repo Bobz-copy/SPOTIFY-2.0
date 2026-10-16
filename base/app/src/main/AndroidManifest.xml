@@ -77,7 +77,11 @@
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <intent-filter android:autoVerify="true">
+            <!-- No autoVerify: these are Spotify's domains, verification can never
+                 pass for this app. spotify.link is not claimed: the id is only in the
+                 redirect target, so the browser resolves it to open.spotify.com,
+                 which is claimed and parsed. -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -93,9 +97,6 @@
                 <data
                     android:scheme="https"
                     android:host="play.spotify.com" />
-                <data
-                    android:scheme="https"
-                    android:host="spotify.link" />
             </intent-filter>
         </activity>
 

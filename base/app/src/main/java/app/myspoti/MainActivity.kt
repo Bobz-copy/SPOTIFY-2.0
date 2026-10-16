@@ -184,7 +184,7 @@ class MainActivity : AppCompatActivity() {
         intent ?: return
         // The SpotiFLAC verification's return (spotiflac://session-grant?grant=…&state=…).
         if (intent.data?.scheme == "spotiflac" && intent.data?.host == "session-grant") {
-            com.music.spotui.lossless.ZarzSession.grants.tryEmit(intent.data.toString())
+            com.music.spotui.lossless.ZarzSession.grants.value = intent.data.toString()
             return
         }
         when (intent.action) {

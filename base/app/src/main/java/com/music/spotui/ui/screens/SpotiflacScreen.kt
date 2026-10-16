@@ -73,8 +73,9 @@ fun SpotiflacScreen(onClose: () -> Unit) {
 
     // Reused so a retry keeps the same install; the service binds the session to it.
     val installId = remember { com.music.spotui.lossless.ZarzSession.installId(context) }
-    // The state the challenge page must send back with its grant.
-    var state by remember { mutableStateOf("") }
+    // The state the challenge page must send back with its grant. Saveable: a
+    // rotation while the browser is open must not lose it (the grant is then rejected).
+    var state by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
 
     fun finish(grant: String) = scope.launch {
         message = res(R.string.spotiflac_session_creating)
@@ -133,6 +134,8 @@ fun SpotiflacScreen(onClose: () -> Unit) {
     // The grant coming back from the browser tab.
     LaunchedEffect(Unit) {
         com.music.spotui.lossless.ZarzSession.grants.collect { link ->
+            if (link == null) return@collect
+            com.music.spotui.lossless.ZarzSession.grants.value = null // take it, once
             val back = com.music.spotui.lossless.ZarzSession.parseGrant(link)
             if (back == null || state.isBlank() || back.second != state) {
                 message = res(R.string.spotiflac_verify_rejected)

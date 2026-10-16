@@ -464,7 +464,13 @@ object SongPlayer {
         intendPlaying()
         command {
             api.player.setShuffle(true)
-            if (ctx == null) playSong(songs.random().url) else api.player.play(ctx)
+            if (ctx == null) {
+                // No registered context: play the whole list in a shuffled order
+                // (first track now, the rest queued), not one random song alone.
+                val order = songs.shuffled()
+                api.player.play(order.first().url)
+                if (order.size > 1) api.player.addToQueue(order.drop(1).map { it.url })
+            } else api.player.play(ctx)
             // A play command may reset the options: make sure shuffle sticks.
             kotlinx.coroutines.delay(1500)
             api.player.setShuffle(true)

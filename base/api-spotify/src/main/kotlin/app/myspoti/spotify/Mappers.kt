@@ -91,9 +91,11 @@ internal fun playlist(d: JsonElement?): Playlist? {
 
 /** Search tab pages: `{items[], totalCount, pagingInfo{nextOffset}}`. */
 internal fun <T> page(node: JsonElement?, offset: Int, map: (JsonElement) -> T?): Page<T> {
-    val items = node.list("items").mapNotNull(map)
+    val rows = node.list("items")
+    val items = rows.mapNotNull(map)
     val total = node.int("totalCount") ?: items.size
-    val next = node.int("pagingInfo.nextOffset") ?: (offset + items.size).takeIf { items.isNotEmpty() && it < total }
+    // Raw row count, as in SpotifyLibrary: unmappable rows still occupy positions.
+    val next = node.int("pagingInfo.nextOffset") ?: (offset + rows.size).takeIf { rows.isNotEmpty() && it < total }
     return Page(items, offset, total, next)
 }
 

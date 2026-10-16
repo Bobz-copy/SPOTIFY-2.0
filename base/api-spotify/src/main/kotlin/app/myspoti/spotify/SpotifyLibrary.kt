@@ -8,10 +8,12 @@ import app.myspoti.api.LibrarySort
 import app.myspoti.api.MediaKind
 import app.myspoti.api.Page
 import app.myspoti.api.Playlist
+import app.myspoti.api.PlaylistSort
 import app.myspoti.api.Playlists
 import app.myspoti.api.SavedTrack
 import app.myspoti.api.Track
 import app.myspoti.api.Uri
+import app.myspoti.api.sortedFor
 import app.myspoti.spotify.bridge.Bridge
 import app.myspoti.spotify.bridge.service
 import app.myspoti.spotify.gql.Gql
@@ -207,16 +209,20 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
         return r.str("uri") ?: (r as? JsonPrimitive)?.content ?: throw GqlException("createPlaylist", "no uri")
     }
 
-    override suspend fun rename(uri: Uri, name: String) = updateDetails(uri, "name", name)
+    override suspend fun rename(uri: Uri, name: String) = updateDetails(uri, "name", JsonPrimitive(name))
 
-    override suspend fun setDescription(uri: Uri, description: String) = updateDetails(uri, "description", description)
+    override suspend fun setDescription(uri: Uri, description: String) = updateDetails(uri, "description", JsonPrimitive(description))
+
+    override suspend fun setPublic(uri: Uri, public: Boolean) = updateDetails(uri, "public", JsonPrimitive(public))
+
+    override suspend fun setCollaborative(uri: Uri, collaborative: Boolean) = updateDetails(uri, "collaborative", JsonPrimitive(collaborative))
 
     /** Two updates sent back to back can lose the second one: check it landed, and resend once. */
-    private suspend fun updateDetails(uri: Uri, field: String, value: String) {
+    private suspend fun updateDetails(uri: Uri, field: String, value: JsonElement) {
         repeat(2) {
             bridge.service("PlaylistAPI", "updateDetails", JsonPrimitive(uri), json(mapOf(field to value)))
             repeat(10) {
-                if (bridge.service("PlaylistAPI", "getMetadata", JsonPrimitive(uri)).str(field) == value) return
+                if (bridge.service("PlaylistAPI", "getMetadata", JsonPrimitive(uri)).at(field) == value) return
                 kotlinx.coroutines.delay(300)
             }
         }
@@ -231,6 +237,19 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
 
     override suspend fun unfollow(uri: Uri) {
         bridge.service("RootlistAPI", "remove", json(listOf(mapOf("uri" to uri))))
+    }
+
+    /** Pages through the whole playlist (100 rows a request), then sorts it on the client. */
+    override suspend fun sortedTracks(uri: Uri, sort: PlaylistSort, descending: Boolean): List<Track> {
+        val all = mutableListOf<Track>()
+        var offset: Int? = 0
+        while (offset != null) {
+            val page = tracks(uri, offset, 100)
+            if (page.items.isEmpty()) break
+            all += page.items
+            offset = page.nextOffset
+        }
+        return all.sortedFor(sort, descending)
     }
 
     override suspend fun addTracks(uri: Uri, trackUris: List<Uri>) {

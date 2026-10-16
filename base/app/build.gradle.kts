@@ -84,6 +84,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Betas are release builds too, but their log reports read Log.v/d/i.
+            if (!beta) proguardFiles("proguard-strip-logs.pro")
         }
     }
     compileOptions {

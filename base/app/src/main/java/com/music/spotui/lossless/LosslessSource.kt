@@ -125,7 +125,7 @@ object LosslessSource {
                 Log.w(TAG, "zarz qobuz: verification required")
                 return null
             } catch (e: Exception) {
-                Log.w(TAG, "zarz qobuz $q: ${e.message}")
+                Log.w(TAG, "zarz qobuz: ${e.message}")
             }
         }
         return null
@@ -154,7 +154,7 @@ object LosslessSource {
                 Log.w(TAG, "zarz tidal: verification required")
                 return null
             } catch (e: Exception) {
-                Log.w(TAG, "zarz tidal $q: ${e.message}")
+                Log.w(TAG, "zarz tidal: ${e.message}")
             }
         }
         return null
@@ -178,7 +178,7 @@ object LosslessSource {
                 com.music.spotui.data.preferences.clearSpotiflacSession(context, ZarzSession.Ext.TIDAL.appVersion)
                 return null
             } catch (e: Exception) {
-                Log.w(TAG, "zarz tidal aac $q: ${e.message}")
+                Log.w(TAG, "zarz tidal aac: ${e.message}")
             }
         }
         return null
@@ -217,9 +217,9 @@ object LosslessSource {
             if (endpoint.isBlank()) continue
             for (q in qualities) {
                 val body = runCatching { get("$endpoint/track/?id=${tidal.id}&quality=$q", keyHeader()) }
-                    .getOrElse { Log.w(TAG, "tidal $endpoint $q: ${it.message}"); continue }
+                    .getOrElse { Log.w(TAG, "tidal $endpoint: ${it.message}"); continue }
                 val fromResponse = runCatching { parseTidalTrack(body, endpoint) }.getOrElse {
-                    Log.w(TAG, "tidal $endpoint $q parse: ${it.message}"); null
+                    Log.w(TAG, "tidal $endpoint parse: ${it.message}"); null
                 }
                 val file = fromResponse ?: continue
                 if (file.url.isBlank()) {

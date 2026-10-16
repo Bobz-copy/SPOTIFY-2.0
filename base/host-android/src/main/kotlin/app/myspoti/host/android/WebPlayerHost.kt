@@ -18,6 +18,7 @@ import android.webkit.WebViewClient
 import app.myspoti.spotify.bridge.AdBlock
 import app.myspoti.spotify.bridge.BridgeHost
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -36,7 +37,9 @@ import java.io.ByteArrayInputStream
 class WebPlayerHost(context: Context) : BridgeHost {
     private val main = Handler(Looper.getMainLooper())
 
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 256)
+    // DROP_OLDEST: tryEmit under a main-thread stall must not drop the newest
+    // state/result (the default SUSPEND overflow drops exactly the new value).
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val messages: SharedFlow<String> = _messages
 
     private val _url = MutableStateFlow("")

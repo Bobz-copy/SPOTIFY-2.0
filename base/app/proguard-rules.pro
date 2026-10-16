@@ -72,3 +72,11 @@
 -dontwarn org.jsoup.**
 -dontwarn com.google.re2j.**
 -dontwarn jdk.dynalink.**
+
+# Release builds stay quiet: Log.v/d/i calls (bridge traffic, track names,
+# per-listen reports) are stripped; Log.w/e above keep real failures.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}

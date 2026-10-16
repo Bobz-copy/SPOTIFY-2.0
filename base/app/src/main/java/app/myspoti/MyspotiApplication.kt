@@ -21,8 +21,9 @@ class MyspotiApplication : Application() {
         SongPlayer.attachEngine(Graph.currentSongState)
         // Headphones or Bluetooth gone: pause rather than play on the speaker.
         com.music.spotui.di.NoisyAudio.register(this)
-        // Offline listens kept for Wrapped reporting are replayed once signed in.
-        com.music.spotui.data.offline.WrappedSync.resumePending()
+        // Downloaded songs are no longer reported to Spotify: drop the old report queue,
+        // whose replays sent play commands that took over the Web Player.
+        runCatching { java.io.File(filesDir, "wrapped_queue.json").delete() }
         PlaybackService.library = object : MediaLibrary {
             override suspend fun children(context: Context, parentId: String): List<MediaBrowserCompat.MediaItem> =
                 AutoBrowser.children(context, parentId)

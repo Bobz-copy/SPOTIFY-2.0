@@ -55,7 +55,7 @@ Details for developers: [`base/api-spotify/README.md`](base/api-spotify/README.m
 
 - No DRM circumvention. No Amazon stream decryption.
 - No Spotify audio download. Offline downloads are resolved from lossless catalogues through the open-backends community of SpotiFLAC; a track with no lossless source is simply marked unavailable.
-- Downloaded songs played on the phone are reported to Spotify as if Spotify had streamed them, although their audio did not come from Spotify (play time as measured on the phone; sent later when offline). Spotify counts them like streamed listens, in Wrapped and in artists' play counts, and may treat such reports as artificial streaming. No ad is marked as heard.
+- Downloaded songs played on the phone are not reported to Spotify: they do not count in Wrapped or in artists' play counts. They are kept in Myspoti's own Recap only. No ad is marked as heard.
 
 ## Credits
 

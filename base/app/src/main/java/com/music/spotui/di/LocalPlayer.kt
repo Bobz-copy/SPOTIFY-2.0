@@ -61,8 +61,6 @@ object LocalPlayer {
         exo?.let { it.stop(); it.clearMediaItems() }
         tracks.clear(); unshuffled = null
         SongPlayer.restoreEngineQueue()
-        // Whatever this run played gets closed honestly (Wrapped reporting).
-        com.music.spotui.data.offline.WrappedSync.finish()
     }
 
     fun resume() { exo?.play() }

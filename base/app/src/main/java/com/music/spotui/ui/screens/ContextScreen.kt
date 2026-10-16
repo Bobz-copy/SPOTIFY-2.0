@@ -259,9 +259,6 @@ class ContextViewModel(
             if (local.size < p.tracks.size)
                 android.widget.Toast.makeText(app, app.getString(R.string.offline_only_downloaded, local.size, p.tracks.size), android.widget.Toast.LENGTH_SHORT).show()
             com.music.spotui.di.LocalPlayer.play(local.map(com.music.spotui.data.offline.OfflineStore::toLocalTrack), at, context = p.name)
-            // The downloads play from the list the user chose: the Wrapped report
-            // starts on that context (playlist/album), like a streamed play.
-            com.music.spotui.data.offline.WrappedSync.contextUri = p.uri.takeIf { it.isNotBlank() }
             return
         }
         state.updateQueue(p.tracks)

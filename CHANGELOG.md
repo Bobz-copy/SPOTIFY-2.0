@@ -14,7 +14,7 @@ A new engine, written from scratch, and a cleaner app on top of it.
 - **No more "bop" between two songs** on the phone's speaker: the sound output stays awake across the change.
 - **Downloads are encrypted**: a downloaded song only plays in Myspoti, on the phone that downloaded it. Songs downloaded before are encrypted in the background.
 - **The queue of downloaded songs is the real one**: it shows what plays next, and moving, removing or skipping songs works offline.
-- **Offline listens reach your Wrapped**: listens kept while offline are sent within a minute once the network and Spotify are back, not only at the next app start.
+- **Downloaded songs stay on the phone**: they are no longer reported to Spotify, so playing one never makes the Web Player start the album over it. They count in Myspoti's own Recap.
 - **Downloads say when the SpotiFLAC verification is missing**, with a banner that opens it.
 - **Shorter debug logs**: the copied logs keep Myspoti's own lines and crashes only.
 - **Updates install in the app**: "Update" downloads the new version with a progress bar and hands it to Android's installer; no trip to GitHub. The first time, Android asks to allow installs from Myspoti.

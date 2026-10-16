@@ -456,6 +456,9 @@ object SongPlayer {
     fun next() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.next(); return }; intendPlaying(); command { api.player.next() } }
     fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); command { api.player.previous() } }
 
+    /** Tracks shufflePlay plays without a context: the first one, plus up to 49 queued. */
+    private const val SHUFFLE_QUEUE_MAX = 50
+
     /** Shuffle-play a list: Spotify picks the first track of its own shuffled context. */
     fun shufflePlay(songs: List<SongsModel>) {
         if (songs.isEmpty()) return
@@ -465,9 +468,12 @@ object SongPlayer {
         command {
             api.player.setShuffle(true)
             if (ctx == null) {
-                // No registered context: play the whole list in a shuffled order
-                // (first track now, the rest queued), not one random song alone.
-                val order = songs.shuffled()
+                // No registered context: play the list in a shuffled order (first
+                // track now, the rest queued), not one random song alone. Capped at
+                // SHUFFLE_QUEUE_MAX tracks: the queue is the user's Spotify queue,
+                // which outlives this list and follows them to every device, so
+                // queuing all of Liked Songs would bury whatever they play next.
+                val order = songs.shuffled().take(SHUFFLE_QUEUE_MAX)
                 api.player.play(order.first().url)
                 if (order.size > 1) api.player.addToQueue(order.drop(1).map { it.url })
             } else api.player.play(ctx)

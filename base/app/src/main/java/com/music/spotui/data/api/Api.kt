@@ -1,5 +1,6 @@
 package com.music.spotui.data.api
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import android.util.Log
@@ -308,7 +309,7 @@ class Api constructor(
         emit(Response.Loading())
         if (!ready()) { emit(Response.Error(notSignedIn())); return@flow }
         val uri = "spotify:show:$showId"
-        runCatching {
+        val episodes = runCatching {
             val out = ArrayList<SongsModel>()
             var offset = 0
             repeat(10) {
@@ -318,7 +319,9 @@ class Api constructor(
                 offset = page.nextOffset ?: return@runCatching out
             }
             out
-        }.fold(
+        }
+        if (episodes.exceptionOrNull() is CancellationException) throw episodes.exceptionOrNull()!!
+        episodes.fold(
             onSuccess = { songs -> SongPlayer.registerContext(songs.map { it.url }, uri); emit(Response.Success(songs)) },
             onFailure = { Log.e("Api", "getShowEpisodes failed", it); emit(Response.Error(it.message ?: "error")) },
         )
@@ -474,7 +477,11 @@ class Api constructor(
         LikedCache.tracks?.let { emit(Response.Success(page(it, true))) } ?: emit(Response.Loading())
         if (!ready()) { if (LikedCache.tracks == null) emit(Response.Error(notSignedIn())); return@flow }
         val first = LikedCache.tracks == null
+        // Cancellation must escape: emit() throws AbortFlowException (a CancellationException)
+        // when the collector stops early (first { … }); catching it and emitting again
+        // violates flow exception transparency and breaks Android Auto's firstResult.
         val tracks = runCatching { allLiked { if (first) emit(Response.Success(page(it, false))) } }.getOrElse {
+            if (it is CancellationException) throw it
             Log.e("Api", "getLikedPage failed", it)
             if (LikedCache.tracks == null) emit(Response.Error(context.getString(R.string.couldnt_load, context.getString(R.string.collection_liked_songs_title))))
             return@flow
@@ -702,9 +709,11 @@ class Api constructor(
     suspend fun getLikedSongs(): Flow<Response<List<SongsModel>>> = flow {
         emit(Response.Loading())
         if (!ready()) { emit(Response.Error(notSignedIn())); return@flow }
-        runCatching {
+        val liked = runCatching {
             allLiked { emit(Response.Success(it)) }
-        }.fold(
+        }
+        if (liked.exceptionOrNull() is CancellationException) throw liked.exceptionOrNull()!!
+        liked.fold(
             onSuccess = { songs ->
                 SongPlayer.registerLikedSongs(songs.map { it.url })
                 com.music.spotui.data.preferences.syncSpotifyLikedSongIds(context, songs.mapTo(HashSet()) { it.id.toString() }, complete = true)

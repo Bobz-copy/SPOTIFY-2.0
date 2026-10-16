@@ -133,6 +133,7 @@ object SongPlayer {
         override fun playFromMediaId(mediaId: String) = AutoBrowser.play(mediaId)
         override fun playFromSearch(query: String) { scope.launch { AutoBrowser.playFromSearch(query) } }
         override fun setRemoteVolume(volume: Int) = SongPlayer.setRemoteVolume(volume)
+        override fun setShuffle(on: Boolean) = SongPlayer.setShuffle(on)
     }
 
     // ── Last track: shown at launch (mini player) before the Web Player reports ──
@@ -242,6 +243,7 @@ object SongPlayer {
             playing = isPlaying(),
             buffering = isBuffering,
             liked = liked,
+            shuffle = st?.shuffle?.value == true,
         ))
         com.music.spotui.widget.NowPlayingWidget.show(Graph.app,
             title = song?.title ?: st?.title?.value.orEmpty(),

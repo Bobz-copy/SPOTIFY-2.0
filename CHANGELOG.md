@@ -20,6 +20,7 @@ A new engine, written from scratch, and a cleaner app on top of it.
 - **Hearts show at once** in playlists: the liked songs were only checked after a tap (a playlist in the check made Spotify refuse it). Lists at the top of the library and the home shortcuts load before you open them.
 - **Setup screen** after signing in: notifications, local music, Bluetooth and unrestricted battery, each with its own button.
 - **Folders in Local Files**: choose the folders shown; WhatsApp, Telegram, recordings and ringtones start hidden.
+- **Lock screen and Now Bar**: play / pause in the middle (like, previous, play, next, shuffle) and a centred app icon.
 - **Spotify keeps working after its updates**: the app picks up the Web Player's new operations by itself when Spotify ships a new version.
 - **No ads**: the ad audio is refused, so the player skips the ad within a second, and nothing false is reported to Spotify.
 - **Podcasts and audiobooks are back**: shows, episodes, chapters, **Your Episodes** in Your Library, and **playback speed** (from the song menu) for episodes.

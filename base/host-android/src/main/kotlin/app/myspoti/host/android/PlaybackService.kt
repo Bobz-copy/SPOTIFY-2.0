@@ -43,6 +43,7 @@ data class NowPlayingInfo(
     val playing: Boolean,
     val buffering: Boolean = false,
     val liked: Boolean = false,
+    val shuffle: Boolean = false,
 )
 
 /** Commands from the system (notification buttons, headset, car, lock screen). */
@@ -56,6 +57,7 @@ interface PlaybackControls {
     fun playFromMediaId(mediaId: String)
     fun playFromSearch(query: String)
     fun setRemoteVolume(volume: Int)
+    fun setShuffle(on: Boolean) {}
 }
 
 /** Android Auto / media browser content. */
@@ -116,7 +118,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
         override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) { controls?.playFromMediaId(mediaId) }
         override fun onPlayFromSearch(query: String, extras: Bundle?) { controls?.playFromSearch(query) }
         override fun onCustomAction(action: String, extras: Bundle?) {
-            if (action == ACTION_LIKE) controls?.setLiked(!(current?.liked ?: false))
+            when (action) {
+                ACTION_LIKE -> controls?.setLiked(!(current?.liked ?: false))
+                ACTION_SHUFFLE -> controls?.setShuffle(!(current?.shuffle ?: false))
+            }
         }
     }
 
@@ -142,8 +147,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     PlaybackStateCompat.ACTION_SEEK_TO or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
                     PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
             )
+            // Like on the left of previous / play / next, shuffle on the right: five buttons, so
+            // play / pause sits in the middle (lock screen, Samsung Now Bar, Android 13+ shade).
             .addCustomAction(ACTION_LIKE, if (info.liked) "Unlike" else "Like",
                 if (info.liked) R.drawable.msp_ic_liked else R.drawable.msp_ic_like)
+            .addCustomAction(ACTION_SHUFFLE, if (info.shuffle) "Shuffle off" else "Shuffle on",
+                if (info.shuffle) R.drawable.msp_ic_shuffle_on else R.drawable.msp_ic_shuffle)
             .setState(state, info.positionMs, if (info.playing && !info.buffering) 1f else 0f)
             .build())
         if (info.coverUrl != lastCoverUrl) loadCover(info.coverUrl)
@@ -278,6 +287,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         private const val CHANNEL_ID = "playback"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_LIKE = "like"
+        private const val ACTION_SHUFFLE = "shuffle"
         private val http = OkHttpClient()
 
         @Volatile private var instance: PlaybackService? = null

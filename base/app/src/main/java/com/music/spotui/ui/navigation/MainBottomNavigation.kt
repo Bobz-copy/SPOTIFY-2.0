@@ -76,7 +76,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                 contentAlignment = Alignment.BottomCenter,
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Settings, Display: a solid black bar, or the fade that lets the list show through.
+                    // Settings, Display: solid black (the default, from #15), or the fade over the list.
                     .then(
                         if (com.music.spotui.data.preferences.SolidNavBar.on) Modifier.background(Color.Black)
                         else Modifier.background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black), startY = 0f))

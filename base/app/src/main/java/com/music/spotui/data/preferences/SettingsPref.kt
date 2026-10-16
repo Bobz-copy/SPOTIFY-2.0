@@ -18,10 +18,10 @@ fun setLyricsExtraSources(c: Context, v: Boolean) = prefs(c).edit().putBoolean(K
 
 private fun prefs(c: Context) = c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
-/** The bottom bar: solid black (the default), or fading into the list. Read by the bar as state. */
+/** The bottom bar: fading into the list (the default), or solid black. Read by the bar as state. */
 object SolidNavBar {
     private const val KEY = "solid_nav_bar"
-    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, true))
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, false))
         private set
 
     fun set(c: Context, value: Boolean) {

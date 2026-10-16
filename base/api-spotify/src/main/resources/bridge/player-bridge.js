@@ -204,6 +204,18 @@
     'player.setSpeed': a => need().player.setSpeed(a.speed),
     // Streaming quality, as the desktop app's setting: "auto", "low", "normal", "high",
     // "very_high". The page's own player (PlayerSDK.harmony) picks the files with it.
+    // What the page plays now: bitrate, codec and the chosen quality level.
+    'player.audioInfo': async () => {
+      const sdk = need().resolve('PlayerSDK');
+      const streamer = sdk && sdk.harmony && sdk.harmony._streamer;
+      const player = streamer && streamer._playerPromise ? await streamer._playerPromise : null;
+      const content = player && player._currentContent;
+      return {
+        bitrate: content && content._bitrate || 0,
+        mime: content && content._mimeType || '',
+        level: player && player._preferredMediaPlaybackQuality && player._preferredMediaPlaybackQuality.audio || '',
+      };
+    },
     'player.setAudioQuality': async a => {
       const sdk = need().resolve('PlayerSDK');
       const harmony = sdk && sdk.harmony;

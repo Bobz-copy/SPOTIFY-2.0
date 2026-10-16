@@ -27,6 +27,8 @@ data class OfflineCollection(
     val name: String,
     val trackIds: Set<String>,
     val syncedAt: Long,
+    /** The quality chosen when the list was first downloaded; its new songs follow it. */
+    val quality: String = "",
 )
 
 /**
@@ -61,11 +63,11 @@ object OfflineCollections {
         collections.values.any { trackId in it.trackIds }
 
     /** Download a song on its own. */
-    fun downloadSong(song: SongsModel) {
+    fun downloadSong(song: SongsModel, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
         if (song.spotifyTrackId.isBlank()) return
         synchronized(lock) { singles += song.spotifyTrackId }
         save()
-        OfflineDownloader.enqueue(listOf(song))
+        OfflineDownloader.enqueue(listOf(song), quality)
     }
 
     /**
@@ -81,11 +83,11 @@ object OfflineCollections {
     }
 
     /** Download a list as a whole, and keep it in step from now on. */
-    fun download(page: ContextPageModel) {
+    fun download(page: ContextPageModel, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
         val ids = page.tracks.map { it.spotifyTrackId }.filter { it.isNotBlank() }.toSet()
-        collections[page.uri] = OfflineCollection(page.uri, page.type, page.name, ids, System.currentTimeMillis())
+        collections[page.uri] = OfflineCollection(page.uri, page.type, page.name, ids, System.currentTimeMillis(), quality?.name.orEmpty())
         save()
-        OfflineDownloader.enqueue(page.tracks)
+        OfflineDownloader.enqueue(page.tracks, quality)
     }
 
     /** Stop keeping a list: its songs go, unless another reason keeps them. */
@@ -114,7 +116,7 @@ object OfflineCollections {
         collections[page.uri] = c.copy(name = page.name, trackIds = ids, syncedAt = System.currentTimeMillis())
         save()
         val missing = songs.filter { !OfflineStore.isDownloaded(it.spotifyTrackId) && OfflineStore.status[it.spotifyTrackId] == null }
-        if (missing.isNotEmpty()) OfflineDownloader.enqueue(missing)
+        if (missing.isNotEmpty()) OfflineDownloader.enqueue(missing, com.music.spotui.data.preferences.DownloadQuality.saved(c.quality))
         gone.filterNot { isKept(it) }.forEach { OfflineDownloader.remove(it) }
         if (missing.isNotEmpty() || gone.isNotEmpty()) Log.i(TAG, "${page.name}: +${missing.size} -${gone.size}")
     }
@@ -149,7 +151,7 @@ object OfflineCollections {
             val lists = JSONArray()
             collections.values.forEach { c ->
                 lists.put(JSONObject().put("uri", c.uri).put("type", c.type).put("name", c.name)
-                    .put("synced", c.syncedAt).put("tracks", JSONArray(c.trackIds.toList())))
+                    .put("synced", c.syncedAt).put("tracks", JSONArray(c.trackIds.toList())).put("quality", c.quality))
             }
             JSONObject().put("version", 1).put("lists", lists).put("singles", JSONArray(singles.toList())).toString()
         }
@@ -169,7 +171,7 @@ object OfflineCollections {
             val tracks = c.optJSONArray("tracks") ?: JSONArray()
             collections[c.getString("uri")] = OfflineCollection(
                 c.getString("uri"), c.optString("type"), c.optString("name"),
-                (0 until tracks.length()).map { tracks.getString(it) }.toSet(), c.optLong("synced"),
+                (0 until tracks.length()).map { tracks.getString(it) }.toSet(), c.optLong("synced"), c.optString("quality"),
             )
         }
         val s = o.optJSONArray("singles") ?: JSONArray()

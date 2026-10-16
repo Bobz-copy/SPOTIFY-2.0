@@ -31,16 +31,6 @@ internal object LosslessRegistry {
     // Community backend API key (shared/published constant in SpotiFLAC's sources).
     const val API_KEY = "ak_8e3f1a7c2b5d9e4f0a6c3b8d1e5f2a9c7b4d0e6f"
 
-    // Issues the signed sessions the community download servers accept. Sessions from
-    // any other host fail there with 401 "Signed request validation failed". Network call: IO only.
-    fun communityVerifyUrl(): String =
-        registry()?.optJSONObject("community")?.optString("verify")?.takeIf { it.startsWith("https://") }
-            ?.trimEnd('/') ?: "https://verify.spotbye.qzz.io"
-
-    /** Community (gated) download endpoint for a provider, e.g. tidal → .../api/dl. */
-    fun communityDlUrl(provider: String): String? =
-        registry()?.optJSONObject(provider)?.optString("community")?.takeIf { it.isNotBlank() }
-
     private const val GIST_URL =
         "https://gist.githubusercontent.com/BartolomeoRusso9/ef9fdbbc894818aea89d25a8d99f8c77/raw"
 

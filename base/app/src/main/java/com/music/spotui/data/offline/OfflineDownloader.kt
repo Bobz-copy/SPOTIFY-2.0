@@ -4,9 +4,7 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import com.music.spotui.data.entity.SongsModel
-import com.music.spotui.data.preferences.isHiRes
 import com.music.spotui.data.preferences.isLosslessEnabled
-import com.music.spotui.data.preferences.isSmallDownloads
 import com.music.spotui.di.Graph
 import com.music.spotui.lossless.DashFlacRemux
 import com.music.spotui.lossless.LosslessSource
@@ -54,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object OfflineDownloader {
     private const val TAG = "Offline"
-    private const val WORKERS = 2
+    private const val WORKERS = 3
     private const val MIN_SCORE = 0.5
 
     data class Request(
@@ -65,9 +63,12 @@ object OfflineDownloader {
         val albumId: String,
         val durationMs: Long,
         val coverUrl: String,
+        /** The quality chosen for this download ([DownloadQuality.name]); empty = the setting. */
+        val quality: String = "",
     ) {
         fun toJson(): JSONObject = JSONObject().put("id", trackId).put("title", title).put("artist", artist)
             .put("album", album).put("albumId", albumId).put("duration", durationMs).put("cover", coverUrl)
+            .put("quality", quality)
 
         companion object {
             fun of(s: SongsModel) = Request(
@@ -76,7 +77,7 @@ object OfflineDownloader {
             )
             fun fromJson(o: JSONObject) = Request(
                 o.getString("id"), o.optString("title"), o.optString("artist"), o.optString("album"),
-                o.optString("albumId"), o.optLong("duration"), o.optString("cover"),
+                o.optString("albumId"), o.optLong("duration"), o.optString("cover"), o.optString("quality"),
             )
         }
     }
@@ -127,7 +128,11 @@ object OfflineDownloader {
         if (saved.isNotEmpty()) enqueueAll(saved)
     }
 
-    fun enqueue(songs: List<SongsModel>) {
+    /**
+     * Downloads [songs] in [quality] (asked when the setting is "ask each time"), else in
+     * the quality chosen in Settings.
+     */
+    fun enqueue(songs: List<SongsModel>, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
         // Downloads switched off in Settings: say so, instead of a list of failed songs.
         if (!isLosslessEnabled(Graph.app)) {
             scope.launch(Dispatchers.Main) {
@@ -135,7 +140,8 @@ object OfflineDownloader {
             }
             return
         }
-        enqueueAll(songs.filter { it.spotifyTrackId.isNotBlank() }.map(Request::of))
+        val q = quality?.let { com.music.spotui.data.preferences.DownloadQuality.saved(it.name) }?.name.orEmpty()
+        enqueueAll(songs.filter { it.spotifyTrackId.isNotBlank() }.map { Request.of(it).copy(quality = q) })
     }
 
     private fun enqueueAll(list: List<Request>) {
@@ -227,6 +233,7 @@ object OfflineDownloader {
 
     private suspend fun download(r: Request): OfflineTrack {
         if (!isLosslessEnabled(Graph.app)) throw Unavailable("lossless downloads are off")
+        val quality = qualityOf(r)
         val tmp = OfflineStore.tmpDir
         val audioTmp = File(tmp, "${r.trackId}.flacpart")
         val previewTmp = File(tmp, "${r.trackId}.preview")
@@ -248,7 +255,8 @@ object OfflineDownloader {
             Log.i(TAG, "${meta.title}: isrc=${meta.isrc ?: "-"} preview=${if (previewFeatures != null) "ok" else if (previewLink != null) "unusable" else "none"}")
 
             // ── Lossless resolve: gated SpotiFLAC first, then the community backends.
-            val file = resolveAndFetch(r, meta, audioTmp) ?: throw Unavailable("no lossless match")
+            val file = resolveAndFetch(r, meta, audioTmp, quality == com.music.spotui.data.preferences.DownloadQuality.HI_RES)
+                ?: throw Unavailable("no lossless match")
             currentCoroutineContext().ensureActive()
 
             // ── Verification before the file is kept.
@@ -267,7 +275,7 @@ object OfflineDownloader {
             }
 
             val out: File
-            if (isSmallDownloads(Graph.app)) {
+            if (quality == com.music.spotui.data.preferences.DownloadQuality.SMALL) {
                 // "Smallest": the checked FLAC becomes AAC, encoded on the phone.
                 out = File(OfflineStore.audioDir, "${r.trackId}.m4a")
                 val aacTmp = File(OfflineStore.tmpDir, "${r.trackId}.m4apart")
@@ -301,11 +309,17 @@ object OfflineDownloader {
     }
 
     /** Runs the lossless resolver and saves the audio into [out]; null when nothing matched. */
-    private suspend fun resolveAndFetch(r: Request, meta: Meta, out: File): Fetched? {
+    /** This download's quality: the one chosen when it started, else Settings (CD when Settings says "ask"). */
+    private fun qualityOf(r: Request): com.music.spotui.data.preferences.DownloadQuality =
+        com.music.spotui.data.preferences.DownloadQuality.saved(r.quality)
+            ?: com.music.spotui.data.preferences.DownloadQuality.saved(com.music.spotui.data.preferences.getDownloadQuality(Graph.app).name)
+            ?: com.music.spotui.data.preferences.DownloadQuality.CD
+
+    private suspend fun resolveAndFetch(r: Request, meta: Meta, out: File, hiRes: Boolean): Fetched? {
         val resolved = LosslessSource.resolve(
             Graph.app, r.trackId,
             LosslessSource.TrackInfo(meta.title, meta.artist, (meta.durationMs / 1000).toInt(), meta.isrc.orEmpty()),
-            preferHiRes = isHiRes(Graph.app),
+            preferHiRes = hiRes,
         )
         if (resolved !is LosslessSource.Success) return null
         val track = resolved.track
@@ -420,7 +434,7 @@ object OfflineDownloader {
     }
 
     private fun rangedDownload(url: String, out: File, knownTotal: Long): Boolean {
-        val chunk = 16L * 1024 * 1024 // 16 MB
+        val chunk = 4L * 1024 * 1024 // 4 MB: the stream gets its turn between two chunks
         var total = knownTotal
         java.io.RandomAccessFile(out, "rw").use { output ->
             output.setLength(0)
@@ -429,6 +443,7 @@ object OfflineDownloader {
                 val end = if (total > 0) minOf(output.length() + chunk - 1, total - 1) else output.length() + chunk - 1
                 var done = false
                 var attempt = 0
+                yieldToPlayer()
                 while (true) {
                     attempt++
                     val position = output.length()
@@ -476,6 +491,22 @@ object OfflineDownloader {
         }
         return true
     }
+
+    /**
+     * The song playing here is loading: downloads wait (up to 30 s) so they do not starve
+     * it, or the player's stall watchdog would take it for stuck and skip it.
+     */
+    private fun yieldToPlayer() {
+        var waited = 0
+        while (waited < 30_000 && playerStarving()) {
+            Thread.sleep(500); waited += 500
+        }
+    }
+
+    private fun playerStarving(): Boolean = runCatching {
+        com.music.spotui.di.SongPlayer.isPlaying() && com.music.spotui.di.SongPlayer.isBuffering &&
+            com.music.spotui.di.SongPlayer.activeDevice.value == null && !com.music.spotui.di.LocalPlayer.active.value
+    }.getOrDefault(false)
 
     private fun contentLength(url: String): Long =
         runCatching {

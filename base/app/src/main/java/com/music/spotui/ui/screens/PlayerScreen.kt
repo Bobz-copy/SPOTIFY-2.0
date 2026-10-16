@@ -962,29 +962,6 @@ fun PlayerFull(
     }
 }
 
-/** The current audio output route name for the Connect indicator (BT name if
- *  connected, else Headphones / This device). Uses AudioDeviceInfo.productName
- *  which needs no Bluetooth permission. */
-private fun currentAudioRoute(context: Context): String {
-    return try {
-        val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        val outs = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
-        val bt = outs.firstOrNull {
-            it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-        }
-        if (bt != null) return bt.productName?.toString()?.takeIf { it.isNotBlank() } ?: context.getString(R.string.label_bluetooth)
-        val wired = outs.firstOrNull {
-            it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                it.type == android.media.AudioDeviceInfo.TYPE_USB_HEADSET
-        }
-        if (wired != null) context.getString(R.string.headphones) else context.getString(R.string.connect_phone_is_self)
-    } catch (e: Exception) {
-        context.getString(R.string.connect_phone_is_self)
-    }
-}
-
 @Composable
 fun PlayerConnectRow(
     context: Context,

@@ -1,6 +1,8 @@
 package com.music.spotui.data.preferences
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 // Trimmed from Spotui: stream quality, crossfade, YouTube and web-playback settings
 // are gone (the Web Player engine streams Spotify's own audio).
@@ -15,6 +17,18 @@ fun isLyricsExtraSources(c: Context): Boolean = prefs(c).getBoolean(KEY_LYRICS_E
 fun setLyricsExtraSources(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_LYRICS_EXTRA, v).apply()
 
 private fun prefs(c: Context) = c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+
+/** The bottom bar: solid black, or fading into the list (the default). Read by the bar as state. */
+object SolidNavBar {
+    private const val KEY = "solid_nav_bar"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, false))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+    }
+}
 
 /** Library layout: false = rows (default), true = Spotify-style 3-column grid. */
 fun isLibraryGridView(c: Context): Boolean = prefs(c).getBoolean(KEY_LIBRARY_GRID, false)

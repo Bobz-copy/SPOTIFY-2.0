@@ -33,6 +33,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Pause
@@ -81,9 +83,20 @@ import com.music.spotui.ui.screens.ExplicitBadge
 private val Green: Color get() = com.music.spotui.ui.theme.AppAccent
 private val SheetColor = Color(0xFF282828)
 
-/** Name of the device playing now ("This phone" when it's this phone). */
+/**
+ * Name of the output playing now: the Connect device, else the headphones this phone
+ * plays into (their Bluetooth name), else "This phone".
+ */
 @Composable
-fun activeDeviceLabel(): String = SongPlayer.activeDevice.value?.name ?: stringResource(R.string.connect_phone_is_self)
+fun activeDeviceLabel(): String {
+    SongPlayer.activeDevice.value?.let { return it.name }
+    val route = rememberAudioRoute()
+    return when (route.kind) {
+        AudioRoute.Kind.SPEAKER -> stringResource(R.string.connect_phone_is_self)
+        AudioRoute.Kind.BLUETOOTH -> route.name.ifBlank { stringResource(R.string.label_bluetooth) }
+        AudioRoute.Kind.WIRED -> stringResource(R.string.headphones)
+    }
+}
 
 private fun deviceIcon(type: String): ImageVector = when (type.uppercase()) {
     "SMARTPHONE", "TABLET" -> Icons.Default.Smartphone
@@ -92,63 +105,165 @@ private fun deviceIcon(type: String): ImageVector = when (type.uppercase()) {
     else -> Icons.Default.Computer
 }
 
-// ── Spotify Connect device picker ──
+// ── Connect: where the music plays ──
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesSheet(onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var devices by remember { mutableStateOf<List<SongPlayer.ConnectDevice>?>(null) }
+    var quality by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { devices = SongPlayer.devices() }
+    val remote = SongPlayer.activeDevice.value
+    val route = rememberAudioRoute()
+    val headphones = remote == null && route.kind != AudioRoute.Kind.SPEAKER
+    if (quality) QualitySheet(onDismiss = { quality = false })
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 stringResource(R.string.listen_on),
-                color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
+            // The output playing now, the song, and its quality (tap: what plays, and change it).
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(16.dp)).background(Color(0xFF333333)).padding(16.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(activeDeviceLabel(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        if (remote == null) Text(
+                            stringResource(streamingLabel(com.music.spotui.data.preferences.getStreamingQuality(context))),
+                            color = Color(0xFFDDDDDD), fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF4A4A4A))
+                                .clickable { quality = true }.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                    val title = Graph.currentSongState.title.value
+                    if (title.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        Icon(Icons.Default.Equalizer, null, tint = Green, modifier = Modifier.size(16.dp))
+                        Text("$title — ${Graph.currentSongState.singer.value}", color = Green, fontSize = 14.sp, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
+                    }
+                }
+                Icon(
+                    when {
+                        remote != null -> deviceIcon(remote.type)
+                        headphones -> Icons.Default.Headphones
+                        else -> Icons.Default.Smartphone
+                    },
+                    contentDescription = null, tint = Green, modifier = Modifier.padding(start = 12.dp).size(40.dp),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
             val list = devices
+            val self = list?.firstOrNull { it.isSelf }
+            // This phone's speaker: from headphones (the system's output picker), or back from a Connect device.
+            if (remote != null || headphones) DeviceRow(Icons.Default.Smartphone, stringResource(R.string.connect_phone_is_self), null) {
+                if (remote != null) self?.let { SongPlayer.transferTo(it) } else AudioRoute.pickOutput(context)
+                onDismiss()
+            }
+            // The headphones this phone plays into, while a Connect device has the music.
+            if (remote != null && route.kind != AudioRoute.Kind.SPEAKER || headphones) DeviceRow(
+                Icons.Default.Headphones,
+                if (route.kind == AudioRoute.Kind.BLUETOOTH) route.name.ifBlank { stringResource(R.string.label_bluetooth) } else stringResource(R.string.headphones),
+                if (route.kind == AudioRoute.Kind.BLUETOOTH) stringResource(R.string.label_bluetooth) else null,
+                current = headphones,
+            ) {
+                if (remote != null) self?.let { SongPlayer.transferTo(it) } else AudioRoute.pickOutput(context)
+                onDismiss()
+            }
             if (list == null) {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Green, modifier = Modifier.size(28.dp))
                 }
-            } else if (list.isEmpty()) {
-                Text(stringResource(R.string.no_devices), color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(20.dp))
             } else {
-                val anyActive = list.any { it.isActive }
-                list.forEach { d ->
-                    // This phone counts as current when nothing else is playing.
-                    val current = d.isActive || (d.isSelf && !anyActive)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (!current) SongPlayer.transferTo(d)
-                                onDismiss()
-                            }
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                    ) {
-                        Icon(
-                            if (d.isSelf) Icons.Default.Smartphone else deviceIcon(d.type),
-                            contentDescription = null,
-                            tint = if (current) Green else Color.White,
-                            modifier = Modifier.size(28.dp),
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Column {
-                            Text(
-                                if (d.isSelf) stringResource(R.string.connect_phone_is_self) else d.name,
-                                color = if (current) Green else Color.White,
-                                fontSize = 16.sp, fontWeight = FontWeight.Medium,
-                            )
-                            if (current) Text(stringResource(R.string.default_notification_channel_name), color = Green.copy(alpha = 0.8f), fontSize = 12.sp)
-                        }
-                    }
+                list.filter { !it.isSelf && !it.isActive }.forEach { d ->
+                    DeviceRow(deviceIcon(d.type), d.name, null) { SongPlayer.transferTo(d); onDismiss() }
                 }
+                if (list.none { !it.isSelf } && !headphones && remote == null)
+                    Text(stringResource(R.string.no_devices), color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(20.dp))
             }
             JamSection(onDismiss)
+            // Bluetooth: pair or pick headphones and speakers in the system settings.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(12.dp)).background(Color(0xFF333333))
+                    .clickable { AudioRoute.openBluetooth(context) }.padding(14.dp),
+            ) {
+                Icon(Icons.Default.Bluetooth, null, tint = Green, modifier = Modifier.size(26.dp))
+                Text(stringResource(R.string.label_bluetooth), color = Green, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+            }
         }
     }
+}
+
+@Composable
+private fun DeviceRow(icon: ImageVector, name: String, detail: String?, current: Boolean = false, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 14.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = if (current) Green else Color.White, modifier = Modifier.size(28.dp))
+        Spacer(Modifier.width(16.dp))
+        Column {
+            Text(name, color = if (current) Green else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            if (detail != null) Text(detail, color = Color(0xFFB3B3B3), fontSize = 13.sp)
+        }
+    }
+}
+
+private fun streamingLabel(q: com.music.spotui.data.preferences.StreamingQuality): Int = when (q) {
+    com.music.spotui.data.preferences.StreamingQuality.AUTO -> R.string.quality_streaming_auto
+    com.music.spotui.data.preferences.StreamingQuality.LOW -> R.string.quality_streaming_low
+    com.music.spotui.data.preferences.StreamingQuality.NORMAL -> R.string.quality_streaming_normal
+    com.music.spotui.data.preferences.StreamingQuality.HIGH -> R.string.quality_streaming_high
+}
+
+/** The sound quality page: what plays now (codec and bitrate, or the downloaded file), and the setting. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QualitySheet(onDismiss: () -> Unit) {
+    val local = com.music.spotui.di.LocalPlayer.active.value
+    val now by androidx.compose.runtime.produceState<String?>(null) {
+        value = if (local) {
+            val t = com.music.spotui.di.LocalPlayer.current()
+            val file = t?.let { com.music.spotui.data.offline.OfflineStore.byLocalId(it.id) }
+            file?.let { "${it.file.substringAfterLast('.').uppercase()} · ${it.source}" } ?: ""
+        } else {
+            val (bitrate, mime) = app.myspoti.host.android.MyspotiRuntime.spotify.player.audioInfo()
+            if (bitrate <= 0) "" else "${codecName(mime)} · ${bitrate / 1000} kbit/s"
+        }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
+            Text(stringResource(R.string.quality_sheet_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            val text = now
+            Text(
+                when {
+                    text == null -> "…"
+                    text.isBlank() -> stringResource(R.string.quality_now_unknown)
+                    else -> stringResource(R.string.quality_now, text)
+                },
+                color = Green, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+            if (!local) StreamingQualityPicker(Modifier.padding(top = 12.dp))
+        }
+    }
+}
+
+private fun codecName(mime: String): String = when {
+    "mp4a" in mime -> "AAC"
+    "flac" in mime -> "FLAC"
+    "opus" in mime -> "Opus"
+    "vorbis" in mime -> "Ogg Vorbis"
+    "mpeg" in mime -> "MP3"
+    else -> mime.substringBefore(';').substringAfter('/').uppercase()
 }
 
 /** Spotify Jam: listen together. Free accounts can join (Spotify keeps starting one to Premium). */

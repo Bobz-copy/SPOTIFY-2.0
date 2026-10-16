@@ -186,9 +186,11 @@ fun SongOptionsSheet(
                     onDismiss()
                 }
                 else -> MenuRow(Icons.Outlined.ArrowCircleDown, stringResource(R.string.context_menu_download), enabled = hasId) {
-                    com.music.spotui.data.offline.OfflineCollections.downloadSong(song)
-                    com.music.spotui.di.Haptics.confirm()
-                    toast(context.getString(R.string.download_notification_downloading))
+                    com.music.spotui.ui.components.DownloadAsk.start(context) { q ->
+                        com.music.spotui.data.offline.OfflineCollections.downloadSong(song, q)
+                        com.music.spotui.di.Haptics.confirm()
+                        toast(context.getString(R.string.download_notification_downloading))
+                    }
                     onDismiss()
                 }
             }

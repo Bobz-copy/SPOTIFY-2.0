@@ -123,6 +123,12 @@ fun SettingsScreen(navController: NavController) {
                 enabled = !energy.policy.saverEnabled,
                 onChecked = app.myspoti.power.EnergySettings::setCanvasEnabled,
             )
+            OptionRow(
+                label = stringResource(R.string.settings_solid_nav_title),
+                detail = stringResource(R.string.settings_solid_nav_detail),
+                checked = com.music.spotui.data.preferences.SolidNavBar.on,
+                onChecked = { com.music.spotui.data.preferences.SolidNavBar.set(ctx, it) },
+            )
             LanguageRow()
             Divider()
 

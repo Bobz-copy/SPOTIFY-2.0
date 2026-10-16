@@ -10,6 +10,7 @@ private const val PREF = "LosslessPref"
 private const val KEY_HI_RES = "hires_24bit"
 private const val KEY_ENABLED = "enabled"
 private const val KEY_SMALL = "small_aac"
+private const val KEY_ASK = "ask_each_time"
 
 /**
  * Hi-res downloads (24-bit when the provider has it: bigger files, ~3× a CD-quality FLAC).
@@ -28,5 +29,10 @@ fun setLosslessEnabled(context: Context, on: Boolean) = prefs(context).edit().pu
 fun isSmallDownloads(context: Context): Boolean = prefs(context).getBoolean(KEY_SMALL, false)
 
 fun setSmallDownloads(context: Context, on: Boolean) = prefs(context).edit().putBoolean(KEY_SMALL, on).apply()
+
+/** The quality is asked at each download (once for a whole list). */
+fun isAskDownloadQuality(context: Context): Boolean = prefs(context).getBoolean(KEY_ASK, false)
+
+fun setAskDownloadQuality(context: Context, on: Boolean) = prefs(context).edit().putBoolean(KEY_ASK, on).apply()
 
 private fun prefs(c: Context) = c.getSharedPreferences(PREF, Context.MODE_PRIVATE)

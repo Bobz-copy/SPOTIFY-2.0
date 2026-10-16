@@ -277,6 +277,7 @@ object SongPlayer {
         val predicted = getCurrentPosition()
         bufferingState.value = s.isBuffering
         playing = resolvePlaying(s.isPaused)
+        SpeakerKeepAlive.set(playing && _activeDevice.value == null)
         durationMs = item?.durationMs ?: 0L
         val reported = s.positionAt(System.currentTimeMillis())
         // Keep the running clock when the player only nudges it (< 1 s).
@@ -589,6 +590,9 @@ object SongPlayer {
         return saved
     }
 
+    /** Bumped at every like / unlike of a track: the Liked Songs page refreshes its top. */
+    val likedChanges = kotlinx.coroutines.flow.MutableStateFlow(0)
+
     /** Like / unlike a track by id. */
     fun setTrackSaved(trackId: String, on: Boolean) {
         if (trackId.isBlank()) return
@@ -602,12 +606,14 @@ object SongPlayer {
         intentValue = on
         intentUntil = SystemClock.elapsedRealtime() + 3000
         onLibraryItem(uri, on)
+        val track = uri.startsWith(SPOTIFY_TRACK_PREFIX)
         command {
             if (uri.startsWith("spotify:playlist:")) {
                 if (on) api.playlists.follow(uri) else api.playlists.unfollow(uri)
             } else {
                 if (on) api.library.add(listOf(uri)) else api.library.remove(listOf(uri))
             }
+            if (track) likedChanges.value++
         }
     }
 

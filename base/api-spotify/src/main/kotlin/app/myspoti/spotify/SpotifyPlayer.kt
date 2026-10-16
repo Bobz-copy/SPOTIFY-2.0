@@ -233,6 +233,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (bridge.ready.value) applyAudioQuality()
     }
 
+    /** What the page plays now: bitrate (bit/s, 0 = unknown) and codec ("audio/mp4; codecs=…"). */
+    suspend fun audioInfo(): Pair<Int, String> = runCatching {
+        val o = bridge.call("player.audioInfo") as? JsonObject ?: return@runCatching 0 to ""
+        (o["bitrate"]?.jsonPrimitive?.content?.toDoubleOrNull()?.toInt() ?: 0) to (o["mime"]?.jsonPrimitive?.content.orEmpty())
+    }.getOrDefault(0 to "")
+
     private suspend fun applyAudioQuality() {
         runCatching { bridge.call("player.setAudioQuality", buildJsonObject { put("level", audioQuality) }) }
             .onFailure { bridge.logger?.invoke("audio quality $audioQuality not set: ${it.message}") }

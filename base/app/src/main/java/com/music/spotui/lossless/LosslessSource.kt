@@ -18,13 +18,13 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 
 /**
- * Resolves a Spotify track to lossless FLAC via SpotiFLAC — its gated backend
- * first (the user's signed session), then the public community backends. Each
+ * Resolves a Spotify track to lossless FLAC — the SpotiFLAC download servers first
+ * (Qobuz, with the user's signed session), then the public community backends. Each
  * provider fails gracefully: a down or throttled source just falls through.
  *
  * Priority (most reliable first):
- *   1. SpotiFLAC gated session — Qobuz (found by ISRC in its own catalogue), then
- *      Tidal (16 or 24-bit).
+ *   1. Qobuz (found by ISRC in its own catalogue) through the SpotiFLAC (Zarz)
+ *      servers and the user's signed session — 16 or 24-bit.
  *   2. Tidal community backends — `/track/?id=`, single-file FLAC (16) or a
  *      DASH manifest to remux into one FLAC file (24).
  *   3. Amazon self-resolve by Spotify id (often dormant).
@@ -67,67 +67,109 @@ object LosslessSource {
     ): Result = withContext(Dispatchers.IO) {
         // Qobuz's own catalogue search finds the ISRC quickly and does not depend on the
         // community backends; the Tidal id does (their search), and they are often down.
+        fun verified(ext: ZarzSession.Ext) = com.music.spotui.data.preferences.getSpotiflacSession(context, ext.appVersion) != null
+
+        // 1. Tidal through the SpotiFLAC download servers (Zarz), with the user's verified
+        //    session, as SpotiFLAC Mobile's tidal-web extension does: the most reliable source.
+        //    Tidal's own public API finds the exact ISRC.
+        if (verified(ZarzSession.Ext.TIDAL)) {
+            tidalIdForIsrc(info.isrc)?.let { id -> zarzTidal(context, id, info, preferHiRes)?.let { return@withContext it } }
+        }
+        // 2. Qobuz the same way (qobuz-web), found by ISRC in Qobuz's own catalogue.
         val qobuz = qobuzIdForIsrc(info.isrc)
-        val session = SpotiflacGated.hasSession(context)
+        if (qobuz != null && verified(ZarzSession.Ext.QOBUZ)) {
+            zarzQobuz(context, qobuz, info, preferHiRes)?.let { return@withContext it }
+        }
 
-        // 1. SpotiFLAC's gated /api/dl (needs the user's verification session): Qobuz first
-        //    when the ISRC found it, so a dead Tidal backend costs no time.
-        if (session && qobuz != null) gated(context, null, qobuz, info, preferHiRes)?.let { return@withContext it }
+        // 3. Tidal community backends (no account needed).
         val tidal = tidalHit(info)
-        if (session && tidal != null) gated(context, tidal, null, info, preferHiRes)?.let { return@withContext it }
-
-        // 2. Tidal community backends (no account needed).
         if (tidal != null) tidalDirect(tidal, info, preferHiRes)?.let { return@withContext it }
 
-        // 3. Amazon (self-resolves from the Spotify id; usually dormant).
+        // 4. Amazon (self-resolves from the Spotify id; usually dormant).
         amazon(spotifyId)?.let { return@withContext it }
 
         NotFound
     }
 
-    /** Gated providers: Tidal first (its match is the strongest), then Qobuz by ISRC. */
-    private suspend fun gated(
-        context: Context,
-        tidal: TidalHit?,
-        qobuzId: String?,
-        info: TrackInfo,
-        preferHiRes: Boolean,
-    ): Result? {
-        if (tidal != null) {
-            val qualities = if (preferHiRes) listOf("HI_RES_LOSSLESS", "LOSSLESS") else listOf("LOSSLESS")
-            for (q in qualities) {
-                val hit = runCatching { SpotiflacGated.flacUrl(context, "tidal", tidal.id, q) }
-                    .getOrElse { Log.w(TAG, "gated tidal $q: ${it.message}"); null } ?: continue
-                val result = hitAsSuccess(hit, "SpotiFLAC tidal", info, isrcMatches(tidal.isrc, info.isrc))
-                if (result is Success) return result
-            }
-        }
-        if (qobuzId != null) {
-            val qualities = if (preferHiRes) listOf("HI_RES_LOSSLESS", "LOSSLESS") else listOf("LOSSLESS")
-            for (q in qualities) {
-                val hit = runCatching { SpotiflacGated.flacUrl(context, "qobuz", qobuzId, q) }
-                    .getOrElse { Log.w(TAG, "gated qobuz $q: ${it.message}"); null } ?: continue
-                // Qobuz was looked up by the ISRC itself and its answer checked against it.
-                val result = hitAsSuccess(hit, "SpotiFLAC qobuz", info, true)
-                if (result is Success) return result
+    /**
+     * Qobuz by its track id, as the qobuz-web extension asks for it: a download ticket for
+     * the track's URL, then POST /dl/qbz with it. 24-bit max first when hi-res is wanted.
+     */
+    private fun zarzQobuz(context: Context, qobuzId: String, info: TrackInfo, preferHiRes: Boolean): Result? {
+        val trackUrl = "https://open.qobuz.com/track/$qobuzId"
+        val qualities = if (preferHiRes) listOf("hi-res-max", "cd") else listOf("cd")
+        for (q in qualities) {
+            try {
+                val ticket = ZarzSession.ticket(context, ZarzSession.Ext.QOBUZ, "qbz", "track", trackUrl)
+                val o = ZarzSession.signedJson(context, ZarzSession.Ext.QOBUZ, "POST", "/dl/qbz", JSONObject()
+                    .put("quality", q).put("upload_to_r2", false).put("id", qobuzId)
+                    .put("type", "track").put("url", trackUrl), mapOf("X-Zarz-Ticket" to ticket))
+                val data = o.optJSONObject("data") ?: JSONObject()
+                val url = listOf("download_url", "url", "link")
+                    .firstNotNullOfOrNull { k -> o.optString(k).ifBlank { data.optString(k) }.takeIf { it.startsWith("http") } }
+                    ?: continue
+                val bits = o.optInt("bit_depth", data.optInt("bit_depth", 0)).takeIf { it in 8..32 } ?: if (q == "cd") 16 else 24
+                if (!isFullTrack(url, info.durationSec)) continue
+                // The Qobuz id came from a search on the ISRC itself, checked against it.
+                return Success(LosslessFile(url, "", "Qobuz", bits), isrcMatched = true)
+            } catch (e: ZarzSession.VerifyRequired) {
+                // The servers want a new verification: forget the session, Settings asks again.
+                com.music.spotui.data.preferences.clearSpotiflacSession(context, ZarzSession.Ext.QOBUZ.appVersion)
+                Log.w(TAG, "zarz qobuz: verification required")
+                return null
+            } catch (e: Exception) {
+                Log.w(TAG, "zarz qobuz $q: ${e.message}")
             }
         }
         return null
     }
 
-    /** Turns a gated hit into a Success, rejecting what is not full-length audio. */
-    private suspend fun hitAsSuccess(
-        hit: SpotiflacGated.GatedHit,
-        provider: String,
-        info: TrackInfo,
-        isrcMatched: Boolean,
-    ): Result? {
-        if (hit.dashBase64.isNotBlank()) return Success(LosslessFile("", hit.dashBase64, provider, 24), isrcMatched)
-        if (hit.url.isBlank()) return null
-        if (!isFullTrack(hit.url, info.durationSec)) return null
-        val quality = if (hit.quality > 0) hit.quality else 16
-        return Success(LosslessFile(hit.url, "", provider, quality), isrcMatched)
+    /**
+     * Tidal by its track id, as the tidal-web extension asks for it: a ticket for the
+     * id, then POST /dl/tid. The answer carries Tidal's own manifest: one FLAC file
+     * (CD), or a DASH manifest remuxed into one FLAC (hi-res).
+     */
+    private fun zarzTidal(context: Context, tidalId: String, info: TrackInfo, preferHiRes: Boolean): Result? {
+        val qualities = if (preferHiRes) listOf("HI_RES_LOSSLESS", "LOSSLESS") else listOf("LOSSLESS")
+        for (q in qualities) {
+            try {
+                val ticket = ZarzSession.ticket(context, ZarzSession.Ext.TIDAL, "tid", "track", tidalId)
+                val o = ZarzSession.signedJson(context, ZarzSession.Ext.TIDAL, "POST", "/dl/tid",
+                    JSONObject().put("id", tidalId).put("quality", q), mapOf("X-Zarz-Ticket" to ticket))
+                val data = o.optJSONObject("data") ?: continue
+                if (data.optString("assetPresentation").equals("PREVIEW", true)) continue
+                val file = parseTidalTrack(JSONObject().put("data", data).toString(), "https://tidal.zarz") ?: continue
+                val named = file.copy(provider = if (file.dashBase64.isNotBlank()) "Tidal hi-res" else "Tidal")
+                if (named.url.isNotBlank() && !isFullTrack(named.url, info.durationSec)) continue
+                return Success(named, isrcMatched = true)
+            } catch (e: ZarzSession.VerifyRequired) {
+                com.music.spotui.data.preferences.clearSpotiflacSession(context, ZarzSession.Ext.TIDAL.appVersion)
+                Log.w(TAG, "zarz tidal: verification required")
+                return null
+            } catch (e: Exception) {
+                Log.w(TAG, "zarz tidal $q: ${e.message}")
+            }
+        }
+        return null
     }
+
+    /** Tidal's public API: the track carrying this exact ISRC (the web player's own token). */
+    internal fun tidalIdForIsrc(isrc: String): String? {
+        if (isrc.isBlank()) return null
+        return runCatching {
+            val body = get("https://tidal.com/v1/tracks?isrc=${URLEncoder.encode(isrc.trim(), "UTF-8")}&countryCode=US",
+                mapOf("x-tidal-token" to TIDAL_PUBLIC_TOKEN))
+            val items = JSONObject(body).optJSONArray("items") ?: JSONArray()
+            (0 until items.length()).map { items.getJSONObject(it) }
+                // Several releases carry the ISRC: one that streams in full, lossless first.
+                .filter { isrcMatches(it.optString("isrc"), isrc.trim()) && it.optBoolean("streamReady", true) }
+                .sortedByDescending { if (it.optString("audioQuality") == "HI_RES_LOSSLESS") 2 else if (it.optString("audioQuality") == "LOSSLESS") 1 else 0 }
+                .firstOrNull()?.optString("id")?.takeIf(String::isNotBlank)
+        }.getOrElse { Log.w(TAG, "tidal isrc lookup: ${it.message}"); null }
+    }
+
+    /** The public token Tidal's web player sends (the tidal-web extension's default). */
+    private const val TIDAL_PUBLIC_TOKEN = "49YxDN9a2aFV6RTG"
 
     /** The public Tidal community backends direct: search gave the id already. */
     private fun tidalDirect(tidal: TidalHit, info: TrackInfo, preferHiRes: Boolean): Result? {

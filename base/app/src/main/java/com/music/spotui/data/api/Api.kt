@@ -77,7 +77,22 @@ class Api constructor(
         }
     }
 
-    object LikedCache { @Volatile var tracks: List<SongsModel>? = null }
+    object LikedCache {
+        @Volatile var tracks: List<SongsModel>? = null
+
+        /**
+         * [head] (the newest liked songs, from Spotify) then the rest of [known] after them.
+         * A song unliked inside the head's span is gone from it, so it goes from the list too.
+         */
+        fun merge(head: List<SongsModel>, known: List<SongsModel>): List<SongsModel> {
+            val ids = head.mapTo(HashSet()) { it.spotifyTrackId }
+            val lastHead = head.lastOrNull()?.spotifyTrackId
+            // What came after the head's last song in the old list is older: kept as it was.
+            val tailStart = known.indexOfFirst { it.spotifyTrackId == lastHead }.let { if (it < 0) known.size else it + 1 }
+            val tail = if (head.size < 50) emptyList() else known.drop(tailStart).filterNot { it.spotifyTrackId in ids }
+            return head + tail
+        }
+    }
 
     /** True once the Web Player is signed in and ready (waits up to 30 s at startup). */
     private suspend fun ready(): Boolean =
@@ -469,6 +484,20 @@ class Api constructor(
         SongPlayer.registerLikedSongs(tracks.map { it.url })
         emit(Response.Success(page(tracks, true)))
     }
+
+    /**
+     * After a like / unlike: the newest Liked Songs (one page) put on top of what is
+     * known, so the list is right at once without loading every page again.
+     */
+    suspend fun mergeLikedHead(): List<SongsModel>? = runCatching {
+        if (!ready()) return null
+        val head = api.library.likedTracks(0, 50).items.map { songOf(it.track).copy(addedAt = it.addedAt.orEmpty()) }
+        val merged = LikedCache.merge(head, LikedCache.tracks.orEmpty())
+        LikedCache.tracks = merged
+        withContext(Dispatchers.IO) { ScreenCache.liked.write(merged) }
+        SongPlayer.registerLikedSongs(merged.map { it.url })
+        merged
+    }.getOrNull()
 
     private suspend fun allLiked(onPage: suspend (List<SongsModel>) -> Unit): List<SongsModel> {
         val out = ArrayList<SongsModel>()

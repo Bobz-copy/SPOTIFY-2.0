@@ -241,4 +241,11 @@
     <string name="downloads_verify_hint">Aucune source sans perte n\'a répondu. Faites une fois la vérification SpotiFLAC dans Réglages, Téléchargements : ses serveurs sont les plus fiables.</string>
     <string name="quality_download_small">La plus légère</string>
     <string name="quality_download_small_detail">AAC 96 kbit/s, le minimum : environ 3 Mo par titre</string>
+    <string name="settings_solid_nav_title">Barre du bas opaque</string>
+    <string name="settings_solid_nav_detail">Noire derrière les onglets, au lieu d\'un fondu sur la liste</string>
+    <string name="quality_download_ask">Demander à chaque fois</string>
+    <string name="quality_download_ask_detail">Choisir au lancement d\'un téléchargement, une seule fois pour toute une playlist</string>
+    <string name="quality_sheet_title">Qualité du son</string>
+    <string name="quality_now">En cours : %1$s</string>
+    <string name="quality_now_unknown">Pas encore connue : lancez un titre</string>
 </resources>

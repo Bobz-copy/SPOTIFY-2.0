@@ -45,19 +45,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.myspoti.engine.R
-import com.music.spotui.lossless.LosslessRegistry
 import com.music.spotui.ui.theme.AppBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 
 /**
- * SpotiFLAC verification, the way the official client does it: bootstrap → the
+ * SpotiFLAC verification, the way SpotiFLAC Mobile's extensions do it: bootstrap → the
  * service's own hosted challenge page (the user solves the Turnstile themselves)
  * → redirect with a grant → exchange the grant for a signing session.
  *
@@ -72,7 +67,11 @@ fun SpotiflacScreen(onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     var webView by remember { mutableStateOf<WebView?>(null) }
     var attempt by remember { mutableStateOf(0) }
-    var verified by remember { mutableStateOf(com.music.spotui.data.preferences.hasSpotiflacSession(context)) }
+    // One session per download server (Tidal, then Qobuz); verified once none is missing.
+    fun missing() = com.music.spotui.lossless.ZarzSession.Ext.entries
+        .firstOrNull { com.music.spotui.data.preferences.getSpotiflacSession(context, it.appVersion) == null }
+    var ext by remember { mutableStateOf(missing()) }
+    var verified by remember { mutableStateOf(ext == null) }
     var message by remember { mutableStateOf("") }
     var done by remember { mutableStateOf(false) }
     val leave: () -> Unit = onClose
@@ -80,53 +79,51 @@ fun SpotiflacScreen(onClose: () -> Unit) {
     fun res(id: Int): String = context.getString(id)
 
     // Reused so a retry keeps the same install; the service binds the session to it.
-    val installId = remember {
-        com.music.spotui.data.preferences.getSpotiflacSession(context)?.installId?.takeIf { it.isNotBlank() }
-            ?: java.security.SecureRandom().let { r -> (1..16).joinToString("") { "%02x".format(r.nextInt(256)) } }
-    }
-    val state = remember(attempt) {
-        java.security.SecureRandom().let { r -> (1..16).joinToString("") { "%02x".format(r.nextInt(256)) } }
-    }
+    val installId = remember { com.music.spotui.lossless.ZarzSession.installId(context) }
+    // The state the challenge page must send back with its grant.
+    var state by remember { mutableStateOf("") }
 
     fun finish(grant: String) = scope.launch {
         message = res(R.string.spotiflac_session_creating)
+        val current = ext ?: return@launch
         val ok = withContext(Dispatchers.IO) {
-            runCatching {
-                val body = JSONObject()
-                    .put("grant", grant).put("install_id", installId)
-                    .put("app_version", APP_VERSION).put("platform", PLATFORM)
-                val o = JSONObject(post("${LosslessRegistry.communityVerifyUrl()}/session/exchange", body.toString()))
-                val id = o.optString("session_id")
-                val secret = o.optString("session_secret")
-                require(id.isNotBlank() && secret.isNotBlank())
-                com.music.spotui.data.preferences.saveSpotiflacSession(context, id, secret, installId, o.optString("expires_at"))
-            }.isSuccess
+            runCatching { com.music.spotui.lossless.ZarzSession.exchange(context, current, installId, grant) }
+                .onFailure { android.util.Log.w("Spotiflac", "exchange: ${it.message}") }.isSuccess
         }
         if (ok) {
-            verified = true
-            done = true
-            android.widget.Toast.makeText(context, R.string.spotiflac_session_ok, android.widget.Toast.LENGTH_LONG).show()
+            // The next server, if one is still missing (often given at once to a verified install).
+            ext = missing()
+            if (ext == null) {
+                verified = true
+                done = true
+                android.widget.Toast.makeText(context, R.string.spotiflac_session_ok, android.widget.Toast.LENGTH_LONG).show()
+            }
         } else {
             message = res(R.string.spotiflac_session_failed)
         }
     }
 
-    LaunchedEffect(attempt) {
-        if (verified) return@LaunchedEffect
+    LaunchedEffect(attempt, ext) {
+        val current = ext
+        if (verified || current == null) return@LaunchedEffect
         message = ""
-        val challenge = withContext(Dispatchers.IO) {
-            runCatching {
-                val base = LosslessRegistry.communityVerifyUrl()
-                val url = "$base/bootstrap?install_id=$installId&app_version=$APP_VERSION&platform=$PLATFORM"
-                JSONObject(get(url)).optString("challenge_url").takeIf { it.startsWith("https://") }
-            }.getOrNull()
+        val boot = withContext(Dispatchers.IO) {
+            runCatching { com.music.spotui.lossless.ZarzSession.bootstrap(context, current, installId) }
+                .onFailure { android.util.Log.w("Spotiflac", "bootstrap: ${it.message}") }.getOrNull()
         }
-        if (challenge == null) {
+        if (boot == null) {
             message = res(R.string.spotiflac_verify_start_failed)
             return@LaunchedEffect
         }
+        if (boot.challengeUrl == null) {
+            // The servers gave a session straight away: nothing to solve for this one.
+            ext = missing()
+            if (ext == null) { verified = true; done = true }
+            return@LaunchedEffect
+        }
         message = ""
-        webView?.loadUrl("$challenge&cb=" + URLEncoder.encode("$CALLBACK?state=$state", "UTF-8"))
+        state = boot.state
+        webView?.loadUrl(boot.challengeUrl)
         // Never leave the user on a page that silently stalled.
         delay(180_000)
         if (!done && !verified) message = res(R.string.spotiflac_verify_timeout)
@@ -211,14 +208,17 @@ private fun SpotiflacStatusScreen(onClose: () -> Unit) {
     ) {
         Text(stringResource(R.string.spotiflac_status_title), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.spotiflac_status_verified), color = Color(0xFFB3B3B3), fontSize = 14.sp)
-        val session = com.music.spotui.data.preferences.getSpotiflacSession(context)
-        Text(
-            stringResource(R.string.spotiflac_session_expires, session?.expiresAt.orEmpty().take(19)),
-            color = Color(0xFF00C7B7), fontSize = 13.sp,
-        )
+        for (e in com.music.spotui.lossless.ZarzSession.Ext.entries) {
+            val session = com.music.spotui.data.preferences.getSpotiflacSession(context, e.appVersion) ?: continue
+            Text(
+                e.name.lowercase().replaceFirstChar { it.uppercase() } + " — " +
+                    stringResource(R.string.spotiflac_session_expires, session.expiresAt.take(19).replace('T', ' ')),
+                color = Color(0xFF00C7B7), fontSize = 13.sp,
+            )
+        }
         Button(
             onClick = {
-                com.music.spotui.data.preferences.clearSpotiflacSession(context)
+                com.music.spotui.data.preferences.clearSpotiflacSessions(context)
                 onClose()
             },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E1E1E), contentColor = Color.White),
@@ -232,36 +232,4 @@ private fun SpotiflacStatusScreen(onClose: () -> Unit) {
     }
 }
 
-// Screen constants; APP_VERSION must stay in step with SpotiflacGated (same signing).
-private const val CALLBACK = "spotiflac://session-grant"
-private const val APP_VERSION = "4.8.5"
-private const val PLATFORM = "android"
-
-// ── HTTP helpers (same shape as Spotui's) ────────────────────────────────────
-
-private fun get(url: String): String = request(url, null)
-
-private fun post(url: String, json: String): String = request(url, json)
-
-private fun request(url: String, json: String?): String {
-    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-        connectTimeout = 20_000
-        readTimeout = 20_000
-        setRequestProperty("Accept", "application/json")
-        if (json != null) {
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-        }
-    }
-    try {
-        if (json != null) conn.outputStream.use { it.write(json.toByteArray()) }
-        val code = conn.responseCode
-        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
-            ?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) throw java.io.IOException("HTTP $code")
-        return text
-    } finally {
-        conn.disconnect()
-    }
-}
+private const val CALLBACK = com.music.spotui.lossless.ZarzSession.CALLBACK

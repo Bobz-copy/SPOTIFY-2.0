@@ -6,8 +6,14 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 A new engine, written from scratch, and a cleaner app on top of it.
 
-- **Lossless downloads**: the offline downloads are now FLAC. Myspoti finds the same recording on a lossless service (Tidal, Qobuz or Amazon) by the track's ISRC and takes it as it is served, never re-encoded — 16-bit CD quality, **24-bit hi-res when it exists**, or AAC re-encoded on the phone to keep them small (in Settings). The matching is done the way [SpotiFLAC](https://github.com/spotbye/SpotiFLAC) does it, with SpotiFLAC's own signed servers first. A one-off verification (a quick invisible check) turns it on after sign-in. A track with no lossless recording anywhere is marked unavailable.
+- **Lossless downloads**: the offline downloads are now FLAC. Myspoti finds the same recording on a lossless service (Tidal, Qobuz or Amazon) by the track's ISRC and takes it as it is served, never re-encoded — 16-bit CD quality, **24-bit hi-res when it exists**, or AAC re-encoded on the phone to keep them small (in Settings). Tidal and Qobuz come through the same signed servers as SpotiFLAC Mobile's extensions, three songs at a time; a one-off verification in Settings turns them on. A track with no lossless recording anywhere is marked unavailable.
 - **Sound quality, chosen at the start**: a first step after sign-in picks the streaming quality (Automatic, Low 24 kbit/s, Normal 96, High 160) and the download quality (off, smallest AAC 96 kbit/s, FLAC CD, FLAC hi-res). Both stay in the new **Settings** page.
+- **Connect shows your headphones**: with Bluetooth or wired headphones, their name replaces "This phone", a "This phone" row sends the sound back to the speaker, and a Bluetooth button opens the pairing settings. The quality badge opens a small page with what plays now (codec and bitrate) and the setting.
+- **Downloads ask their quality** if you want ("Ask each time"): once for a whole playlist, kept for its new songs.
+- **Liked Songs update at once** after a like or an unlike, without reloading the whole list.
+- **No more "bop" between two songs** on the phone's speaker: the sound output stays awake across the change.
+- **Haptics work again**: buttons, likes and the debug icon vibrate.
+- **Solid bottom bar** as an option in Settings, Display.
 - **Settings page**: sound quality, downloads, data and battery, display and language, in one place (profile menu or Library's account menu).
 - **Italian**: Myspoti's own texts are translated too.
 - **Headphones unplugged or Bluetooth gone**: the music pauses instead of moving to the phone's speaker.

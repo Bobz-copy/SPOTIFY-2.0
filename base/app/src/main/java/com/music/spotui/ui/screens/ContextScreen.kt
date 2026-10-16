@@ -77,6 +77,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -166,6 +168,20 @@ class ContextViewModel(
                 "album" -> api.getAlbumPage(id)
                 "liked" -> api.getLikedPage()
                 else -> api.getPlaylistPage(id)
+            }
+            // Liked Songs: a like or unlike anywhere puts the list right at once.
+            if (type == "liked") viewModelScope.launch(Dispatchers.IO) {
+                SongPlayer.likedChanges.drop(1).collectLatest {
+                    kotlinx.coroutines.delay(1_500) // Spotify's library takes the change first
+                    val songs = api.mergeLikedHead() ?: return@collectLatest
+                    val current = (_page.value as? Response.Success)?.data ?: return@collectLatest
+                    val updated = Response.Success(current.copy(
+                        tracks = songs,
+                        metaLine = Graph.app.resources.getQuantityString(R.plurals.liked_songs_header_metadata_text, songs.size, songs.size),
+                    ))
+                    _page.value = updated
+                    recent[key!!] = updated
+                }
             }
             flow.collect { r ->
                 if (r is Response.Loading && _page.value is Response.Success) return@collect
@@ -435,9 +451,11 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                     com.music.spotui.ui.components.DownloadListButton(downloadedCount, ids.size, busy, kept = listKept) {
                         if (listKept) askRemoveDownloads = true
                         else {
-                            com.music.spotui.di.Haptics.confirm()
-                            com.music.spotui.data.offline.OfflineCollections.download(p)
-                            android.widget.Toast.makeText(context, context.getString(R.string.download_notification_downloading), android.widget.Toast.LENGTH_SHORT).show()
+                            com.music.spotui.ui.components.DownloadAsk.start(context) { q ->
+                                com.music.spotui.di.Haptics.confirm()
+                                com.music.spotui.data.offline.OfflineCollections.download(p, q)
+                                android.widget.Toast.makeText(context, context.getString(R.string.download_notification_downloading), android.widget.Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                     Spacer(Modifier.weight(1f))

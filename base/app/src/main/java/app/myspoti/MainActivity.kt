@@ -65,6 +65,8 @@ class MainActivity : AppCompatActivity() {
                             connecting -> ConnectingScreen()
                             else -> WelcomeScreen(onLogin = { showLogin() })
                         }
+                        // "Ask each time": the download quality question, above every screen.
+                        com.music.spotui.ui.components.DownloadAskHost()
                         // Beta and dev builds only: hold the faint dot to copy the recent logs.
                         if (com.music.spotui.data.api.UpdateChecker.isBeta || app.myspoti.engine.BuildConfig.DEBUG)
                             com.music.spotui.ui.components.BetaLogButton(
@@ -75,6 +77,8 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(compose, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
+        // Haptics (buttons, likes, the debug icon) go through this window.
+        com.music.spotui.di.Haptics.attach(compose)
         // Debug builds: `am start ... --ez showPlayer true` shows the Web Player page full screen.
         val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         MyspotiRuntime.host.attach(root, visible = debuggable && intent.getBooleanExtra("showPlayer", false))

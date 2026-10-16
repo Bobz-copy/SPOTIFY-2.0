@@ -25,13 +25,18 @@ All of these are exercised by `host-cdp` live tests against a free account:
 | Search | all, tracks, artists, albums, playlists, shows, episodes, audiobooks, users, genres, suggestions, recent, clear recent |
 | Catalog | track, album, album tracks, artist, top tracks, discography, related artists, appears on, similar albums |
 | Library | contains/add/remove, library list with filters, sort and folders, liked songs, pin/unpin, create/rename/delete folders, move to folder |
-| Playlists | playlist, tracks (paged, with row uids), mine, editable, create, rename, description, delete, follow/unfollow, add/remove/move tracks, recommended songs |
+| Playlists | playlist, tracks (paged, with row uids), sorted tracks (client side, ascending or descending), mine, editable, create, rename, description, public, collaborative, delete, follow/unfollow, add/remove/move tracks, recommended songs |
 | Home | feed with filters, categories, category pages |
-| Podcasts | show, episodes, episode, audiobook, chapters, saved episodes |
+| Podcasts | show, episodes, episode, audiobook, chapters, saved episodes, save or unsave an episode |
 | Users | me, public profile, top artists/tracks, follow/unfollow/is following, history |
-| Track extras | lyrics (line and word sync, colours), canvas, credits, radio for a track or artist, taste-profile exclusion |
+| Track extras | lyrics (line and word sync, colours), canvas, credits, radio for a track or artist, taste-profile exclusion, don't play this artist |
 | Devices | list, transfer, pull here |
 | Jam | availability, session, start, join, leave, end, invite link, remove member, queue-only, participant volume |
+
+Added without a live check (same mechanism as a verified neighbour, see the notes in
+[feature-inventory.md](../../docs/api/feature-inventory.md)): don't play this artist (`artistban`),
+save or unsave an episode (`listenlater`), public and collaborative (`PlaylistAPI.updateDetails`,
+read back with `getMetadata`). The full feature list, with what needs a capture, is in that file.
 
 Limits seen on the Web Player with a free account:
 - Jam: Spotify answers `RESTRICTED`, so `start` fails; join and the rest are wired but unverified.

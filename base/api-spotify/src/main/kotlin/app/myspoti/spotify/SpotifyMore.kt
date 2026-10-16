@@ -160,6 +160,11 @@ class SpotifyPodcasts(private val gql: Gql, private val bridge: Bridge) : Podcas
         }.filterNotNull()
         return Page(items, offset, saved.size, (offset + slice.size).takeIf { it < saved.size })
     }
+
+    /** Saves or unsaves an episode in the `listenlater` set that [savedEpisodes] reads. */
+    override suspend fun setEpisodeSaved(uri: Uri, saved: Boolean) {
+        bridge.service("CollectionPlatformAPI", if (saved) "add" else "remove", JsonPrimitive("listenlater"), json(listOf(uri)))
+    }
 }
 
 class SpotifyUsers(private val gql: Gql, private val bridge: Bridge, private val http: SpotifyHttp) : Users {
@@ -290,10 +295,20 @@ class SpotifyTrackExtras(private val gql: Gql, private val bridge: Bridge, priva
         bridge.service("CollectionPlatformAPI", if (excluded) "add" else "remove", JsonPrimitive("ignoreinrecs"), json(listOf(trackUri)))
     }
 
+    override suspend fun isExcludedFromTaste(trackUris: List<Uri>): List<Boolean> = collectionContains("ignoreinrecs", trackUris)
+
+    /** "Don't play this artist" is the `artistban` collection set, written like the taste exclusion. */
+    override suspend fun setArtistBanned(artistUri: Uri, banned: Boolean) {
+        bridge.service("CollectionPlatformAPI", if (banned) "add" else "remove", JsonPrimitive("artistban"), json(listOf(artistUri)))
+    }
+
+    override suspend fun isArtistBanned(artistUris: List<Uri>): List<Boolean> = collectionContains("artistban", artistUris)
+
     /** Asks the server: the page's own contains() answers from a cache that removals do not clear. */
-    override suspend fun isExcludedFromTaste(trackUris: List<Uri>): List<Boolean> {
+    private suspend fun collectionContains(set: String, uris: List<Uri>): List<Boolean> {
+        if (uris.isEmpty()) return emptyList()
         val username = bridge.service("UserAPI", "getUser").str("username") ?: throw GqlException("collection", "no user")
-        val body = json(mapOf("username" to username, "set" to "ignoreinrecs", "items" to trackUris.map { mapOf("uri" to it) })).toString()
+        val body = json(mapOf("username" to username, "set" to set, "items" to uris.map { mapOf("uri" to it) })).toString()
         val (code, text) = http.send("POST", "https://spclient.wg.spotify.com/collection/v2/contains?market=from_token", body, contentType = "application/json")
         if (code != 200) throw app.myspoti.spotify.gql.HttpException(code, text.take(200))
         return Bridge.json.parseToJsonElement(text).list("found").map { (it as? JsonPrimitive)?.content == "true" }

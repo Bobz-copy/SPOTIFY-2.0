@@ -60,6 +60,25 @@ data class Playlist(
     val followers: Long? = null,
 )
 
+/** Client-side orders for a playlist's rows. [CUSTOM] is the playlist's own order. */
+enum class PlaylistSort { CUSTOM, TITLE, ARTIST, ALBUM, ADDED_AT, DURATION }
+
+/**
+ * Sorts playlist rows the way the Web Player's sort menu does. The server has no sort
+ * parameter, so this runs on rows already loaded. Ties keep the playlist's own order.
+ */
+fun List<Track>.sortedFor(sort: PlaylistSort, descending: Boolean = false): List<Track> {
+    val order: Comparator<Track> = when (sort) {
+        PlaylistSort.CUSTOM -> return if (descending) asReversed() else this
+        PlaylistSort.TITLE -> compareBy<Track> { it.name.lowercase() }
+        PlaylistSort.ARTIST -> compareBy<Track> { it.artists.firstOrNull()?.name?.lowercase() ?: "" }
+        PlaylistSort.ALBUM -> compareBy<Track> { it.album?.name?.lowercase() ?: "" }
+        PlaylistSort.ADDED_AT -> compareBy<Track> { it.addedAt ?: "" }
+        PlaylistSort.DURATION -> compareBy<Track> { it.durationMs }
+    }
+    return sortedWith(if (descending) order.reversed() else order)
+}
+
 /** One page of a longer list. [nextOffset] is null on the last page. */
 data class Page<T>(val items: List<T>, val offset: Int, val total: Int, val nextOffset: Int?)
 

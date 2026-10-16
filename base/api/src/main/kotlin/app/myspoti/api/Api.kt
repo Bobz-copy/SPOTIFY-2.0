@@ -123,6 +123,8 @@ interface Library {
 interface Playlists {
     suspend fun playlist(uri: Uri): Playlist
     suspend fun tracks(uri: Uri, offset: Int = 0, limit: Int = 100): Page<Track>
+    /** Every row, sorted on the client (the server has no sort). Use [sortedFor] to sort rows already loaded. */
+    suspend fun sortedTracks(uri: Uri, sort: PlaylistSort = PlaylistSort.CUSTOM, descending: Boolean = false): List<Track>
     /** The user's own playlists and the ones they follow, in library order, folders flattened. */
     suspend fun mine(): List<Playlist>
     /** Playlists the user may add tracks to. */
@@ -132,6 +134,10 @@ interface Playlists {
     suspend fun create(name: String, folderUri: Uri? = null): Uri
     suspend fun rename(uri: Uri, name: String)
     suspend fun setDescription(uri: Uri, description: String)
+    /** Public playlists show on the profile and in search; private ones only to the owner. */
+    suspend fun setPublic(uri: Uri, public: Boolean)
+    /** Collaborative playlists let other users add and remove tracks (owner only). */
+    suspend fun setCollaborative(uri: Uri, collaborative: Boolean)
     /** Removes the playlist from the library (owners: deletes it; it can be restored for 90 days). */
     suspend fun delete(uri: Uri)
     suspend fun follow(uri: Uri)
@@ -161,6 +167,7 @@ interface Podcasts {
     suspend fun chapters(uri: Uri, offset: Int = 0, limit: Int = 50): Page<Episode>
     /** Episodes the user saved ("Your Episodes"). */
     suspend fun savedEpisodes(offset: Int = 0, limit: Int = 50): Page<Episode>
+    suspend fun setEpisodeSaved(uri: Uri, saved: Boolean)
 }
 
 interface Users {
@@ -185,6 +192,9 @@ interface TrackExtras {
     /** Hide this track from recommendations, or show it again. */
     suspend fun setExcludedFromTaste(trackUri: Uri, excluded: Boolean)
     suspend fun isExcludedFromTaste(trackUris: List<Uri>): List<Boolean>
+    /** "Don't play this artist": the artist is kept out of recommendations and radios. */
+    suspend fun setArtistBanned(artistUri: Uri, banned: Boolean)
+    suspend fun isArtistBanned(artistUris: List<Uri>): List<Boolean>
 }
 
 interface Devices {

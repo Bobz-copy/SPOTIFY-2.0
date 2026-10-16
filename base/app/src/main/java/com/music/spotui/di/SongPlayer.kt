@@ -82,6 +82,9 @@ object SongPlayer {
     @Volatile var currentSource: String = "Spotify"
     @Volatile var currentQuality: String = ""
 
+    /** Queue items of the local player (downloads, Local Files). */
+    private const val LOCAL = "local"
+
     /** Spotify's real queue. */
     data class QueueItem(val song: SongsModel, val uri: String, val uid: String, val provider: String)
     data class EngineQueue(
@@ -344,9 +347,13 @@ object SongPlayer {
         }
     }
 
+    /** Back from the local player: the Spotify queue again. */
+    fun restoreEngineQueue() = main.post { _queue.value = EngineQueue(); applyQueue(apiQueue) }
+
     private fun applyQueue(q: app.myspoti.api.Queue?) {
         apiQueue = q
-        if (q == null) return
+        // While a downloaded or local file plays, the queue shown is the local player's.
+        if (q == null || LocalPlayer.active.value) return
         fun items(list: List<app.myspoti.api.NowPlaying>) = list
             .filter { it.uri.startsWith("spotify:track:") || it.uri.startsWith("spotify:episode:") }
             .map { QueueItem(songOf(it), it.uri, it.uid.orEmpty(), "") }
@@ -733,6 +740,7 @@ object SongPlayer {
     }
 
     fun skipTo(item: QueueItem) {
+        if (item.provider == LOCAL) { item.uid.toIntOrNull()?.let(LocalPlayer::skipTo); return }
         val id = trackIdOf(item.uri)
         if (id.isNotBlank()) markPending(id)
         boundState?.updateSongState(item.song.coverUri, item.song.title, item.song.singer, true, item.song.id, 0, item.song.album)
@@ -750,6 +758,12 @@ object SongPlayer {
 
     /** Move [item] just before / after [target] (same section of the queue). */
     fun reorder(item: QueueItem, target: QueueItem, after: Boolean) {
+        if (item.provider == LOCAL) {
+            val from = item.uid.toIntOrNull() ?: return
+            val t = target.uid.toIntOrNull() ?: return
+            LocalPlayer.move(from, if (after) (if (from < t) t else t + 1) else (if (from < t) t - 1 else t))
+            return
+        }
         val a = apiItem(item) ?: return
         val b = apiItem(target) ?: return
         command { api.player.moveInQueue(a, b, after) }
@@ -757,6 +771,7 @@ object SongPlayer {
 
     /** Move a "next up" track into the queue, right after the current one. */
     fun moveToQueueFront(item: QueueItem) {
+        if (item.provider == LOCAL) { item.uid.toIntOrNull()?.let(LocalPlayer::moveNext); return }
         val a = apiItem(item) ?: return
         command {
             api.player.addToQueue(listOf(a.uri))
@@ -765,6 +780,7 @@ object SongPlayer {
     }
 
     fun removeFromQueue(item: QueueItem) {
+        if (item.provider == LOCAL) { item.uid.toIntOrNull()?.let(LocalPlayer::remove); return }
         _queue.value = _queue.value.let { q -> q.copy(queued = q.queued - item, nextUp = q.nextUp - item) }
         val a = apiItem(item) ?: return
         command { api.player.removeFromQueue(listOf(a)) }
@@ -795,8 +811,7 @@ object SongPlayer {
             bufferingState.value = false
             val uri = "local:${t.id}"
             if (_nowPlaying.value.uri != uri) _nowPlaying.value = NowPlaying(uri = uri, contextName = LocalPlayer.contextName)
-            val song = SongsModel(id = ("local:" + t.id).hashCode() and 0x7fffffff, title = t.title, album = t.album,
-                singer = t.artist, coverUri = t.artUri.toString(), url = "local:${t.uri}", durationMs = dur.toInt())
+            val song = localSong(t, dur)
             boundState?.let { st ->
                 st.likeState.value = false
                 st.updateSongState(song.coverUri, song.title, song.singer, isPlaying, song.id, 0, song.album)
@@ -808,6 +823,21 @@ object SongPlayer {
             // The offline report: a downloaded song this app really played gets its
             // play counted on Spotify's side (Wrapped), now or once back online.
             com.music.spotui.data.offline.WrappedSync.onLocalState(t, isPlaying, pos, dur)
+        }
+    }
+
+    private fun localSong(t: com.music.spotui.data.local.LocalTrack, dur: Long = t.durationMs) =
+        SongsModel(id = ("local:" + t.id).hashCode() and 0x7fffffff, title = t.title, album = t.album,
+            singer = t.artist, coverUri = t.artUri.toString(), url = "local:${t.uri}", durationMs = dur.toInt())
+
+    /** The local player's queue: [upcoming] are the songs after [current], with their list index as uid. */
+    fun onLocalQueue(current: com.music.spotui.data.local.LocalTrack, upcoming: List<Pair<Int, com.music.spotui.data.local.LocalTrack>>) {
+        main.post {
+            if (!LocalPlayer.active.value) return@post
+            _queue.value = EngineQueue(
+                current = localSong(current),
+                nextUp = upcoming.map { (i, t) -> QueueItem(localSong(t), "local:${t.id}", i.toString(), LOCAL) },
+            )
         }
     }
 

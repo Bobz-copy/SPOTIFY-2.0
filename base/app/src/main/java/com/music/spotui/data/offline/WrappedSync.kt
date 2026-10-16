@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit
  */
 object WrappedSync {
     private const val TAG = "Wrapped"
+    private const val RETRY_MS = 60_000L
 
     /** Spotify's own countable threshold: reaching it makes the listen real. */
     internal const val THRESHOLD_MS = 30_000L
@@ -107,7 +108,25 @@ object WrappedSync {
             }
             Log.i(TAG, "queued listens to sync: ${queue.size}")
         }
-        if (queue.isNotEmpty()) flush()
+        startRetries()
+    }
+
+    @Volatile private var retrying = false
+
+    /**
+     * Retries the kept listens every minute while some are left: at app start the Web Player
+     * has no session yet, and the network may come back with no local song played after it.
+     */
+    private fun startRetries() {
+        if (retrying) return
+        retrying = true
+        scope.launch {
+            while (true) {
+                if (queue.isNotEmpty() && OfflineStore.isOnline(Graph.app) && RelayCredentials.ready())
+                    lock.withLock { flushLocked() }
+                kotlinx.coroutines.delay(RETRY_MS)
+            }
+        }
     }
 
     private suspend fun step(localId: Long, isPlaying: Boolean, pos: Long, dur: Long) {
@@ -195,8 +214,9 @@ object WrappedSync {
         }
     }
 
-    private fun enqueue(listen: Listen) = synchronized(persistLock) {
-        queue.add(listen); persistLocked()
+    private fun enqueue(listen: Listen) {
+        synchronized(persistLock) { queue.add(listen); persistLocked() }
+        startRetries()
     }
 
     /** A kept listen replays on the same context it started from, its facts, its own fresh playback id. */

@@ -299,6 +299,8 @@ object OfflineDownloader {
                 out = File(OfflineStore.audioDir, "${r.trackId}.flac")
                 if (!audioTmp.renameTo(out)) throw IOException("could not move the file")
             }
+            // Kept encrypted: the file only plays in Myspoti, on this phone.
+            runInterruptible(Dispatchers.IO) { OfflineCrypto.encryptInPlace(Graph.app, out) }
             val cover = runCatching {
                 val c = File(OfflineStore.coverDir, "${r.trackId}.jpg")
                 httpGet(meta.coverUrl, c); c.name

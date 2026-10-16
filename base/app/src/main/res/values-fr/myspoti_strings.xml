@@ -255,4 +255,5 @@
     <string name="update_allow">Autoriser</string>
     <string name="update_failed">La mise à jour a échoué : %1$s</string>
     <string name="update_retry">Réessayer</string>
+    <string name="downloads_verify_banner">Les téléchargements demandent la vérification SpotiFLAC une fois dans cette app. Touchez ici pour la faire.</string>
 </resources>

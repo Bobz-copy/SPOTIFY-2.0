@@ -12,6 +12,11 @@ A new engine, written from scratch, and a cleaner app on top of it.
 - **Downloads ask their quality** if you want ("Ask each time"): once for a whole playlist, kept for its new songs.
 - **Liked Songs update at once** after a like or an unlike, without reloading the whole list.
 - **No more "bop" between two songs** on the phone's speaker: the sound output stays awake across the change.
+- **Downloads are encrypted**: a downloaded song only plays in Myspoti, on the phone that downloaded it. Songs downloaded before are encrypted in the background.
+- **The queue of downloaded songs is the real one**: it shows what plays next, and moving, removing or skipping songs works offline.
+- **Offline listens reach your Wrapped**: listens kept while offline are sent within a minute once the network and Spotify are back, not only at the next app start.
+- **Downloads say when the SpotiFLAC verification is missing**, with a banner that opens it.
+- **Shorter debug logs**: the copied logs keep Myspoti's own lines and crashes only.
 - **Updates install in the app**: "Update" downloads the new version with a progress bar and hands it to Android's installer; no trip to GitHub. The first time, Android asks to allow installs from Myspoti.
 - **Haptics work again**: buttons, likes and the debug icon vibrate.
 - **Solid bottom bar** as an option in Settings, Display.

@@ -17,15 +17,22 @@ import com.music.spotui.data.local.LocalTrack
 object LocalPlayer {
     /** Local playback is the current source. */
     val active = mutableStateOf(false)
-    private var tracks: List<LocalTrack> = emptyList()
+    /** The play order, kept in step with the player's items (shuffle reorders it, see [setShuffle]). */
+    private val tracks = mutableListOf<LocalTrack>()
+    /** The order before shuffle, to go back to. */
+    private var unshuffled: List<LocalTrack>? = null
     /** Where the queue comes from (Local Files, Downloaded…), shown in the player. */
     var contextName: String = ""
         private set
     private var exo: ExoPlayer? = null
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun player(): ExoPlayer = exo ?: ExoPlayer.Builder(Graph.app)
         .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
         .setHandleAudioBecomingNoisy(true)
+        // Downloaded songs are encrypted files: the player reads them through the decrypting source.
+        .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+            com.music.spotui.data.offline.OfflineCrypto.Factory(Graph.app)))
         .build().also { p ->
             p.addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) = publish()
@@ -36,16 +43,14 @@ object LocalPlayer {
     fun play(list: List<LocalTrack>, index: Int, shuffle: Boolean = false, context: String? = null) {
         if (list.isEmpty()) return
         SongPlayer.pauseEngineForLocal()
-        tracks = list
+        tracks.clear(); tracks.addAll(list); unshuffled = null
         contextName = context ?: Graph.app.getString(app.myspoti.engine.R.string.local_files_title)
         active.value = true
         val p = player()
-        p.setMediaItems(list.map { t ->
-            MediaItem.Builder().setUri(t.uri).setMediaId(t.id.toString())
-                .setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist).build()).build()
-        }, index.coerceIn(0, list.lastIndex), 0L)
-        p.shuffleModeEnabled = shuffle
+        p.shuffleModeEnabled = false
+        p.setMediaItems(list.map(::item), index.coerceIn(0, list.lastIndex), 0L)
         p.prepare()
+        if (shuffle) setShuffle(true)
         p.play()
     }
 
@@ -54,6 +59,8 @@ object LocalPlayer {
         if (!active.value) return
         active.value = false
         exo?.let { it.stop(); it.clearMediaItems() }
+        tracks.clear(); unshuffled = null
+        SongPlayer.restoreEngineQueue()
         // Whatever this run played gets closed honestly (Wrapped reporting).
         com.music.spotui.data.offline.WrappedSync.finish()
     }
@@ -63,7 +70,67 @@ object LocalPlayer {
     fun next() { exo?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() } }
     fun previous() { exo?.let { if (it.currentPosition > 3000 || !it.hasPreviousMediaItem()) it.seekTo(0) else it.seekToPreviousMediaItem() } }
     fun seekTo(ms: Long) { exo?.seekTo(ms) }
-    fun setShuffle(on: Boolean) { exo?.shuffleModeEnabled = on }
+    /**
+     * Shuffle reorders the songs after the current one (and off puts the list's order back),
+     * so the queue shown is the order that really plays and can be edited like any list.
+     */
+    fun setShuffle(on: Boolean) {
+        val p = exo ?: return
+        if (on == (unshuffled != null) || tracks.isEmpty()) return
+        val cur = p.currentMediaItemIndex.coerceIn(0, tracks.lastIndex)
+        if (on) {
+            unshuffled = tracks.toList()
+            arrange(tracks.subList(0, cur + 1).toList() + tracks.subList(cur + 1, tracks.size).shuffled())
+        } else {
+            val before = unshuffled.orEmpty()
+            unshuffled = null
+            arrange(before.filter { b -> tracks.any { it === b } } + tracks.filter { t -> before.none { it === t } })
+        }
+    }
+
+    val shuffled get() = unshuffled != null
+
+    /** The songs after the current one, in play order, with their index in the list. */
+    fun upcoming(): List<Pair<Int, LocalTrack>> {
+        val i = exo?.currentMediaItemIndex ?: return emptyList()
+        return (i + 1 until tracks.size).map { it to tracks[it] }
+    }
+
+    fun skipTo(index: Int) { exo?.let { if (index in tracks.indices) { it.seekTo(index, 0L); it.play() } } }
+
+    /** Moves the song at [from] so it ends at [to] (indices of the list after the move). */
+    fun move(from: Int, to: Int) {
+        val p = exo ?: return
+        if (from !in tracks.indices || to !in tracks.indices || from == to) return
+        p.moveMediaItem(from, to)
+        tracks.add(to, tracks.removeAt(from))
+        publish()
+    }
+
+    /** Moves the song at [from] right after the current one. */
+    fun moveNext(from: Int) { exo?.let { val cur = it.currentMediaItemIndex; move(from, if (from > cur) cur + 1 else cur) } }
+
+    fun remove(index: Int) {
+        val p = exo ?: return
+        if (index !in tracks.indices || index == p.currentMediaItemIndex) return
+        p.removeMediaItem(index)
+        val t = tracks.removeAt(index)
+        unshuffled = unshuffled?.filterNot { it === t }
+        publish()
+    }
+
+    /** Puts the player's items in [target]'s order with moves only, so the current song keeps playing. */
+    private fun arrange(target: List<LocalTrack>) {
+        val p = exo ?: return
+        for (k in target.indices) {
+            val j = (k until tracks.size).firstOrNull { tracks[it] === target[k] } ?: continue
+            if (j != k) { p.moveMediaItem(j, k); tracks.add(k, tracks.removeAt(j)) }
+        }
+        publish()
+    }
+
+    private fun item(t: LocalTrack) = MediaItem.Builder().setUri(t.uri).setMediaId(t.id.toString())
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist).build()).build()
     fun setRepeatMode(mode: Int) {
         exo?.repeatMode = when (mode) { 1 -> Player.REPEAT_MODE_ALL; 2 -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF }
     }
@@ -76,5 +143,6 @@ object LocalPlayer {
         if (!active.value) return
         val t = current() ?: return
         SongPlayer.onLocalState(t, exo?.playWhenReady == true, position(), duration())
+        SongPlayer.onLocalQueue(t, upcoming())
     }
 }

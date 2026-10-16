@@ -85,6 +85,12 @@ object OfflineStore {
         audioDir.listFiles()?.forEach { if (it.name !in names) it.delete() }
         val covers = kept.map { it.cover }.toSet()
         coverDir.listFiles()?.forEach { if (it.name !in covers) it.delete() }
+        // Songs downloaded before encryption existed: encrypted once, in the background.
+        val plain = kept.map { File(audioDir, it.file) }
+        if (plain.isNotEmpty()) Thread {
+            plain.forEach { f -> runCatching { OfflineCrypto.encryptInPlace(context.applicationContext, f) }
+                .onFailure { android.util.Log.w("Offline", "could not encrypt ${f.name}: ${it.message}") } }
+        }.apply { name = "offline-encrypt"; priority = Thread.MIN_PRIORITY }.start()
     }
 
     val audioDir: File get() = File(root, "audio")

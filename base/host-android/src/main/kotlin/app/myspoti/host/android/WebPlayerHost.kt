@@ -164,7 +164,15 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
     /** Signs out of Spotify in this WebView, then shows the login page. */
     fun logout() = main.post {
-        CookieManager.getInstance().removeAllCookies { main.post { view.clearCache(false); view.loadUrl(LOGIN_URL) } }
+        CookieManager.getInstance().removeAllCookies {
+            main.post {
+                // Web storage too: localStorage/IndexedDB hold the player's session
+                // state, and clearCache(true) also drops the disk cache (false kept it).
+                android.webkit.WebStorage.getInstance().deleteAllData()
+                view.clearCache(true)
+                view.loadUrl(LOGIN_URL)
+            }
+        }
     }
 
     override suspend fun evaluate(script: String) {

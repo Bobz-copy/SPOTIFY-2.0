@@ -25,7 +25,9 @@ object ScreenCache {
     // Bumped when a cached model changes shape.
     private const val DIR = "screen_cache1"
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // One thread: writes and clear() run in call order, so a write already in
+    // flight at logout cannot land after the clear and restore the old account.
+    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
     private val dir: File by lazy { File(Graph.app.filesDir, DIR).also { it.mkdirs() } }
 
     val home = Entry("home", HomeFeedModel.serializer())

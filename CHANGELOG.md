@@ -6,6 +6,7 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 - **Fewer ads abroad**: ads from other countries' ad servers, sponsored playlists and promotion shelves are blocked; ads are recognised even when they look like songs; an ad that still gets through is muted and skipped.
 - **Artist discography** (Releases) shows albums and singles again.
+- **Long names fit**: long playlist names and artist mixes no longer push the layout; big titles shrink to fit, cards in a row keep the same height.
 - **A pause stays a pause**, even right at the end of a song.
 - **Downloads are safe**: a damaged download list no longer deletes your downloaded songs.
 - **Changes Spotify refuses are undone on screen** (likes, playlist visibility), with a message.

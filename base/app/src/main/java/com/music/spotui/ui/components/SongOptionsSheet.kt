@@ -332,7 +332,7 @@ private fun CreditsSheet(song: SongsModel, onDismiss: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Text(stringResource(R.string.track_credits), color = Color.White, fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 modifier = Modifier.padding(20.dp, 8.dp))
-            Text(song.title, color = Color(0xFFB3B3B3), fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp))
+            Text(song.title, color = Color(0xFFB3B3B3), fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
             val roles = credits?.roles
             if (roles == null) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().padding(20.dp))
             else roles.forEach { role ->

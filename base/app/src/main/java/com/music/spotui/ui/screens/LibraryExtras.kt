@@ -409,7 +409,7 @@ private fun PickRow(name: String, detail: String, cover: String?, onClick: () ->
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)))
         Column(Modifier.padding(start = 12.dp)) {
             Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1)
+            Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }
 }
@@ -435,7 +435,7 @@ fun LibraryItemSheet(entry: LibraryEntry, onDismiss: () -> Unit, onChanged: () -
     val api = app.myspoti.host.android.MyspotiRuntime.api
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
-            Text(entry.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            Text(entry.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp))
             if (!moving) {
                 SheetRow(Icons.Outlined.PushPin, stringResource(if (entry.pinned) R.string.library_unpin else R.string.library_pin)) {

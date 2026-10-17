@@ -775,6 +775,6 @@ private fun QueueAction(icon: ImageVector, label: String, active: Boolean, modif
     ) {
         Icon(icon, contentDescription = null, tint = if (active) Green else Color.White, modifier = Modifier.size(26.dp))
         Spacer(Modifier.height(4.dp))
-        Text(label, color = if (active) Green else Color.White, fontSize = 13.sp, maxLines = 1)
+        Text(label, color = if (active) Green else Color.White, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }

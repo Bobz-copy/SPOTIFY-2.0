@@ -329,8 +329,9 @@ private fun HomeShortcutGrid(navController: NavController, items: List<HomeItem>
                             text = item.name,
                             color = Color.White,
                             fontSize = 12.sp,
+                            lineHeight = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 2,
+                            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             modifier = Modifier.padding(8.dp, 4.dp),
                         )
                     }
@@ -348,6 +349,8 @@ private fun HomeFeedSection(navController: NavController, section: HomeSection) 
         color = Color.White,
         fontSize = 21.sp,
         fontWeight = FontWeight.Bold,
+        maxLines = 2,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         modifier = Modifier.padding(16.dp, 20.dp, 16.dp, 4.dp),
     )
     LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp, 0.dp)) {
@@ -390,14 +393,17 @@ private fun HomeFeedCard(item: HomeItem, onClick: () -> Unit) {
             color = Color.White,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             textAlign = if (isArtist) TextAlign.Center else TextAlign.Start,
         )
+        // Always two lines tall: a long artist mix no longer makes one card taller than its row.
         Text(
             text = subtitle,
             color = Color(0xFFB3B3B3),
             fontSize = 11.sp,
-            maxLines = 2,
+            lineHeight = 14.sp,
+            minLines = 2,
+            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             textAlign = if (isArtist) TextAlign.Center else TextAlign.Start,
         )
     }

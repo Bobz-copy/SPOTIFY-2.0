@@ -214,12 +214,11 @@ private fun ArtistOverviewContent(
                         .align(Alignment.BottomStart)
                         .padding(16.dp, 0.dp, 16.dp, 12.dp),
                 ) {
-                    Text(
+                    com.music.spotui.ui.components.FitText(
                         text = displayName,
-                        color = Color.White,
                         fontSize = 44.sp,
+                        minSize = 24.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        lineHeight = 46.sp,
                         maxLines = 2,
                     )
                     if (overview.verified) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
@@ -547,7 +546,7 @@ private fun PopularTrackRow(
             Text(text = song.title, color = titleColor, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (song.explicit) { ExplicitBadge(); Spacer(Modifier.width(6.dp)) }
-                Text(text = item.playcount?.let { grouped(it) } ?: song.singer, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1)
+                Text(text = item.playcount?.let { grouped(it) } ?: song.singer, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
         if (saved) {
@@ -596,12 +595,12 @@ private fun ReleaseCard(album: AlbumsModel, onClick: () -> Unit) {
             contentDescription = "",
         )
         Spacer(Modifier.height(6.dp))
-        Text(text = album.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(text = album.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Text(
             text = album.time.ifBlank { album.artists }.let { if (album.time.isNotBlank()) "${album.time} • Album" else it },
             color = Color.Gray,
             fontSize = 11.sp,
-            maxLines = 1,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
 }
@@ -628,7 +627,7 @@ private fun ReleaseRow(album: AlbumsModel, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = album.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(text = album.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             val kind = when (album.type.uppercase()) {
                 "SINGLE" -> stringResource(R.string.album_type_single); "EP" -> stringResource(R.string.album_type_ep)
                 "COMPILATION" -> stringResource(R.string.album_type_compilation); "" -> ""
@@ -639,7 +638,7 @@ private fun ReleaseRow(album: AlbumsModel, onClick: () -> Unit) {
                 text = listOf(year, kind).filter { it.isNotBlank() }.joinToString(" • "),
                 color = Color.Gray,
                 fontSize = 13.sp,
-                maxLines = 1,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
@@ -821,7 +820,7 @@ private fun RelatedArtistCard(artist: ArtistsModel, onClick: () -> Unit) {
             contentDescription = "",
         )
         Spacer(Modifier.height(6.dp))
-        Text(text = artist.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(text = artist.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Text(text = stringResource(R.string.artist_subtitle), color = Color.Gray, fontSize = 11.sp)
     }
 }

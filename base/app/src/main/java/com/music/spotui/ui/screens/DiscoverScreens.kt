@@ -126,7 +126,7 @@ fun NewReleasesScreen(navController: NavController) {
                         Column(Modifier.clickable { navController.navigate(albumRoute(t.name, t.artists, t.id)) }) {
                             GlideImage(model = t.cover, contentDescription = null, contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(6.dp)))
-                            Text(t.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                            Text(t.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, lineHeight = 16.sp, minLines = 2, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
                             Text(t.detail.ifBlank { t.artists }, color = Color.Gray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -162,7 +162,7 @@ fun EpisodesScreen(navController: NavController) {
                             modifier = Modifier.size(56.dp).clip(RoundedCornerShape(6.dp)))
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
                             Text(e.title, color = Color.White, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(e.singer + " • " + formatMinutes(e.durationMs / 60_000L), color = Subtle, fontSize = 12.sp, maxLines = 1)
+                            Text(e.singer + " • " + formatMinutes(e.durationMs / 60_000L), color = Subtle, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -229,7 +229,7 @@ fun RecapScreen(navController: NavController) {
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
                             Text(r.name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(listOf(r.subtitle, stringResource(R.string.recap_plays, r.count)).filter { it.isNotBlank() }.joinToString(" • "),
-                                color = Subtle, fontSize = 12.sp, maxLines = 1)
+                                color = Subtle, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                     }
                 }

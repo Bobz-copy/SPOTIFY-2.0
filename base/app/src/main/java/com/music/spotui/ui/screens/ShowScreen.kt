@@ -160,7 +160,7 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(ep.singer, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1)
+                    Text(ep.singer, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
         }

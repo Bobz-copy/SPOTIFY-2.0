@@ -211,14 +211,14 @@ fun MiniPlayer(navController: NavHostController) {
                                     append(" • " + (s?.singer ?: songSinger))
                                     pop()
                                 },
-                                fontSize = 13.sp, maxLines = 1, softWrap = false,
+                                fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, softWrap = false,
                                 // Scrolls once per track then rests: an endless marquee in the always-visible
                                 // mini player made the whole app redraw at 120 Hz without pause.
                                 modifier = Modifier.basicMarquee(iterations = 1, initialDelayMillis = 2_000),
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = com.music.spotui.ui.theme.AppAccent, modifier = Modifier.size(14.dp))
-                                Text(remote.name, color = com.music.spotui.ui.theme.AppAccent, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                                Text(remote.name, color = com.music.spotui.ui.theme.AppAccent, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp))
                             }
                         }
                     }

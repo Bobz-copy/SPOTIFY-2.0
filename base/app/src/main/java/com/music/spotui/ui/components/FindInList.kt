@@ -59,7 +59,7 @@ fun FindInListField(query: String, onQuery: (String) -> Unit, hint: String, modi
             modifier = Modifier.weight(1f).padding(8.dp, 10.dp),
             decorationBox = { inner ->
                 Box {
-                    if (query.isEmpty()) Text(hint, color = Color(0xFFB3B3B3), fontSize = 15.sp, maxLines = 1)
+                    if (query.isEmpty()) Text(hint, color = Color(0xFFB3B3B3), fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     inner()
                 }
             },

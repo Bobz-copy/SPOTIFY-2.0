@@ -699,7 +699,7 @@ fun PlayerInfo(
                 color = Color.White,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 softWrap = false,
             )
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {

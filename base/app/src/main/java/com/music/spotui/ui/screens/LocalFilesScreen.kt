@@ -237,7 +237,7 @@ private fun LocalFoldersSheet(onChanged: () -> Unit, onDismiss: () -> Unit) {
                     ) {
                         Column(Modifier.weight(1f)) {
                             val name = folder.trimEnd('/').substringAfterLast('/').ifBlank { folder.ifBlank { "/" } }
-                            Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1)
+                            Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             Text("$folder · ${pluralStringResource(R.plurals.local_files_count, count, count)}", color = Color(0xFF9A9A9A),
                                 fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }

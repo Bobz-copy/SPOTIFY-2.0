@@ -295,7 +295,7 @@ private fun FolderRow(name: String, subtitle: String, onOpen: () -> Unit) {
         }
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1)
+            Text(subtitle, color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color(0xFFB3B3B3))
     }
@@ -327,7 +327,7 @@ private fun SavedInRow(
         ) {
             Text(name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle.isNotBlank()) {
-                Text(subtitle, color = Color.Gray, fontSize = 13.sp, maxLines = 1)
+                Text(subtitle, color = Color.Gray, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
         if (saved) {

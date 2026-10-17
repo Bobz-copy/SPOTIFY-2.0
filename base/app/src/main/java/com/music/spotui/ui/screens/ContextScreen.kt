@@ -402,7 +402,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                 }
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text(p.name, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
+                    com.music.spotui.ui.components.FitText(p.name, fontSize = 26.sp, minSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2)
                     if (p.description.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text(p.description, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)

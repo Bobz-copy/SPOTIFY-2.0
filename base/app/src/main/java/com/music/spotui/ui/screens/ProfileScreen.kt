@@ -97,8 +97,8 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
                     modifier = Modifier.size(150.dp).clip(CircleShape),
                 )
                 Spacer(Modifier.height(14.dp))
-                Text(p?.name ?: userName, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                com.music.spotui.ui.components.FitText(p?.name ?: userName, fontSize = 28.sp, minSize = 18.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 if (p != null) {
                     val parts = listOfNotNull(
                         p.followers?.let { pluralStringResource(R.plurals.profile_followers, it, it) },
@@ -161,7 +161,7 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
                             Text(pl.name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             pl.followers?.let {
                                 Text(pluralStringResource(R.plurals.profile_followers, it.toInt(), it.toInt()),
-                                    color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1)
+                                    color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             }
                         }
                     }

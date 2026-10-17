@@ -136,6 +136,9 @@ private fun CategoryGrid(entries: List<LibraryEntry>, navController: NavControll
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
+                    lineHeight = 16.sp,
+                    // Two lines tall either way: every card of a grid row ends at the same height.
+                    minLines = 2,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 6.dp),

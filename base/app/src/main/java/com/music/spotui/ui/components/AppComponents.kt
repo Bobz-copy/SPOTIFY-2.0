@@ -29,6 +29,7 @@ import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -145,6 +146,18 @@ fun MiniPlayer(navController: NavHostController) {
             // Warm the full player's background colour: it opens already tinted.
             Palette().extractSecondColorFromCoverUrl(context, songCoverUri) { }
         }
+    }
+
+    // The Canvas of the song playing is looked up and loaded now, so the full player
+    // opens on it directly instead of showing the cover first.
+    val energy by app.myspoti.power.EnergySettings.state.collectAsStateWithLifecycle()
+    LaunchedEffect(np.uri, energy.policy.allowCanvas, com.music.spotui.data.DataSaver.active) {
+        val id = np.uri.removePrefix("spotify:track:").takeIf { np.uri.startsWith("spotify:track:") } ?: return@LaunchedEffect
+        if (!energy.policy.allowCanvas || com.music.spotui.data.DataSaver.active) return@LaunchedEffect
+        val url = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { com.music.spotui.di.Graph.api.getCanvasUrl(id) }.getOrNull()
+        } ?: return@LaunchedEffect
+        CanvasPlayer.preload(context, url)
     }
 
     // The thin bar moves ~2 px/s: 4 ticks a second look identical to 20.

@@ -239,13 +239,29 @@ fun PlayerScreen(navController: NavController) {
         )
     }
     val canvas = playerViewModel.canvasState.value
-    val canvasUrl = canvas.url.takeIf {
-        energy.policy.allowCanvas && !com.music.spotui.data.DataSaver.active && displayedTrackId.isNotBlank() && canvas.trackId == displayedTrackId
+    // Read from the cache in this very frame when already looked up (the view model's state
+    // only follows one frame later): the screen then opens on the Canvas, not on the cover.
+    val knownCanvas = remember(displayedTrackId) { com.music.spotui.di.Graph.api.knownCanvas(displayedTrackId)?.getOrNull() }
+    val canvasUrl = (if (canvas.trackId == displayedTrackId) canvas.url else knownCanvas).takeIf {
+        energy.policy.allowCanvas && !com.music.spotui.data.DataSaver.active && displayedTrackId.isNotBlank()
     }
     // The cover stays until the Canvas has drawn its first frame: hiding it earlier showed
     // the bare background for a moment (a flash) between the cover and the clip.
-    var canvasShown by remember(canvasUrl) { mutableStateOf(canvasUrl != null && CanvasPlayer.hasFrame(canvasUrl)) }
-    val coverAlpha by androidx.compose.animation.core.animateFloatAsState(if (canvasUrl != null && canvasShown) 0f else 1f, label = "cover")
+    // Prepared beforehand by the mini player: the clip is shown from the first frame, no cover.
+    var canvasShown by remember(canvasUrl) { mutableStateOf(canvasUrl != null && com.music.spotui.ui.components.CanvasPlayer.isReady(canvasUrl)) }
+    // Cover to Canvas as one cross-fade: the clip (full screen) fades in while the cover fades
+    // out and grows a little into it, instead of the background switching at once.
+    val canvasOn = canvasUrl != null && canvasShown
+    // A clip already loaded shows at once; one still loading fades in over the cover.
+    val readyAtOnce = remember(canvasUrl) { canvasUrl != null && com.music.spotui.ui.components.CanvasPlayer.isReady(canvasUrl) }
+    val canvasProgress = remember { androidx.compose.animation.core.Animatable(if (readyAtOnce) 1f else 0f) }
+    LaunchedEffect(canvasOn, readyAtOnce) {
+        val target = if (canvasOn) 1f else 0f
+        if (canvasOn && readyAtOnce) canvasProgress.snapTo(target)
+        else canvasProgress.animateTo(target, androidx.compose.animation.core.tween(CANVAS_FADE_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
+    val canvasAlpha = canvasProgress.value
+    val coverAlpha = 1f - canvasProgress.value
     // Music video (YouTube, synced to the Spotify playback): looked up for every track
     // shown here, offered once its time map is known, shown in place of the artwork.
     val mv = com.music.spotui.video.MusicVideoController
@@ -296,11 +312,12 @@ fun PlayerScreen(navController: NavController) {
                 url = canvasUrl,
                 onFirstFrame = { canvasShown = true },
                 playing = songPlayingState && !showLyrics && !audioBuffering,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().alpha(canvasAlpha),
             )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .alpha(canvasAlpha)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -392,7 +409,11 @@ fun PlayerScreen(navController: NavController) {
                             .padding(horizontal = 24.dp)
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .alpha(coverAlpha),
+                            .graphicsLayer {
+                                alpha = coverAlpha
+                                val grow = 1f + (1f - coverAlpha) * 0.06f
+                                scaleX = grow; scaleY = grow
+                            },
                         model = cover,
                         contentScale = ContentScale.Crop,
                         contentDescription = "")
@@ -1220,63 +1241,6 @@ fun PlayerMenuRow(
 }
 /**
  * Plays a Spotify Canvas clip: a short, muted, looping video filling the
- * now-playing background. Uses a dedicated ExoPlayer (separate from the audio
- * engine) released when the composable leaves. Falls back to nothing if the URL fails.
- *
- * Loops are served from the media cache: without it every loop re-downloaded the
- * clip, and since ExoPlayer ignores the activity lifecycle it kept doing so in the
- * background (#87, gigabytes per hour). It also pauses while the app is not visible.
- */
-/**
- * One Canvas player for the whole app: closing and reopening the player screen keeps the
- * clip loaded (and its last frame), instead of building a new player that starts from nothing.
- */
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private object CanvasPlayer {
-    private var exo: androidx.media3.exoplayer.ExoPlayer? = null
-    private var url: String? = null
-    private var framed: String? = null
-    private val firstFrame = mutableListOf<() -> Unit>()
-
-    /** [url]'s first frame is already drawn (the clip was on screen before). */
-    fun hasFrame(url: String) = framed == url && exo != null
-
-    fun get(context: android.content.Context, url: String): androidx.media3.exoplayer.ExoPlayer {
-        val player = exo ?: run {
-            val cached = androidx.media3.datasource.cache.CacheDataSource.Factory()
-                .setCache(SongPlayer.mediaCache(context.applicationContext))
-                .setUpstreamDataSourceFactory(androidx.media3.datasource.DefaultHttpDataSource.Factory())
-            androidx.media3.exoplayer.ExoPlayer.Builder(context.applicationContext)
-                .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cached))
-                .build().apply {
-                    repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
-                    volume = 0f
-                    playWhenReady = false
-                    addListener(object : androidx.media3.common.Player.Listener {
-                        override fun onRenderedFirstFrame() {
-                            framed = this@CanvasPlayer.url
-                            firstFrame.toList().forEach { it() }
-                        }
-                    })
-                }.also { exo = it }
-        }
-        if (url != this.url) {
-            this.url = url
-            framed = null
-            player.setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
-            player.prepare()
-        }
-        return player
-    }
-
-    fun onFirstFrame(listener: () -> Unit): () -> Unit {
-        firstFrame += listener
-        return { firstFrame -= listener }
-    }
-}
-
-/**
- * Plays a Spotify Canvas clip: a short, muted, looping video filling the
  * now-playing background, on the shared [CanvasPlayer] (separate from the audio engine),
  * paused when the composable leaves. [onFirstFrame]: the clip is visible.
  *
@@ -1288,7 +1252,7 @@ private object CanvasPlayer {
 @Composable
 private fun CanvasVideo(url: String, playing: Boolean, onFirstFrame: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val exo = remember(url) { CanvasPlayer.get(context, url) }
+    val exo = remember(url) { com.music.spotui.ui.components.CanvasPlayer.get(context, url) }
     val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     val requested by androidx.compose.runtime.rememberUpdatedState(playing)
     val shown by androidx.compose.runtime.rememberUpdatedState(onFirstFrame)
@@ -1300,7 +1264,7 @@ private fun CanvasVideo(url: String, playing: Boolean, onFirstFrame: () -> Unit,
             exo.playWhenReady = requested && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
         }
         lifecycle.addObserver(observer)
-        val removeFrame = CanvasPlayer.onFirstFrame { shown() }
+        val removeFrame = com.music.spotui.ui.components.CanvasPlayer.onFirstFrame { shown() }
         onDispose {
             lifecycle.removeObserver(observer)
             removeFrame()
@@ -1321,6 +1285,9 @@ private fun CanvasVideo(url: String, playing: Boolean, onFirstFrame: () -> Unit,
         },
     )
 }
+
+/** Cover to Canvas cross-fade. */
+private const val CANVAS_FADE_MS = 550
 
 /** Height the player needs under the artwork: top bar, title, seek bar, controls, Connect row. */
 private const val PLAYER_CONTROLS_DP = 450

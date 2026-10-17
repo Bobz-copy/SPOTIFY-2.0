@@ -250,10 +250,16 @@ fun SavedInSheet(
                             if (song.spotifyTrackId.isBlank()) return@SavedInRow
                             membership[pl.id] = !saved
                             // Refused by Spotify: back to the real state, and say so.
+                            // Done or refused: say it, so nobody has to open the playlist to check.
                             val done: (Boolean) -> Unit = { ok ->
-                                if (!ok) android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    membership[pl.id] = saved
-                                    android.widget.Toast.makeText(context, context.getString(R.string.playlist_change_refused), android.widget.Toast.LENGTH_SHORT).show()
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    if (!ok) membership[pl.id] = saved
+                                    val text = when {
+                                        !ok -> context.getString(R.string.playlist_change_refused)
+                                        saved -> context.getString(R.string.removed_from, pl.name)
+                                        else -> context.getString(R.string.local_added_to, pl.name)
+                                    }
+                                    android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
                             if (saved) SpotifySync.removeTrackFromPlaylist(context, pl.id, song.spotifyTrackId, done)
@@ -262,7 +268,15 @@ fun SavedInSheet(
                     }
                 }
             }
-            Spacer(modifier = Modifier.padding(10.dp))
+            // Spotify's own "Done": closes the sheet once the changes are made.
+            Box(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(R.string.done),
+                    color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(SpotifyGreen)
+                        .clickable(onClick = onDismiss).padding(horizontal = 36.dp, vertical = 12.dp),
+                )
+            }
         }
     }
 }

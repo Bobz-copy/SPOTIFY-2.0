@@ -16,7 +16,21 @@ Every change, release by release. The short version is in [CHANGELOG.md](../CHAN
 - **Shuffle-play without a list** queues the shuffled songs (up to 50).
 - **Music videos** are only looked up when the video is on or the player is showing.
 - **Links** open once (not again on rotation) and www./play.spotify.com links work.
-- **API**: "Don't play this artist", public / collaborative playlists, sorted playlist rows (ascending or descending), save episodes — ready for the screens.
+- **Playlist menu** (⋯ on a playlist page): edit details (name, description, cover picked from the phone, square JPEG under 256 KB, or removed), who can see it (public, private, collaborative: the Web Player's base permission), delete with confirmation; on someone else's playlist, their profile.
+- **Profiles**: a Profiles chip in search, a profile page (picture, followers, following, public playlists, Follow / Following), the owner line of a playlist opens it, "View profile" in the account menus.
+- **Song menu**: "Don't play this artist" (Spotify's artist ban) and, for episodes, add to or remove from Your Episodes.
+- **Search**: Spotify's suggestions while typing; clearing recent searches clears Spotify's list too.
+- **Albums**: "More like this" under the tracks.
+- **Your Library**: a ⋯ on each row to pin or unpin, move a playlist or folder into a folder (or back to the top), delete a folder; sorts by Recents and Recently added; items pinned on Spotify stay on top.
+- **Playlist sort**: ascending or descending (pick the chosen sort again), remembered per playlist across restarts (#16).
+- **AMOLED**: song rows, the library and several pages used fixed greys; they follow the theme.
+- **Bottom of lists**: the last rows scroll above the mini player, the tabs and the system navigation bar.
+- **Full-screen music video**: it was never drawn; it now fills the screen in landscape with its controls.
+- **Spotify account page**: kept out from under the status and navigation bars.
+- **"Saved in"**: a message after each add or removal, and a Done button.
+- **Skipping fast**: taps on next in a row become one jump in the queue instead of a burst of commands.
+- **Light-mode phones**: the app stays dark, so an empty or failed page (like Podcasts, #36) no longer shows white.
+- **API**: playlist access (base permission) and cover upload, checked live; "Hide song" is not available in the Web Player (it reports it cannot ban), so it is not offered.
 
 ## 2.0.0
 

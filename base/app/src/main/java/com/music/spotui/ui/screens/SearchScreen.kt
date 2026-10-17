@@ -1,5 +1,6 @@
 package com.music.spotui.ui.screens
 
+import kotlinx.coroutines.launch
 import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
 
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -139,9 +141,23 @@ fun SumUpSearchScreen(
     // One relevance-mixed list (songs, artists, albums interleaved) instead of
     // separate type sections — matches how most music apps present search.
     val mixed = remember(results, filter) { filterSearchResults(results, filter) }
+    // Profiles are searched only when their chip is on (Spotify keeps them out of Top).
+    val profiles by androidx.compose.runtime.produceState(emptyList<app.myspoti.api.MediaCard>(), text, filter) {
+        value = emptyList()
+        if (filter != SearchFilter.Profiles || text.isBlank()) return@produceState
+        kotlinx.coroutines.delay(250)
+        value = runCatching { app.myspoti.host.android.MyspotiRuntime.api.search.users(text.trim(), limit = 30).items }.getOrDefault(emptyList())
+    }
+    val suggestions by androidx.compose.runtime.produceState(emptyList<String>(), text) {
+        value = emptyList()
+        if (text.isBlank()) return@produceState
+        kotlinx.coroutines.delay(300)
+        value = runCatching { app.myspoti.host.android.MyspotiRuntime.api.search.suggestions(text.trim(), 6) }.getOrDefault(emptyList())
+            .filter { !it.equals(text.trim(), ignoreCase = true) }
+    }
 
     LazyColumn(
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 130.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
@@ -187,6 +203,8 @@ fun SumUpSearchScreen(
                             modifier = Modifier.pressable(0.96f) {
                                 com.music.spotui.data.preferences.clearRecentItems(context)
                                 recents = emptyList()
+                                // Spotify's own list too, so other devices forget them as well.
+                                clearSpotifyRecents()
                             },
                         )
                     }
@@ -245,7 +263,37 @@ fun SumUpSearchScreen(
                 }
             }
         } else {
+            // Spotify's completions for what is typed: one tap searches it.
+            if (suggestions.isNotEmpty()) item {
+                androidx.compose.foundation.lazy.LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    items(suggestions.size) { i ->
+                        val q = suggestions[i]
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2A2A2A))
+                                .pressable(0.96f) { text = q; searchViewModel.search(q) }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                        ) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Search, null, tint = Color(0xFFB3B3B3), modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(q, color = Color.White, fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
             item { SearchFilterChips(filter) { filter = it } }
+            if (filter == SearchFilter.Profiles) {
+                items(profiles.size) { i ->
+                    val u = profiles[i]
+                    SearchProfileRow(u.title, u.images.firstOrNull()?.url) {
+                        navController.navigate(com.music.spotui.ui.navigation.profileRoute(u.uri.substringAfterLast(':'), u.title))
+                    }
+                }
+            }
             items(mixed.size) { i ->
                 when (val row = mixed[i]) {
                     is SearchRow.Song -> com.music.spotui.ui.components.SwipeToQueue(row.song) {
@@ -333,6 +381,7 @@ enum class SearchFilter(@androidx.annotation.StringRes val label: Int) {
     Albums(R.string.assisted_curation_search_filter_albums),
     Playlists(R.string.assisted_curation_search_filter_playlists),
     Podcasts(R.string.assisted_curation_search_filter_podcasts),
+    Profiles(R.string.search_filter_profiles),
 }
 
 private fun filterSearchResults(results: SearchResults, filter: SearchFilter): List<SearchRow> = when (filter) {
@@ -341,7 +390,7 @@ private fun filterSearchResults(results: SearchResults, filter: SearchFilter): L
     SearchFilter.Artists -> results.artists.map { SearchRow.Artist(it) }
     SearchFilter.Albums -> results.albums.map { SearchRow.Album(it) }
     SearchFilter.Playlists -> results.playlists.map { SearchRow.Playlist(it) }
-    SearchFilter.Podcasts -> emptyList()
+    SearchFilter.Podcasts, SearchFilter.Profiles -> emptyList()
 }
 
 @Composable
@@ -801,4 +850,32 @@ fun SearchStickyBar(
             }
         )
     }
+}
+
+
+/** A user found by the Profiles chip: round picture, name, "Profile". */
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun SearchProfileRow(name: String, image: String?, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().pressable(0.98f, onClick = onClick).padding(16.dp, 8.dp),
+    ) {
+        com.bumptech.glide.integration.compose.GlideImage(
+            model = image, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            failure = com.bumptech.glide.integration.compose.placeholder(R.drawable.placeholder),
+            modifier = Modifier.size(52.dp).clip(androidx.compose.foundation.shape.CircleShape),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1)
+            Text(stringResource(R.string.recently_played_user_profile), color = Color(0xFFB3B3B3), fontSize = 13.sp)
+        }
+    }
+}
+
+/** Spotify's own recent searches, cleared with the app's list. */
+private fun clearSpotifyRecents() {
+    val runtime = app.myspoti.host.android.MyspotiRuntime
+    runtime.scope.launch { runCatching { runtime.api.search.clearRecent() } }
 }

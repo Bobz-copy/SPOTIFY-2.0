@@ -263,6 +263,20 @@
       return toJson(await svc[a.method](...(a.args || [])));
     },
 
+    // A playlist's cover, as the page's "Edit details" sets it: the JPEG goes to the image
+    // upload service, then its token to the playlist. No jpeg (null): the cover is removed.
+    // {uri, jpeg: base64 | null}
+    'playlist.setCover': async a => {
+      const playlists = need().resolve('PlaylistAPI');
+      let token = null;
+      if (a.jpeg) {
+        const bytes = Uint8Array.from(atob(a.jpeg), c => c.charCodeAt(0));
+        token = await playlists.uploadImage(new Blob([bytes], { type: 'image/jpeg' }));
+      }
+      await playlists.updateDetails(a.uri, { imageUploadToken: token });
+      return true;
+    },
+
     // Any persisted GraphQL operation of the Web Player, sent by the page's own loader
     // (its auth, client token and retries). {name, hash, variables}
     'gql.query': async a => {

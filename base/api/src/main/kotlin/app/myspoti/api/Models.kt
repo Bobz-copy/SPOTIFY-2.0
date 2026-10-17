@@ -60,6 +60,15 @@ data class Playlist(
     val followers: Long? = null,
 )
 
+/**
+ * A playlist's base permission, as the Web Player sets it: anyone may view it (public),
+ * nobody but the owner (private, "BLOCKED"), or anyone may add and remove tracks.
+ */
+enum class PlaylistAccess(val permission: String) {
+    PUBLIC("VIEWER"), PRIVATE("BLOCKED"), COLLABORATIVE("CONTRIBUTOR");
+    companion object { fun of(permission: String?) = entries.firstOrNull { it.permission == permission } ?: PUBLIC }
+}
+
 /** Client-side orders for a playlist's rows. [CUSTOM] is the playlist's own order. */
 enum class PlaylistSort { CUSTOM, TITLE, ARTIST, ALBUM, ADDED_AT, DURATION }
 

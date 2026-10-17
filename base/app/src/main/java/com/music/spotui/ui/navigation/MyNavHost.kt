@@ -227,6 +227,19 @@ fun MyNavHost(
         }
 
         page(
+            "${Routes.Profile.route}/{uId}?name={name}",
+            arguments = listOf(navArgument("name") { defaultValue = "" }),
+        ) { navBackStackEntry ->
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            val uId = navBackStackEntry.arguments?.getString("uId")
+            val name = navBackStackEntry.arguments?.getString("name").orEmpty()
+            uId?.let { com.music.spotui.ui.screens.ProfileScreen(navHostController, userId = it, userName = name) }
+        }
+
+        page(
             "${Routes.Show.route}/{sId}?name={name}",
             arguments = listOf(navArgument("name") { defaultValue = "" }),
         ) { navBackStackEntry ->

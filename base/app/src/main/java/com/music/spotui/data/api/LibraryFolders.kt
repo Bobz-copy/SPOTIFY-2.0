@@ -14,8 +14,12 @@ object LibraryFolders {
     suspend fun rename(uri: String, name: String): Boolean =
         runCatching { MyspotiRuntime.api.library.renameFolder(uri, name.trim()) }.isSuccess.also { if (it) changed() }
 
+    /** Deletes a folder (its playlists go to the level above); false when Spotify refused. */
+    suspend fun delete(uri: String): Boolean =
+        runCatching { MyspotiRuntime.api.library.deleteFolder(uri) }.isSuccess.also { if (it) changed() }
+
     /** The library changed: the next load must come from Spotify, not from the caches. */
-    private fun changed() {
+    fun changed() {
         Api.HomeCache.libraryRoot = null
         Api.HomeCache.folders.clear()
     }

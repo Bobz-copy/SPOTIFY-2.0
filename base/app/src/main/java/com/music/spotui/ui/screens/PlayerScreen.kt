@@ -480,6 +480,30 @@ fun PlayerScreen(navController: NavController) {
                 onClose = { showLyrics = false }
             )
         }
+        // Full-screen clip: the video over everything, turned sideways, with its own controls.
+        if (videoOn && mv.fullscreen.value) VideoFullscreen()
+    }
+}
+
+/** The clip filling the screen, landscape while it shows; back or the exit button leaves. */
+@Composable
+private fun VideoFullscreen() {
+    val activity = LocalContext.current as? android.app.Activity
+    androidx.compose.runtime.DisposableEffect(activity) {
+        val before = activity?.requestedOrientation
+        activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        val window = activity?.window
+        val bars = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, it.decorView) }
+        bars?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            bars?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            activity?.requestedOrientation = before ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        com.music.spotui.ui.components.VideoSurface(fitHeight = true)
+        com.music.spotui.ui.components.VideoFullscreenOverlay()
     }
 }
 

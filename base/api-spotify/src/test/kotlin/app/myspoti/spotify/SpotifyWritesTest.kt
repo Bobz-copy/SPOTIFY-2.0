@@ -88,20 +88,19 @@ class SpotifyWritesTest {
         assertEquals("""["listenlater",["spotify:episode:e"]]""", host.calls[0].args())
     }
 
-    @Test fun `public and collaborative send the flag and check it landed`() = runBridge({ call ->
-        when (call.method()) {
-            "getMetadata" -> Bridge.json.parseToJsonElement("""{"public":true,"collaborative":false,"name":"x"}""")
-            else -> JsonNull
-        }
+    @Test fun `public, private and collaborative set the base permission`() = runBridge({ call ->
+        if (call.method() == "getBasePermission") kotlinx.serialization.json.JsonPrimitive("BLOCKED") else JsonNull
     }) { host, bridge ->
         val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        playlists.setPublic("spotify:playlist:p", false)
+        playlists.setCollaborative("spotify:playlist:p", true)
         playlists.setPublic("spotify:playlist:p", true)
-        playlists.setCollaborative("spotify:playlist:p", false)
-        val updates = host.calls.filter { it.method() == "updateDetails" }.map { it.args() }
+        val sets = host.calls.filter { it.method() == "setBasePermission" }.map { it.args() }
         assertEquals(
-            listOf("""["spotify:playlist:p",{"public":true}]""", """["spotify:playlist:p",{"collaborative":false}]"""),
-            updates,
+            listOf("""["spotify:playlist:p","BLOCKED"]""", """["spotify:playlist:p","CONTRIBUTOR"]""", """["spotify:playlist:p","VIEWER"]"""),
+            sets,
         )
+        assertEquals(app.myspoti.api.PlaylistAccess.PRIVATE, playlists.access("spotify:playlist:p"))
     }
 
     @Test fun `rename still sends the name as a string`() = runBridge({ call ->

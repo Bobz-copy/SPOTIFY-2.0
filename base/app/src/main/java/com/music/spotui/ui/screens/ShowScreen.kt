@@ -78,7 +78,7 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
     }
 
     LazyColumn(
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 130.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
@@ -164,6 +164,5 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                 }
             }
         }
-        item { Spacer(Modifier.height(130.dp)) }
     }
 }

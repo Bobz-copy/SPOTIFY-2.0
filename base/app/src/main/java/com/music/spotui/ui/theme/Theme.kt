@@ -55,17 +55,13 @@ fun SpotuiTheme(
     androidx.compose.runtime.LaunchedEffect(policy.videoMaxHeight, policy.allowBackgroundLookups) {
         com.music.spotui.video.MusicVideoController.onEnergyPolicyChanged()
     }
+    // The app is always dark, like Spotify: a phone in light mode must not turn the
+    // surfaces white (an empty or failed page then showed white text on white).
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicDarkColorScheme(LocalContext.current)
+        else -> DarkColorScheme
     }
-    val visualScheme = colorScheme.copy(background = AppBackground,
-        surface = if (policy.oledBlack) Color.Black else colorScheme.surface)
+    val visualScheme = colorScheme.copy(background = AppBackground, surface = AppBackground)
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {

@@ -1,6 +1,8 @@
 package com.music.spotui.ui.screens
 
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.ui.res.stringResource
 
 import kotlinx.coroutines.flow.first
@@ -151,7 +153,19 @@ class ContextViewModel(
     private var key: String? = null
     private var savedChecked = 0
 
+    private var lastType = ""
+    private var lastId = ""
+
+    /** After an edit (name, cover, description): the page from the server again. */
+    fun reload() {
+        val k = key ?: return
+        recent.remove(k)
+        key = null
+        load(lastType, lastId)
+    }
+
     fun load(type: String, id: String) {
+        lastType = type; lastId = id
         if (key == "$type:$id") return
         key = "$type:$id"
         // A page seen recently is on screen from the first frame (no blank, then pop,
@@ -248,13 +262,13 @@ class ContextViewModel(
         }
     }
 
-    fun play(p: ContextPageModel, song: SongsModel, sort: TrackSort = TrackSort.CUSTOM) {
+    fun play(p: ContextPageModel, song: SongsModel, sort: TrackOrder = TrackOrder()) {
         // No connection (the Web Player cannot stream), or the data saver on mobile data:
         // the page's downloaded songs play from the phone.
         val app = Graph.app
         if (com.music.spotui.data.offline.OfflineStore.isDownloaded(song.spotifyTrackId) &&
             (com.music.spotui.data.DataSaver.active || !com.music.spotui.data.offline.OfflineStore.isOnline(app))) {
-            val local = p.tracks.mapNotNull { com.music.spotui.data.offline.OfflineStore.tracks[it.spotifyTrackId] }.distinctBy { it.trackId }
+            val local = sort.apply(p.tracks).mapNotNull { com.music.spotui.data.offline.OfflineStore.tracks[it.spotifyTrackId] }.distinctBy { it.trackId }
             val at = local.indexOfFirst { it.trackId == song.spotifyTrackId }.coerceAtLeast(0)
             if (local.size < p.tracks.size)
                 android.widget.Toast.makeText(app, app.getString(R.string.offline_only_downloaded, local.size, p.tracks.size), android.widget.Toast.LENGTH_SHORT).show()
@@ -264,7 +278,7 @@ class ContextViewModel(
         state.updateQueue(p.tracks)
         if (p.type == "liked") SongPlayer.registerLikedSongs(p.tracks.map { it.url })
         // Sorted by the user: Spotify plays the list in that order, not the playlist's.
-        val order = if (sort == TrackSort.CUSTOM) null else sort.apply(p.tracks).map { "spotify:track:${it.spotifyTrackId}" }
+        val order = if (sort.isCustom) null else sort.apply(p.tracks).map { "spotify:track:${it.spotifyTrackId}" }
         if (order != null) state.updateQueue(sort.apply(p.tracks))
         SongPlayer.playSong(song.url, contextUri = p.uri, order = order)
         state.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
@@ -312,9 +326,18 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
     // "Find in Liked Songs / in playlist".
     var find by remember { mutableStateOf("") }
-    // "Sort by" for the list (kept per list while the screen lives).
-    var sort by remember(p.uri) { mutableStateOf(TrackSort.CUSTOM) }
+    // "Sort by" for the list, kept per list (also after leaving it or restarting the app).
+    val ctx = LocalContext.current
+    var sort by remember(p.uri) { mutableStateOf(TrackOrder.load(ctx, p.uri)) }
     var askRemoveDownloads by remember { mutableStateOf(false) }
+    var playlistMenu by remember { mutableStateOf(false) }
+    if (playlistMenu) com.music.spotui.ui.components.PlaylistOptionsSheet(
+        page = p,
+        onDismiss = { playlistMenu = false },
+        onChanged = { vm.reload() },
+        onDeleted = { navController.navigateUp() },
+        onProfile = { navController.navigate(com.music.spotui.ui.navigation.profileRoute(it, p.ownerName)) },
+    )
     if (askRemoveDownloads) androidx.compose.material3.AlertDialog(
         onDismissRequest = { askRemoveDownloads = false },
         containerColor = Color(0xFF282828),
@@ -388,6 +411,8 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                             modifier = Modifier.pressable(0.96f) {
                                 if (p.ownerUri.startsWith("spotify:artist:")) {
                                     navController.navigate(artistRoute(p.ownerName.substringBefore(",").trim(), p.ownerUri.substringAfterLast(":")))
+                                } else if (p.ownerUri.startsWith("spotify:user:")) {
+                                    navController.navigate(com.music.spotui.ui.navigation.profileRoute(p.ownerUri.substringAfterLast(":"), p.ownerName))
                                 }
                             },
                         ) {
@@ -454,6 +479,11 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                                 android.widget.Toast.makeText(context, context.getString(R.string.download_notification_downloading), android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
+                    }
+                    if (p.type == "playlist") {
+                        Spacer(Modifier.width(16.dp))
+                        Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(26.dp).pressable(0.9f) { playlistMenu = true })
                     }
                     Spacer(Modifier.weight(1f))
                     val smart = SmartShuffle.on.value == p.uri
@@ -527,7 +557,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                     stringResource(if (p.type == "liked") R.string.find_in_context_edit_text_liked_songs_hint else R.string.find_in_context_edit_text_playlist_hint),
                     Modifier.weight(1f),
                 )
-                TrackSortButton(sort) { sort = it }
+                TrackSortButton(sort) { sort = it; TrackOrder.save(ctx, p.uri, it) }
             }
         }
         if (rows.isEmpty() && find.isNotBlank()) item(key = "find-empty") {
@@ -556,7 +586,9 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                 localItems(additions, p.name) { com.music.spotui.data.local.LocalPlaylists.removeFromSpotify(playlistId, it.key) }
             }
         }
-        item { Spacer(Modifier.height(160.dp)) }
+        // An album: Spotify's "More like this", albums close to its first song.
+        if (p.type == "album") item(key = "similar") { SimilarAlbums(navController, p.tracks.firstOrNull()?.spotifyTrackId.orEmpty(), p.uri) }
+        item { Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace())) }
     }
 }
 
@@ -659,7 +691,7 @@ enum class TrackSort(val label: Int) {
     DURATION(R.string.track_sort_duration),
     ADDED(R.string.track_sort_added);
 
-    fun apply(songs: List<SongsModel>): List<SongsModel> {
+    internal fun natural(songs: List<SongsModel>): List<SongsModel> {
         val text = java.text.Collator.getInstance().apply { strength = java.text.Collator.PRIMARY }
         return when (this) {
             CUSTOM -> songs
@@ -673,23 +705,88 @@ enum class TrackSort(val label: Int) {
     }
 }
 
+/**
+ * A sort and its direction. [reversed] flips the sort's natural order (A to Z, shortest
+ * first, newest first for date added); for [TrackSort.CUSTOM], the playlist from its end.
+ */
+data class TrackOrder(val sort: TrackSort = TrackSort.CUSTOM, val reversed: Boolean = false) {
+    val isCustom get() = sort == TrackSort.CUSTOM && !reversed
+
+    fun apply(songs: List<SongsModel>): List<SongsModel> = sort.natural(songs).let { if (reversed) it.asReversed() else it }
+
+    companion object {
+        private const val PREFS = "track_sort"
+
+        fun load(context: android.content.Context, uri: String): TrackOrder {
+            val v = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(uri, null) ?: return TrackOrder()
+            val sort = TrackSort.entries.firstOrNull { it.name == v.substringBefore(':') } ?: return TrackOrder()
+            return TrackOrder(sort, v.endsWith(":reversed"))
+        }
+
+        fun save(context: android.content.Context, uri: String, order: TrackOrder) {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().apply {
+                if (order == TrackOrder()) remove(uri) else putString(uri, order.sort.name + if (order.reversed) ":reversed" else "")
+            }.apply()
+        }
+    }
+}
+
+/** Spotify's sort menu: picking the sort already chosen flips its direction (the arrow shows it). */
 @Composable
-private fun TrackSortButton(sort: TrackSort, onSort: (TrackSort) -> Unit) {
+private fun TrackSortButton(sort: TrackOrder, onSort: (TrackOrder) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         androidx.compose.material3.IconButton(onClick = { open = true }) {
             Icon(androidx.compose.material.icons.Icons.Default.SwapVert,
                 contentDescription = stringResource(R.string.filter_and_sort_sort_section_title),
-                tint = if (sort == TrackSort.CUSTOM) Color.White else SpotifyGreen)
+                tint = if (sort.isCustom) Color.White else SpotifyGreen)
         }
         androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Color(0xFF282828)) {
             Text(stringResource(R.string.filter_and_sort_sort_section_title), color = Color(0xFFB3B3B3), fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             TrackSort.entries.forEach { option ->
                 androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(stringResource(option.label), color = if (option == sort) SpotifyGreen else Color.White) },
-                    onClick = { open = false; onSort(option) },
+                    text = { Text(stringResource(option.label), color = if (option == sort.sort) SpotifyGreen else Color.White) },
+                    trailingIcon = if (option == sort.sort) { {
+                        Icon(if (sort.reversed) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                            contentDescription = null, tint = SpotifyGreen, modifier = Modifier.size(18.dp))
+                    } } else null,
+                    onClick = { open = false; onSort(if (option == sort.sort) sort.copy(reversed = !sort.reversed) else TrackOrder(option)) },
                 )
+            }
+        }
+    }
+}
+
+
+/** "More like this" under an album: Spotify's similar albums, from its first song. */
+@OptIn(com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi::class)
+@Composable
+private fun SimilarAlbums(navController: NavController, firstTrackId: String, albumUri: String) {
+    val albums by androidx.compose.runtime.produceState(emptyList<app.myspoti.api.Album>(), firstTrackId) {
+        if (firstTrackId.isBlank()) return@produceState
+        value = runCatching { app.myspoti.host.android.MyspotiRuntime.api.catalog.similarAlbums("spotify:track:$firstTrackId", 12) }
+            .getOrDefault(emptyList()).filter { it.uri != albumUri }
+    }
+    if (albums.isEmpty()) return
+    Column(Modifier.padding(top = 24.dp)) {
+        Text(stringResource(R.string.more_like_this), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(albums.size) { i ->
+                val a = albums[i]
+                val artists = a.artists.joinToString(", ") { it.name }
+                Column(Modifier.width(140.dp).pressable(0.96f) {
+                    navController.navigate(com.music.spotui.ui.navigation.albumRoute(a.name, artists, a.uri.substringAfterLast(':')))
+                }) {
+                    GlideImage(model = a.images.maxByOrNull { it.width ?: 0 }?.url, contentDescription = null, contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(140.dp).clip(RoundedCornerShape(4.dp)))
+                    Text(a.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                    Text(artists, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

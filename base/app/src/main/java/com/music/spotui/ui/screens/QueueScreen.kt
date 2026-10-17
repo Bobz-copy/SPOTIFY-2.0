@@ -79,7 +79,7 @@ fun QueueScreen(navController: NavController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(com.music.spotui.ui.theme.AppBackground)
             .statusBarsPadding()
     ) {
         Row(
@@ -188,7 +188,7 @@ private fun QueueRow(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { translationY = dragOffsetY }
-            .background(Color(if (isDragging) 0xFF1E1E24 else 0xFF121212))
+            .background(if (isDragging) Color(0xFF1E1E24) else com.music.spotui.ui.theme.AppBackground)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

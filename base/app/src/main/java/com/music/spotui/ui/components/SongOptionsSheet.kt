@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.Radio
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Speed
 import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -221,6 +222,40 @@ fun SongOptionsSheet(
                 }
                 com.music.spotui.di.Haptics.confirm()
                 onDismiss()
+            }
+            // "Don't play this artist": the track's first artist, kept out of radios and mixes.
+            val artistBan by androidx.compose.runtime.produceState<Pair<String, Boolean>?>(null, trackUri) {
+                if (!hasId) return@produceState
+                val api = app.myspoti.host.android.MyspotiRuntime.api
+                value = runCatching {
+                    val artist = api.catalog.track(trackUri).artists.first().uri
+                    artist to api.extras.isArtistBanned(listOf(artist)).single()
+                }.getOrNull()
+            }
+            MenuRow(Icons.Outlined.Block, stringResource(if (artistBan?.second == true) R.string.artist_unban else R.string.artist_ban),
+                enabled = artistBan != null) {
+                val (artist, banned) = artistBan ?: return@MenuRow
+                app.myspoti.host.android.MyspotiRuntime.scope.launch {
+                    runCatching { app.myspoti.host.android.MyspotiRuntime.api.extras.setArtistBanned(artist, !banned) }
+                }
+                toast(context.getString(if (banned) R.string.artist_unbanned else R.string.artist_banned, song.singer.substringBefore(",").trim()))
+                com.music.spotui.di.Haptics.confirm()
+                onDismiss()
+            }
+            // An episode: in or out of Your Episodes.
+            if (song.url.startsWith("episode:")) {
+                val episodeUri = "spotify:episode:" + song.url.removePrefix("episode:")
+                val saved by androidx.compose.runtime.produceState<Boolean?>(null, episodeUri) {
+                    value = runCatching { app.myspoti.host.android.MyspotiRuntime.api.library.contains(listOf(episodeUri)).single() }.getOrNull()
+                }
+                MenuRow(Icons.Outlined.Bookmark, stringResource(if (saved == true) R.string.episode_unsave else R.string.episode_save), enabled = saved != null) {
+                    val save = saved != true
+                    app.myspoti.host.android.MyspotiRuntime.scope.launch {
+                        runCatching { app.myspoti.host.android.MyspotiRuntime.api.podcasts.setEpisodeSaved(episodeUri, save) }
+                    }
+                    com.music.spotui.di.Haptics.confirm()
+                    onDismiss()
+                }
             }
             if (nowPlaying && song.url.startsWith("episode:")) {
                 MenuRow(Icons.Outlined.Speed, stringResource(R.string.playback_speed)) { showSpeed = true }

@@ -634,11 +634,14 @@ class Api constructor(
             subtitle = context.getString(R.string.create_menu_item_folder_title) + " • " +
                 context.resources.getQuantityString(R.plurals.add_to_playlist_folder_subtitle_playlists_count, item.count ?: 0, (item.count ?: 0).toString()),
             coverUri = "", isPlaylist = false, folderUri = item.uri, childCount = item.count ?: 0,
+            uri = item.uri, pinned = item.pinned, addedAt = item.addedAt.orEmpty(),
         )
         MediaKind.PLAYLIST -> LibraryEntry(item.uri.substringAfterLast(':'), item.name,
-            context.getString(R.string.assisted_curation_search_playlist) + (item.subtitle?.let { " • $it" } ?: ""), cover(item.images), isPlaylist = true)
+            context.getString(R.string.assisted_curation_search_playlist) + (item.subtitle?.let { " • $it" } ?: ""), cover(item.images), isPlaylist = true,
+            uri = item.uri, pinned = item.pinned, addedAt = item.addedAt.orEmpty())
         MediaKind.ALBUM -> LibraryEntry(item.uri.substringAfterLast(':'), item.name,
-            context.getString(R.string.album_type_album) + (item.subtitle?.let { " • $it" } ?: ""), cover(item.images), isPlaylist = false, artists = item.subtitle.orEmpty())
+            context.getString(R.string.album_type_album) + (item.subtitle?.let { " • $it" } ?: ""), cover(item.images), isPlaylist = false, artists = item.subtitle.orEmpty(),
+            uri = item.uri, pinned = item.pinned, addedAt = item.addedAt.orEmpty())
         MediaKind.COLLECTION -> if (item.uri == "spotify:collection:tracks") null
             else LibraryEntry(EPISODES_ID, item.name, "Podcast", cover(item.images), isPlaylist = true)
         else -> null

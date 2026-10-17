@@ -199,7 +199,7 @@ fun DownloadsScreen(navController: NavController) {
                         modifier = Modifier.size(24.dp).pressable(0.96f) { menuSong = OfflineStore.toSong(t) })
                 } }
             }
-            item { Spacer(Modifier.height(140.dp)) }
+            item { Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace())) }
         }
         Box(
             contentAlignment = Alignment.Center,

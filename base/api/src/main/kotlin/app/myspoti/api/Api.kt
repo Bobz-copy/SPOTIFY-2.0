@@ -134,10 +134,15 @@ interface Playlists {
     suspend fun create(name: String, folderUri: Uri? = null): Uri
     suspend fun rename(uri: Uri, name: String)
     suspend fun setDescription(uri: Uri, description: String)
+    /** Who may see or change the playlist (owner only). */
+    suspend fun access(uri: Uri): PlaylistAccess
+    suspend fun setAccess(uri: Uri, access: PlaylistAccess)
     /** Public playlists show on the profile and in search; private ones only to the owner. */
-    suspend fun setPublic(uri: Uri, public: Boolean)
+    suspend fun setPublic(uri: Uri, public: Boolean) = setAccess(uri, if (public) PlaylistAccess.PUBLIC else PlaylistAccess.PRIVATE)
     /** Collaborative playlists let other users add and remove tracks (owner only). */
-    suspend fun setCollaborative(uri: Uri, collaborative: Boolean)
+    suspend fun setCollaborative(uri: Uri, collaborative: Boolean) = setAccess(uri, if (collaborative) PlaylistAccess.COLLABORATIVE else PlaylistAccess.PUBLIC)
+    /** A new cover (JPEG bytes), or null to go back to the generated one. */
+    suspend fun setCover(uri: Uri, jpeg: ByteArray?)
     /** Removes the playlist from the library (owners: deletes it; it can be restored for 90 days). */
     suspend fun delete(uri: Uri)
     suspend fun follow(uri: Uri)

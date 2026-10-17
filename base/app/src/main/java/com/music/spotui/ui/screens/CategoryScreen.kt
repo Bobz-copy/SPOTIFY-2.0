@@ -61,7 +61,7 @@ fun CategoryScreen(navController: NavController, genre: String, title: String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0E0E13))
+            .background(com.music.spotui.ui.theme.AppBackground)
             .statusBarsPadding()
     ) {
         Row(
@@ -108,7 +108,7 @@ private fun CategoryGrid(entries: List<LibraryEntry>, navController: NavControll
     }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 130.dp),
+        contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, com.music.spotui.ui.components.bottomBarsSpace()),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),

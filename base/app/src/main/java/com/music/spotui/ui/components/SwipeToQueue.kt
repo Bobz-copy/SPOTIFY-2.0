@@ -71,7 +71,7 @@ fun SwipeToQueue(song: SongsModel, content: @Composable () -> Unit) {
         Box(
             modifier = Modifier
                 .offset { IntOffset(offset.value.roundToInt(), 0) }
-                .background(Color(0xFF121212))
+                .background(com.music.spotui.ui.theme.AppBackground)
                 .pointerInput(song.id) {
                     detectHorizontalDragGestures(
                         onDragEnd = {

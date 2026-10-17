@@ -160,7 +160,7 @@ private fun ArtistOverviewContent(
     Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
-        contentPadding = PaddingValues(bottom = 130.dp),
+        contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
@@ -681,7 +681,7 @@ fun ArtistReleasesScreen(navController: NavController, artistName: String) {
         }
 
         LazyColumn(
-            contentPadding = PaddingValues(bottom = 130.dp),
+            contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(AppBackground.toArgb()))

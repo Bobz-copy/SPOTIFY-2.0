@@ -14,7 +14,7 @@ import java.text.Collator
  * Files, Downloaded) always stay on top, as in the official app.
  */
 object LibraryOrder {
-    enum class Sort { CUSTOM, ALPHABETICAL, CREATOR }
+    enum class Sort { CUSTOM, RECENTS, RECENTLY_ADDED, ALPHABETICAL, CREATOR }
 
     const val ROOT = "root"
     private const val PREFS = "library_order"
@@ -83,6 +83,10 @@ object LibraryOrder {
                     rest.withIndex().sortedWith(compareBy({ at[key(it.value)] ?: -1 }, { it.index })).map { it.value }
                 }
             }
+            // Spotify's own order: the most recently played first.
+            Sort.RECENTS -> rest
+            // ISO 8601 dates sort as text; folders (no date) go last.
+            Sort.RECENTLY_ADDED -> rest.sortedByDescending { it.addedAt }
             Sort.ALPHABETICAL -> rest.sortedWith { a, b -> collator.compare(a.name, b.name) }
             Sort.CREATOR -> rest.sortedWith(
                 compareBy<LibraryEntry> { !it.isFolder }
@@ -90,6 +94,7 @@ object LibraryOrder {
                     .then { a, b -> collator.compare(a.name, b.name) },
             )
         }
-        return head + sorted
+        // Items pinned on Spotify stay at the top, in the chosen order.
+        return head + sorted.sortedBy { !it.pinned }
     }
 }

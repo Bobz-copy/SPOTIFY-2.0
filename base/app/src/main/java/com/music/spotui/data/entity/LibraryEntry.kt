@@ -17,6 +17,12 @@ data class LibraryEntry(
     val folderUri: String = "",
     /** Playlists and folders inside a folder. */
     val childCount: Int = 0,
+    /** The Spotify uri (playlist, album, folder); empty for the app's own entries. */
+    val uri: String = "",
+    /** Pinned at the top of Your Library. */
+    val pinned: Boolean = false,
+    /** When it was added to the library (ISO 8601), for "Recently added". */
+    val addedAt: String = "",
 ) {
     val isFolder: Boolean get() = folderUri.isNotBlank()
 }

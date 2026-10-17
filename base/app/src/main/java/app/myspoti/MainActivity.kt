@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
 @androidx.compose.runtime.Composable
 private fun ConnectingScreen() {
     androidx.compose.foundation.layout.Box(
-        androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0E0E13)),
+        androidx.compose.ui.Modifier.fillMaxSize().background(com.music.spotui.ui.theme.AppBackground),
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         androidx.compose.material3.CircularProgressIndicator(color = com.music.spotui.ui.theme.AppAccent)

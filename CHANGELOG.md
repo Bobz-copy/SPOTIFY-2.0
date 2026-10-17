@@ -9,6 +9,11 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **Downloaded songs are no longer reported to Spotify**: no more album starting over a downloaded song.
 - **In-app updates**: download and install without leaving the app.
 - **Jam QR scan** no longer crashes; a banner tells when downloads need the SpotiFLAC verification.
+- **Your playlists, edited in the app**: name, description, cover (from your photos), public, private or collaborative, delete.
+- **Profiles**: search people, open a profile (followers, public playlists), follow; a playlist's owner opens theirs.
+- **More from Spotify**: "Don't play this artist", save episodes, search suggestions, "More like this" under albums, library sorted by recents or recently added, pin and move items into folders.
+- **Sort in both directions** (tap the chosen sort again), remembered for each playlist.
+- **Fixes**: AMOLED black everywhere, lists no longer end under the mini player, full-screen music videos show, the Spotify account page stays under the status bar, "Saved in" confirms each change, fast skips no longer jam the player, no white screen on phones in light mode.
 - **Security and reliability fixes** (Android Auto, library pages, logout, links, video lookups).
 
 ## 2.0.0

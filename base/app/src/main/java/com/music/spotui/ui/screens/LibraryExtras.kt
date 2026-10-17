@@ -1,5 +1,9 @@
 package com.music.spotui.ui.screens
 
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.PushPin
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -201,6 +205,7 @@ fun FolderScreen(navController: NavController, uri: String, initialName: String)
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var newPlaylist by remember { mutableStateOf(false) }
+    var deletingFolder by remember { mutableStateOf(false) }
     var generation by remember { mutableStateOf(0) }
     LaunchedEffect(uri, generation) {
         withContext(Dispatchers.IO) {
@@ -211,8 +216,21 @@ fun FolderScreen(navController: NavController, uri: String, initialName: String)
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_playlist_new_playlist_button_text)) { menu = false; newPlaylist = true }
             SheetRow(Icons.Outlined.Edit, stringResource(R.string.context_menu_rename_folder)) { menu = false; renaming = true }
+            SheetRow(Icons.Outlined.Delete, stringResource(R.string.folder_delete)) { menu = false; deletingFolder = true }
         }
     }
+    if (deletingFolder) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { deletingFolder = false },
+        containerColor = SheetColor,
+        text = { Text(stringResource(R.string.folder_delete_confirm, name), color = Color.White) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                deletingFolder = false
+                scope.launch { if (LibraryFolders.delete(uri)) navController.navigateUp() }
+            }) { Text(stringResource(R.string.actions_picker_delete), color = Color(0xFFF15E6C)) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { deletingFolder = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+    )
     // A Spotify playlist created straight inside this folder.
     if (newPlaylist) NameDialog(stringResource(R.string.create_playlist_content_description), context.getString(R.string.my_playlist),
         stringResource(R.string.create_playlist_create_button), onDismiss = { newPlaylist = false }) { playlistName ->
@@ -237,7 +255,7 @@ fun FolderScreen(navController: NavController, uri: String, initialName: String)
             else -> {
                 com.music.spotui.data.local.LibraryOrder.version
                 val arranged = com.music.spotui.data.local.LibraryOrder.run { arrange(list, sort, custom(uri), 0) }
-                SumUpLibraryScreen(PaddingValues(0.dp), arranged, emptyList(), navController, reorderLevel = uri)
+                SumUpLibraryScreen(PaddingValues(0.dp), arranged, emptyList(), navController, reorderLevel = uri, onChanged = { generation++ })
             }
         }
     }
@@ -304,7 +322,7 @@ fun LocalPlaylistScreen(navController: NavController, id: String) {
             navController) { menu = true }
         if (playlist.items.isEmpty()) Text(stringResource(R.string.local_playlist_empty), color = Color(0xFFB3B3B3), fontSize = 14.sp,
             modifier = Modifier.padding(20.dp))
-        else LazyColumn(contentPadding = PaddingValues(bottom = 140.dp), modifier = Modifier.fillMaxSize()) {
+        else LazyColumn(contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()), modifier = Modifier.fillMaxSize()) {
             item {
                 Row(Modifier.fillMaxWidth().padding(16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.weight(1f))
@@ -394,4 +412,58 @@ private fun PickRow(name: String, detail: String, cover: String?, onClick: () ->
             Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1)
         }
     }
+}
+
+
+/**
+ * A library row's ⋯ menu: pin it at the top, move a playlist or folder into another folder
+ * (or back to the top level), delete a folder. [onChanged] reloads the list.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LibraryItemSheet(entry: LibraryEntry, onDismiss: () -> Unit, onChanged: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var moving by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    fun act(block: suspend () -> Unit) = scope.launch {
+        val ok = runCatching { block() }.isSuccess
+        if (ok) { LibraryFolders.changed(); onChanged() }
+        else Toast.makeText(context, context.getString(R.string.playlist_change_refused), Toast.LENGTH_SHORT).show()
+        onDismiss()
+    }
+    val api = app.myspoti.host.android.MyspotiRuntime.api
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+        Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+            Text(entry.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp))
+            if (!moving) {
+                SheetRow(Icons.Outlined.PushPin, stringResource(if (entry.pinned) R.string.library_unpin else R.string.library_pin)) {
+                    act { if (entry.pinned) api.library.unpin(entry.uri) else api.library.pin(entry.uri) }
+                }
+                if (entry.isPlaylist || entry.isFolder) SheetRow(Icons.Outlined.DriveFileMove, stringResource(R.string.library_move_to_folder)) { moving = true }
+                if (entry.isFolder) SheetRow(Icons.Outlined.Delete, stringResource(R.string.folder_delete)) { deleting = true }
+            } else {
+                val folders by androidx.compose.runtime.produceState<List<app.myspoti.api.LibraryItem>?>(null) {
+                    value = runCatching { api.library.items(folderUri = null, limit = 200).items.filter { it.kind == app.myspoti.api.MediaKind.FOLDER && it.uri != entry.uri } }
+                        .getOrDefault(emptyList())
+                }
+                SheetRow(Icons.Outlined.Home, stringResource(R.string.library_top_level)) { act { api.library.moveToFolder(entry.uri, null) } }
+                folders?.forEach { f ->
+                    SheetRow(Icons.Outlined.Folder, f.name) { act { api.library.moveToFolder(entry.uri, f.uri) } }
+                }
+            }
+        }
+    }
+    if (deleting) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { deleting = false },
+        containerColor = SheetColor,
+        text = { Text(stringResource(R.string.folder_delete_confirm, entry.name), color = Color.White) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { deleting = false; act { api.library.deleteFolder(entry.uri) } }) {
+                Text(stringResource(R.string.actions_picker_delete), color = Color(0xFFF15E6C))
+            }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+    )
 }

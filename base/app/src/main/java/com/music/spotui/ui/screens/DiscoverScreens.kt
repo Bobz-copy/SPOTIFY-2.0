@@ -58,7 +58,7 @@ import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.theme.AppAccent
 
-private val Background = Color(0xFF0E0E13)
+private val Background: Color get() = com.music.spotui.ui.theme.AppBackground
 private val Subtle = Color(0xFFB3B3B3)
 
 @Composable
@@ -110,7 +110,7 @@ fun NewReleasesScreen(navController: NavController) {
         ScreenHeader(stringResource(R.string.browse_new_releases), navController)
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(12.dp, 0.dp, 12.dp, 130.dp),
+            contentPadding = PaddingValues(12.dp, 0.dp, 12.dp, com.music.spotui.ui.components.bottomBarsSpace()),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize(),
@@ -149,7 +149,7 @@ fun EpisodesScreen(navController: NavController) {
         when (val list = episodes) {
             null -> Loading()
             else -> if (list.isEmpty()) Text(stringResource(R.string.your_episodes_empty), color = Subtle, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
-            else LazyColumn(contentPadding = PaddingValues(bottom = 130.dp)) {
+            else LazyColumn(contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace())) {
                 items(list, key = { it.url }) { e ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -193,7 +193,7 @@ fun RecapScreen(navController: NavController) {
     val recap = loaded ?: ListenHistory.Recap(0, 0, emptyMap(), emptyList(), emptyList(), emptyList())
     Column(Modifier.fillMaxSize().background(Background).statusBarsPadding()) {
         ScreenHeader(stringResource(R.string.recap_title), navController)
-        LazyColumn(contentPadding = PaddingValues(bottom = 130.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace())) {
             item {
                 Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     periods.forEachIndexed { i, (label, _) ->

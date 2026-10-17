@@ -182,7 +182,7 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel, facet: St
     }
 
     LazyColumn(
-        contentPadding = PaddingValues(bottom = 130.dp),
+        contentPadding = PaddingValues(bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
@@ -416,7 +416,11 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
             modifier = Modifier.fillMaxWidth().then(Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars))
                 .verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(bottom = 16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+            // Name and picture open your public profile, as in Spotify.
+            val myId = com.music.spotui.data.api.ProfileCache.id
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
+                .clickable(enabled = myId != null) { myId?.let { onOpen(com.music.spotui.ui.navigation.profileRoute(it, name)) } }
+                .padding(horizontal = 20.dp, vertical = 8.dp)) {
                 if (avatar != null) GlideImage(
                     model = avatar, contentDescription = null, contentScale = ContentScale.Crop,
                     modifier = Modifier.size(48.dp).clip(CircleShape),
@@ -426,6 +430,8 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
                 if (com.music.spotui.data.api.SupportReminder.level != com.music.spotui.data.api.SupportReminder.Level.NONE)
                     com.music.spotui.ui.components.SupporterBadge(Modifier.padding(start = 10.dp))
             }
+            if (myId != null) Text(stringResource(R.string.view_profile), color = Color(0xFFB3B3B3), fontSize = 13.sp,
+                modifier = Modifier.padding(start = 82.dp, bottom = 4.dp))
             androidx.compose.material3.HorizontalDivider(color = Color(0xFF3E3E3E), modifier = Modifier.padding(vertical = 8.dp))
             // Sound quality, downloads, data, battery, display: one page.
             androidx.compose.foundation.layout.Column(

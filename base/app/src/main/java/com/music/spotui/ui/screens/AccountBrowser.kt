@@ -41,7 +41,16 @@ class AccountBrowser : ComponentActivity() {
         lifecycleScope.launch {
             web.loadUrl(withContext(Dispatchers.IO) { runCatching { localized(url, language) }.getOrNull() } ?: url)
         }
-        setContentView(web)
+        // Android draws apps edge to edge: the page sits in a frame kept out from under the
+        // status and navigation bars (a WebView's own padding does not move its content).
+        val frame = android.widget.FrameLayout(this).apply { setBackgroundColor(android.graphics.Color.BLACK); addView(web) }
+        setContentView(frame)
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(frame) { v, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { if (web.canGoBack()) web.goBack() else finish() }
         })

@@ -1,5 +1,7 @@
 package com.music.spotui.ui.screens
 
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PushPin
 import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
 
@@ -311,7 +313,8 @@ fun LibraryScreen(navController: NavController) {
                 if (gridView) LibraryGridScreen(PaddingValues(0.dp), filteredEntries, filteredArtists, navController,
                     reorderLevel = if (searchQuery.isBlank()) LibraryOrder.ROOT else null, pinned = rootPinned)
                 else SumUpLibraryScreen(PaddingValues(0.dp), filteredEntries, filteredArtists, navController,
-                    reorderLevel = if (searchQuery.isBlank()) LibraryOrder.ROOT else null, pinned = rootPinned)
+                    reorderLevel = if (searchQuery.isBlank()) LibraryOrder.ROOT else null, pinned = rootPinned,
+                    onChanged = { libraryViewModel.load() })
                 if (entries !is Response.Success) Box(modifier = Modifier.padding(20.dp, 100.dp)) { Snackbar(showMessage = stringResource(R.string.library_error)) }
             }
         }
@@ -340,7 +343,11 @@ fun SumUpLibraryScreen(
     reorderLevel: String? = null,
     /** Entries at the top that never move (Liked Songs, Local Files, Downloaded). */
     pinned: Int = 0,
+    /** A pin, move or delete changed the library: load it again. */
+    onChanged: () -> Unit = {},
 ) {
+    var itemMenu by remember { mutableStateOf<LibraryEntry?>(null) }
+    itemMenu?.let { LibraryItemSheet(it, onDismiss = { itemMenu = null }, onChanged = onChanged) }
     if (entries.isEmpty() && followedArtists.isEmpty()) {
         Box(modifier = Modifier.padding(20.dp, 40.dp)) { Snackbar(showMessage = stringResource(R.string.library_empty)) }
         return
@@ -410,11 +417,11 @@ fun SumUpLibraryScreen(
 
     LazyColumn(
         state = listState,
-        contentPadding = PaddingValues(top = 10.dp, bottom = 130.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
-            .background(Color(0xFF0E0E13))
+            .background(com.music.spotui.ui.theme.AppBackground)
     ) {
         itemsIndexed(rows, key = { _, e -> LibraryOrder.key(e) }) { index, entry ->
             val key = LibraryOrder.key(entry)
@@ -457,10 +464,16 @@ fun SumUpLibraryScreen(
                     .size(55.dp)
                     .clip(RoundedCornerShape(if (entry.isPlaylist) 6.dp else 4.dp)),
                 )
-                Column(modifier = Modifier.padding(start = 12.dp)) {
+                Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
                     Text(text = entry.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(text = entry.subtitle, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (entry.pinned) Icon(Icons.Default.PushPin, null, tint = com.music.spotui.ui.theme.AppAccent,
+                            modifier = Modifier.padding(end = 4.dp).size(12.dp))
+                        Text(text = entry.subtitle, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
+                if (entry.uri.isNotBlank()) Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu),
+                    tint = Color(0xFFB3B3B3), modifier = Modifier.size(36.dp).clip(CircleShape).clickable { itemMenu = entry }.padding(6.dp))
             }
         }
         // ── Artists the user follows on Spotify ──
@@ -629,8 +642,8 @@ fun LibraryGridScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
-            .background(Color(0xFF0E0E13)),
-        contentPadding = PaddingValues(16.dp, 10.dp, 16.dp, 130.dp),
+            .background(com.music.spotui.ui.theme.AppBackground),
+        contentPadding = PaddingValues(16.dp, 10.dp, 16.dp, com.music.spotui.ui.components.bottomBarsSpace()),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
@@ -714,7 +727,7 @@ private fun LibrarySkeleton(padding: PaddingValues) {
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
-            .background(Color(0xFF0E0E13))
+            .background(com.music.spotui.ui.theme.AppBackground)
     ) {
         Spacer(modifier = Modifier.height(10.dp))
         repeat(8) {
@@ -772,6 +785,12 @@ private fun AccountSheet(
 
             // Spotify's own account pages (plan, privacy, devices), signed in, in the app.
             val context = androidx.compose.ui.platform.LocalContext.current
+            com.music.spotui.data.api.ProfileCache.id?.let { myId ->
+                AccountRow(stringResource(R.string.view_profile)) {
+                    onDismiss()
+                    navController.navigate(com.music.spotui.ui.navigation.profileRoute(myId, account.name))
+                }
+            }
             AccountRow(stringResource(R.string.settings_title)) {
                 onDismiss()
                 navController.navigate(com.music.spotui.ui.navigation.Routes.Settings.route)
@@ -801,6 +820,8 @@ private fun AccountRow(label: String, tint: Color = Color.White, onClick: () -> 
 
 private fun sortLabel(sort: LibraryOrder.Sort) = when (sort) {
     LibraryOrder.Sort.CUSTOM -> R.string.your_library_sort_order_custom
+    LibraryOrder.Sort.RECENTS -> R.string.library_sort_recents
+    LibraryOrder.Sort.RECENTLY_ADDED -> R.string.library_sort_recently_added
     LibraryOrder.Sort.ALPHABETICAL -> R.string.your_library_sort_order_alphabetical
     LibraryOrder.Sort.CREATOR -> R.string.your_library_sort_order_creator
 }

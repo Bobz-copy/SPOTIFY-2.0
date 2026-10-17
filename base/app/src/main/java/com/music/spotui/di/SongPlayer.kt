@@ -29,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
 object SongPlayer {
     private const val SPOTIFY_TRACK_PREFIX = "spotify:track:"
     private const val PENDING_MS = 6000L
+    /** "Next" taps closer than this are sent as one jump. */
+    private const val SKIP_BURST_MS = 350L
     /** After a local file starts, engine states this recent still predate the pause. */
     private const val LOCAL_GRACE_MS = 2500L
     private const val TAG = "MspPlayer"
@@ -465,7 +467,26 @@ object SongPlayer {
     }
 
     fun stop() = pause()
-    fun next() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.next(); return }; intendPlaying(); command { api.player.next() } }
+    fun next() {
+        Haptics.click()
+        if (LocalPlayer.active.value) { LocalPlayer.next(); return }
+        intendPlaying()
+        // Taps in a row become one jump: a burst of "next" commands left the Web Player
+        // out of step (state conflicts, then a player stuck until reloaded).
+        pendingSkips++
+        main.removeCallbacks(sendSkips)
+        main.postDelayed(sendSkips, SKIP_BURST_MS)
+    }
+
+    private var pendingSkips = 0
+    private val sendSkips = Runnable {
+        val n = pendingSkips
+        pendingSkips = 0
+        if (n <= 0) return@Runnable
+        val upcoming = apiQueue?.let { it.queued + it.nextUp }.orEmpty()
+        val target = upcoming.getOrNull(n - 1)
+        command { if (n == 1 || target == null) api.player.next() else api.player.skipTo(target) }
+    }
     fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); command { api.player.previous() } }
 
     /** Tracks shufflePlay plays without a context: the first one, plus up to 49 queued. */

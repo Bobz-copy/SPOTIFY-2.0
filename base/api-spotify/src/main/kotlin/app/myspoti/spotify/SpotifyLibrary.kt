@@ -8,6 +8,7 @@ import app.myspoti.api.LibrarySort
 import app.myspoti.api.MediaKind
 import app.myspoti.api.Page
 import app.myspoti.api.Playlist
+import app.myspoti.api.PlaylistAccess
 import app.myspoti.api.PlaylistSort
 import app.myspoti.api.Playlists
 import app.myspoti.api.SavedTrack
@@ -213,9 +214,17 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
 
     override suspend fun setDescription(uri: Uri, description: String) = updateDetails(uri, "description", JsonPrimitive(description))
 
-    override suspend fun setPublic(uri: Uri, public: Boolean) = updateDetails(uri, "public", JsonPrimitive(public))
+    /** The base permission the page's "Make private" and "Invite collaborators" set. */
+    override suspend fun access(uri: Uri): PlaylistAccess =
+        PlaylistAccess.of((bridge.service("PlaylistPermissionsAPI", "getBasePermission", JsonPrimitive(uri)) as? JsonPrimitive)?.content)
 
-    override suspend fun setCollaborative(uri: Uri, collaborative: Boolean) = updateDetails(uri, "collaborative", JsonPrimitive(collaborative))
+    override suspend fun setAccess(uri: Uri, access: PlaylistAccess) {
+        bridge.service("PlaylistPermissionsAPI", "setBasePermission", JsonPrimitive(uri), JsonPrimitive(access.permission))
+    }
+
+    override suspend fun setCover(uri: Uri, jpeg: ByteArray?) {
+        bridge.call("playlist.setCover", json(mapOf("uri" to uri, "jpeg" to jpeg?.let { java.util.Base64.getEncoder().encodeToString(it) })) as kotlinx.serialization.json.JsonObject, timeoutMs = 60_000)
+    }
 
     /** Two updates sent back to back can lose the second one: check it landed, and resend once. */
     private suspend fun updateDetails(uri: Uri, field: String, value: JsonElement) {

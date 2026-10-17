@@ -31,7 +31,12 @@ sealed class Routes(
     object Recap : Routes(0, "Recap", "recap")
     object Spotiflac : Routes(0, "SpotiFLAC", "spotiflac")
     object Settings : Routes(0, "Settings", "settings")
+    object Profile : Routes(0, "Profile", "profile")
 }
+
+/** A Spotify user's profile, by user id (the part after spotify:user:). */
+fun profileRoute(userId: String, name: String = ""): String =
+    "${Routes.Profile.route}/${android.net.Uri.encode(userId)}?name=${android.net.Uri.encode(name)}"
 
 /** Builds a Browse-category route carrying the search genre and a display title. */
 fun categoryRoute(genre: String, title: String): String =

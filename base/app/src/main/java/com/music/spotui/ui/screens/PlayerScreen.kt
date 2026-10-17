@@ -354,7 +354,10 @@ fun PlayerScreen(navController: NavController) {
         ) {
         val wide = maxWidth > 600.dp && maxWidth > maxHeight
         val contentWidth = if (wide) maxWidth.coerceAtMost(520.dp) else maxWidth
-        val artSide = minOf(contentWidth, maxHeight - PLAYER_CONTROLS_DP.dp).coerceAtLeast(160.dp)
+        // Height budget from the screen, as before (the list item is shorter than the screen and
+        // gave a smaller cover); the width cap only matters on wide windows.
+        val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+        val artSide = minOf(contentWidth, screenHeight - PLAYER_CONTROLS_DP.dp).coerceAtLeast(160.dp)
         Column(
             modifier = Modifier
                 .fillMaxHeight()

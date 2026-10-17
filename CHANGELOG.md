@@ -5,6 +5,8 @@ Each release on GitHub shows its section below. The app shows it too when it off
 ## Unreleased
 
 - **Myspoti's icon in the notification** and in Samsung's Now Bar, instead of a generic music note.
+- **Ads that get through are silent**: they are muted on the page itself, no longer through a Spotify Connect volume command that some accounts refuse (the ad was heard).
+- **Cover back to its full size** in the player.
 - **Music no longer stops for a minute**: a Web Player page that stops answering is reloaded at once, and playback goes on.
 - **No more silent songs**: the sound comes back by itself if a skip or a muted ad left it at zero; after a skip it comes back as soon as the next song is there.
 - **Smart shuffle** goes on from where the song is (no restart), adds songs to every playlist, and has its own icon in the player.

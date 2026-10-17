@@ -111,6 +111,16 @@ internal class ControlRelay(private val view: WebView) {
             (() => {
               if (window.__mspNetInstalled || !window.MyspotiNet) return;
               window.__mspNetInstalled = true;
+              // The player's media elements, often never added to the document: the bridge
+              // mutes them during an ad ("media.mute"); one started while muted starts muted.
+              const media = new Set();
+              window.__mspMedia = media;
+              const play = HTMLMediaElement.prototype.play;
+              HTMLMediaElement.prototype.play = function () {
+                media.add(this);
+                if (window.__mspMuted) this.muted = true;
+                return play.apply(this, arguments);
+              };
               const relayed = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.spotify\.com\/(connect-state|track-playback)\/v1\//;
               const pending = new Map();
               let seq = 0;

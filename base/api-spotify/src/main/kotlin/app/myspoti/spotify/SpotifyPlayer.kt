@@ -50,8 +50,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     val adPlaying: StateFlow<Boolean> = _adPlaying
     @Volatile private var adSince = 0L
     @Volatile private var adState: PlayerState? = null
-    /** The page's volume before an ad muted it, put back when the ad is over. */
-    @Volatile private var volumeBeforeAd: Double? = null
+    /**
+     * An ad is muted. The page's own media element is muted, not the player's volume: the
+     * volume goes through Spotify Connect, which refuses it on some accounts
+     * (DEVICE_DOES_NOT_SUPPORT_COMMAND) and leaves the ad audible.
+     */
+    @Volatile private var adMuted = false
     /** A pause asked through [pause]; it holds until playback is asked for again, never expires. */
     @Volatile private var pausedByUser = false
     /** The order given to the last [play] (context uri to songs), kept for a stall restart. */
@@ -95,7 +99,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 if (!it) return@collect
                 if (audioQuality != "auto") applyAudioQuality()
                 // The page keeps its volume: an app closed during a muted ad must not stay silent.
-                runCatching { if (volume() == 0.0) setVolume(volumeBeforeAd ?: 1.0) }
+                runCatching { if (volume() == 0.0) setVolume(wantedVolume?.takeIf { v -> v > 0.0 } ?: 1.0) }
+                // A reloaded page during an ad break plays the ad again: muted again at once.
+                if (_adPlaying.value) muteForAd()
             }
         }
     }
@@ -188,12 +194,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     private suspend fun guardVolume(s: PlayerState?) {
         if (s == null || s.isPaused || s.isBuffering || _adPlaying.value || fadeBackTo != null || fadeBack?.isActive == true) return
+        // The unmute after an ad was lost (page busy): the song would play silent.
+        if (adMuted) unmuteAfterAd()
         val wanted = wantedVolume ?: 1.0
         if (wanted <= 0.0) return
         val v = runCatching { volume() }.getOrNull() ?: return
-        if (v > 0.0) { if (volumeBeforeAd != null) volumeBeforeAd = null; return }
+        if (v > 0.0) return
         bridge.logger?.invoke("page silent during a song: volume back to $wanted")
-        volumeBeforeAd = null
         runCatching { setLevel(wanted) }
     }
 
@@ -250,7 +257,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     private suspend fun withFade(block: suspend () -> Unit) {
         val s = _state.value
         // Nothing heard (paused, an ad muted): nothing to fade.
-        if (s == null || s.isPaused || _adPlaying.value || volumeBeforeAd != null) { block(); return }
+        if (s == null || s.isPaused || _adPlaying.value || adMuted) { block(); return }
         val target = fadeBackTo ?: runCatching { volume() }.getOrNull()?.takeIf { it > 0.0 }?.also { wantedVolume = it } ?: run { block(); return }
         val from = s.item?.uri
         fadeBackTo = target
@@ -267,7 +274,6 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 withTimeoutOrNull(FADE_BACK_MAX_MS) {
                     _state.first { it != null && !it.isPaused && (it.item?.uri != from || it.positionMs < 1_500) }
                 }
-                if (_adPlaying.value) { if (volumeBeforeAd == null) volumeBeforeAd = target; fadeBackTo = null; return@launch }
                 val back = fadeBackTo ?: target
                 runCatching { for (f in FADE_STEPS.reversed().drop(1)) { setLevel(back * f); delay(FADE_STEP_MS) }; setLevel(back) }
                     .onFailure { runCatching { setLevel(back) } }
@@ -277,14 +283,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     private suspend fun muteForAd() = runCatching {
-        if (volumeBeforeAd == null) volumeBeforeAd = fadeBackTo ?: volume().takeIf { it > 0.0 } ?: wantedVolume?.takeIf { it > 0.0 } ?: 1.0
-        bridge.call("volume.set", buildJsonObject { put("level", 0.0) })
+        adMuted = true
+        val muted = bridge.call("media.mute", buildJsonObject { put("on", true) })
+        bridge.logger?.invoke("ad muted ($muted media elements)")
     }
 
     private suspend fun unmuteAfterAd() = runCatching {
-        val v = volumeBeforeAd ?: return@runCatching
-        bridge.call("volume.set", buildJsonObject { put("level", v) })
-        volumeBeforeAd = null
+        if (!adMuted) return@runCatching
+        bridge.call("media.mute", buildJsonObject { put("on", false) })
+        adMuted = false
     }
 
     override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?, order: List<Uri>?) {

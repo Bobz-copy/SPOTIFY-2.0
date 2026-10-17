@@ -171,6 +171,32 @@
     return out;
   };
 
+  // The page player's own media elements: kept inside its objects, never in the document.
+  const playerMedia = async () => {
+    const found = new Set();
+    const sdk = need().resolve('PlayerSDK');
+    const harmony = sdk && sdk.harmony;
+    const streamer = harmony && harmony._streamer;
+    const roots = [harmony];
+    if (streamer && streamer._playerPromise) roots.push(await streamer._playerPromise);
+    const seen = new WeakSet();
+    const walk = (o, depth) => {
+      if (!o || typeof o !== 'object' || seen.has(o) || depth > 6) return;
+      seen.add(o);
+      if (o instanceof HTMLMediaElement) { found.add(o); return; }
+      if (o instanceof Node || o instanceof Window) return;
+      let keys = [];
+      try { keys = Object.keys(o); } catch (e) { return; }
+      for (const k of keys.slice(0, 80)) {
+        let v;
+        try { v = o[k]; } catch (e) { continue; }
+        walk(v, depth + 1);
+      }
+    };
+    roots.forEach(r => walk(r, 0));
+    return [...found];
+  };
+
   // --- commands -------------------------------------------------------------
 
   const need = () => {
@@ -239,6 +265,16 @@
     'queue.insert': a => need().player.insertIntoQueue(a.uris.map(uri => ({ uri })), { before: a.before }),
     // {items: [{uri, uid}], before | after: {uri, uid}}
     'queue.reorder': a => need().player.reorderQueue(a.items, a.after ? { after: a.after } : { before: a.before }),
+
+    // Mutes the page's own media elements (ads), whatever Spotify Connect says about the
+    // volume. Elements are known from the host's document-start hook (window.__mspMedia),
+    // or found in the document. {on} -> how many elements were set.
+    'media.mute': async a => {
+      window.__mspMuted = !!a.on;
+      const els = new Set([...(window.__mspMedia || []), ...document.querySelectorAll('audio, video'), ...await playerMedia()]);
+      for (const el of els) el.muted = !!a.on;
+      return els.size;
+    },
 
     'volume.get': () => need().playback.getVolume(),
     'volume.set': a => need().playback.setVolume(a.level),

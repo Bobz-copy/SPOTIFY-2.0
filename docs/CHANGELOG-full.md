@@ -5,11 +5,13 @@ Every change, release by release. The short version is in [CHANGELOG.md](../CHAN
 ## 2.0.0-beta.6
 
 - **Ads in other countries**: Google's ad servers (audio and video ads), the ad event tracker and Spotify's ad endpoints (`/ads/`, `/ad-logic/` on spclient) are refused. An ad that plays anyway is muted at once and skipped after 1.5 s; if the page holds on to it after one reload, it stays muted until it ends. The volume comes back after the ad, and after a restart if the app was closed during one.
+- **Ads, continued**: an ad is recognised by its metadata too (`is_advertisement`, `ad_id`, advertiser), not only by a `spotify:ad:` uri. Home promotion shelves and sponsored cards are dropped. Sponsored recommendations and the page's ad/audience trackers (Google Tag Manager, Google Analytics, Scorecard Research, Fastly Insights) are blocked.
+- **Artist discography**: the Releases page filtered on lowercase kinds while Spotify sends "ALBUM", "SINGLE"…, so it stayed empty; it also opens by artist id now, and kinds are shown translated.
 - **Pause**: a pause you ask for no longer expires; the stall watchdog never restarts playback after it, even when paused in the last seconds of a song.
 - **Download index**: an index that cannot be read fully is never used to delete files. The last good copy (`index.json.bak`) is used, the damaged one is kept aside (`index.corrupt-*.json`), and no file is deleted.
 - **Spotify writes**: a write (add to playlist, follow…) is never sent twice when its answer is lost; a GraphQL error on a write is a failure, not a success. Likes, library saves and playlist visibility go one at a time and come back to the real state when Spotify refuses, with a message.
 - **Search**: query and chip kept when coming back from a result; loading, no results and failure are shown apart, with Try again. Artist and profile pages show an error with Try again instead of an empty page.
-- **Player**: a lyrics button next to share (lyrics were only reachable by scrolling); share sends the episode link for episodes; play, pause, next, previous, shuffle, close and devices have names for TalkBack.
+- **Player**: share sends the episode link for episodes; play, pause, next, previous, shuffle, close and devices have names for TalkBack.
 - **Jam**: "Join with a copied link"; a phone without the QR scanner gets a message instead of nothing.
 - **Logout** stops local playback, the music video and the notification, pauses Spotify and drops the cached pages.
 - **Data saver**: on mobile data with the saver on, the Spotify page is not loaded at launch.

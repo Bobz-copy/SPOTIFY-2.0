@@ -87,7 +87,11 @@
   };
 
   // Ads come in the same queue as tracks, with `type: "ad"` and a title instead of a name.
-  const kind = item => item.type === 'ad' || /^spotify:ad:/.test(item.uri) ? 'ad'
+  // Some markets give them a track-like uri: the metadata still flags them.
+  const isAd = item => item.type === 'ad' || /^spotify:ad:/.test(item.uri || '') ||
+    item.provider === 'ad' || !!item.advertiser ||
+    (item.metadata && (item.metadata.is_advertisement === 'true' || item.metadata.is_advertisement === true || !!item.metadata.ad_id));
+  const kind = item => isAd(item) ? 'ad'
     : /^spotify:episode:/.test(item.uri) ? 'episode' : 'track';
 
   const track = item => item && {

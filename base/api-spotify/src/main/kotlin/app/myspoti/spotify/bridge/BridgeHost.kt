@@ -51,6 +51,13 @@ object AdBlock {
         "googleads.g.doubleclick.net",
         "pagead2.googlesyndication.com",
         "imasdk.googleapis.com",
+        // Sponsored playlists and recommendations.
+        "sponsored-recommendations.spotify.com",
+        // Ad and audience trackers the page loads (nothing it needs to play).
+        "googletagmanager.com",
+        "google-analytics.com",
+        "scorecardresearch.com",
+        "fastly-insights.com",
     )
 
     /** Ad endpoints on Spotify's api hosts (spclient): ad slots, ad logic and ad delivery. */

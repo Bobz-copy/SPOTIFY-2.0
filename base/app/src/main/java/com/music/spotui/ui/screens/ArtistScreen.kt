@@ -388,7 +388,7 @@ private fun ArtistOverviewContent(
             if (overview.popularReleases.size > 4) {
                 item {
                     ShowAllButton {
-                        navController.navigate("${Routes.ArtistReleases.route}/$artistName")
+                        navController.navigate("${Routes.ArtistReleases.route}/${android.net.Uri.encode(artistName)}?id=${android.net.Uri.encode(overview.id)}")
                     }
                 }
             }
@@ -629,7 +629,11 @@ private fun ReleaseRow(album: AlbumsModel, onClick: () -> Unit) {
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(text = album.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            val kind = album.type.replaceFirstChar { it.uppercase() }.ifBlank { "" }
+            val kind = when (album.type.uppercase()) {
+                "SINGLE" -> stringResource(R.string.album_type_single); "EP" -> stringResource(R.string.album_type_ep)
+                "COMPILATION" -> stringResource(R.string.album_type_compilation); "" -> ""
+                else -> stringResource(R.string.album_type_album)
+            }
             val year = releaseYear(album)
             Text(
                 text = listOf(year, kind).filter { it.isNotBlank() }.joinToString(" • "),
@@ -660,11 +664,11 @@ private fun releaseYear(album: AlbumsModel): String = album.time.take(4)
 
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
-fun ArtistReleasesScreen(navController: NavController, artistName: String) {
+fun ArtistReleasesScreen(navController: NavController, artistName: String, artistId: String = "") {
     val artistViewModel: ArtistViewModel = viewModel()
     val overview by artistViewModel.overview.collectAsState()
 
-    LaunchedEffect(artistName) { artistViewModel.loadArtistOverview(artistName) }
+    LaunchedEffect(artistName, artistId) { artistViewModel.loadArtistOverview(artistName, artistId) }
 
     Surface(
         modifier = Modifier
@@ -676,9 +680,10 @@ fun ArtistReleasesScreen(navController: NavController, artistName: String) {
         val featuredOn = data?.appearsOn ?: emptyList()
         // Spotify's Releases view: filter chips + a "Latest release" spotlight,
         // then releases grouped by kind, newest first.
-        val albums = releases.filter { it.type == "album" || it.type == "compilation" }
-        val singles = releases.filter { it.type == "single" || it.type == "ep" }
-        val untyped = releases.filter { it.type.isBlank() }
+        // Spotify names the kinds in capitals ("ALBUM", "SINGLE"…): compared without case.
+        val albums = releases.filter { it.type.lowercase() == "album" || it.type.lowercase() == "compilation" }
+        val singles = releases.filter { it.type.lowercase() == "single" || it.type.lowercase() == "ep" }
+        val untyped = releases.filter { it.type.lowercase() !in setOf("album", "compilation", "single", "ep") }
         val latest = releases.maxByOrNull { it.time }
         var filter by remember { mutableStateOf("") } // "" | "albums" | "singles" | "featured"
 

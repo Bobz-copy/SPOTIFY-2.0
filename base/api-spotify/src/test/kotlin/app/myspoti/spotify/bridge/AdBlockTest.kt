@@ -26,6 +26,18 @@ class AdBlockTest {
     }
 
     @Test
+    fun `promotion shelves and sponsored cards are told apart`() {
+        assertTrue(app.myspoti.spotify.isPromotion("HomePromotionSectionData"))
+        assertTrue(app.myspoti.spotify.isPromotion("HomePromotionShelf"))
+        assertTrue(app.myspoti.spotify.isPromotion("SponsoredPlaylist"))
+        assertTrue(app.myspoti.spotify.isPromotion("EmbeddedAdVisual"))
+        assertFalse(app.myspoti.spotify.isPromotion("HomeGenericSectionData"))
+        assertFalse(app.myspoti.spotify.isPromotion("PlaylistResponseWrapper"))
+        assertFalse(app.myspoti.spotify.isPromotion("AlbumResponseWrapper"))
+        assertFalse(app.myspoti.spotify.isPromotion("Audiobook"))
+    }
+
+    @Test
     fun `base62 ids convert to metadata gids`() {
         // Pair checked against a captured metadata/4 request.
         assertTrue(app.myspoti.spotify.base62ToHex("55vPnuXfuzXNW75JpuSczF") == "a734c1d4e4d84c4093c32d5bce9797a3")

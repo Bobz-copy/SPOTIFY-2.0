@@ -54,8 +54,15 @@ import java.util.TimeZone
 
 private fun idOf(uri: Uri) = uri.substringAfterLast(':')
 
+/** Promotions and ads (HomePromotionShelf, sponsored cards…): never shown as content. */
+internal fun isPromotion(typename: String?): Boolean =
+    typename != null && Regex("Promotion|Sponsor|Advert|(^|[a-z])Ad([A-Z]|$)").containsMatchIn(typename)
+
 private fun shelf(section: JsonElement): Shelf? {
-    val items = section.list("sectionItems.items").mapNotNull { card(it.at("content")) }
+    if (isPromotion(section.at("data").typename()) || isPromotion(section.typename())) return null
+    val items = section.list("sectionItems.items")
+        .filterNot { isPromotion(it.at("content").typename()) || isPromotion(it.at("content.data").typename()) }
+        .mapNotNull { card(it.at("content")) }
     if (items.isEmpty()) return null
     return Shelf(
         uri = section.str("uri"),

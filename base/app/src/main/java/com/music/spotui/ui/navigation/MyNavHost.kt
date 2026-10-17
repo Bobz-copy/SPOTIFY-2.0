@@ -273,13 +273,17 @@ fun MyNavHost(
             navBackStackEntry.arguments?.getString("id")?.let { com.music.spotui.ui.screens.LocalPlaylistScreen(navHostController, it) }
         }
 
-        page("${Routes.ArtistReleases.route}/{aString}") { navBackStackEntry ->
+        page(
+            "${Routes.ArtistReleases.route}/{aString}?id={artistId}",
+            arguments = listOf(navArgument("artistId") { defaultValue = "" }),
+        ) { navBackStackEntry ->
             LaunchedEffect(playerState) {
                 bottomBarState.value = true
                 bottomBarPlayerState.value = playerState != ""
             }
             val aId = navBackStackEntry.arguments?.getString("aString")
-            aId?.let { ArtistReleasesScreen(navHostController, it) }
+            val artistId = navBackStackEntry.arguments?.getString("artistId").orEmpty()
+            aId?.let { ArtistReleasesScreen(navHostController, it, artistId) }
         }
 
         page(

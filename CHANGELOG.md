@@ -4,12 +4,13 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 ## 2.0.0-beta.6
 
-- **Fewer ads abroad**: ads from other countries' ad servers are blocked too; an ad that still gets through is muted and skipped.
+- **Fewer ads abroad**: ads from other countries' ad servers, sponsored playlists and promotion shelves are blocked; ads are recognised even when they look like songs; an ad that still gets through is muted and skipped.
+- **Artist discography** (Releases) shows albums and singles again.
 - **A pause stays a pause**, even right at the end of a song.
 - **Downloads are safe**: a damaged download list no longer deletes your downloaded songs.
 - **Changes Spotify refuses are undone on screen** (likes, playlist visibility), with a message.
 - **Search** keeps your query when you come back, and says when it is loading, empty or failed (with Try again). Artist and profile pages can be reloaded too.
-- **Lyrics button** in the player; **Jam**: join with a copied link; sharing an episode works.
+- **Jam**: join with a copied link; sharing an episode works.
 - **Logout** stops everything (local songs, video, notification); the data saver applies from launch.
 - Player buttons are named for TalkBack.
 

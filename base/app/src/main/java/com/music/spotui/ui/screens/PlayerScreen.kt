@@ -74,7 +74,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.music.spotui.ui.components.pressable
-import androidx.compose.material.icons.outlined.Lyrics
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.setValue
@@ -447,7 +446,6 @@ fun PlayerScreen(navController: NavController) {
                 context = context,
                 onDevices = { showDevices = true },
                 onQueue = { showQueue = true },
-                onLyrics = { showLyrics = true },
             )
             Spacer(modifier = Modifier.height(20.dp))
         }
@@ -971,7 +969,6 @@ fun PlayerConnectRow(
     context: Context,
     onDevices: () -> Unit,
     onQueue: () -> Unit,
-    onLyrics: () -> Unit = {},
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1006,14 +1003,6 @@ fun PlayerConnectRow(
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Lyrics also show below the player; this button makes them easy to find.
-            Icon(
-                imageVector = androidx.compose.material.icons.Icons.Outlined.Lyrics,
-                tint = Color.White,
-                modifier = Modifier.size(22.dp).pressable { onLyrics() },
-                contentDescription = stringResource(R.string.lyrics_fullscreen),
-            )
-            Spacer(modifier = Modifier.width(24.dp))
             Icon(
                 painter = painterResource(id = R.drawable.ic_share),
                 tint = Color.White,

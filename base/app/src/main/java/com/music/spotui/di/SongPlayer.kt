@@ -324,6 +324,10 @@ object SongPlayer {
             positionAt = SystemClock.elapsedRealtime()
         }
         val trackChanged = uri != _nowPlaying.value.uri
+        // The Canvas is looked up when the song starts, not when the player opens.
+        if (trackChanged && id.isNotBlank() && !uri.startsWith("spotify:episode:") &&
+            app.myspoti.power.EnergySettings.state.value.policy.allowCanvas && !com.music.spotui.data.DataSaver.active
+        ) scope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { Graph.api.getCanvasUrl(id) } }
         // Autoplay off: stop once, when the player moves on to a track it picked itself.
         if (item != null && item.provider == "autoplay" && uri != autoplayHandledUri && !com.music.spotui.data.preferences.AutoplayPref.on) {
             autoplayHandledUri = uri

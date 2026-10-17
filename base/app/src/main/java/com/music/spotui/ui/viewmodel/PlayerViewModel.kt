@@ -88,6 +88,14 @@ class PlayerViewModel constructor(private val currentSongState: CurrentSongState
     private var canvasJob: Job? = null
 
     fun loadCanvas(trackId: String, allowFetch: Boolean = true) {
+        // Already looked up (prefetched when the song started, or a reopened player): at once,
+        // so the screen knows before its first frame whether the Canvas or the cover shows.
+        repository.knownCanvas(trackId)?.let { known ->
+            canvasJob?.cancel(); canvasJob = null
+            canvasRequests.resolve(trackId, known.getOrNull())
+            _canvasState.value = canvasRequests.state
+            return
+        }
         val request = canvasRequests.select(trackId, allowFetch) ?: return
         canvasJob?.cancel()
         canvasJob = null
@@ -226,6 +234,14 @@ internal class CanvasRequests {
         loading = false
         resolved = true
         return true
+    }
+
+    /** A result known without asking (cache). */
+    fun resolve(trackId: String, url: String?) {
+        generation++
+        state = CanvasTrackState(trackId, url?.takeIf { it.isNotBlank() })
+        loading = false
+        resolved = true
     }
 
     fun fail(request: CanvasRequest): Boolean {

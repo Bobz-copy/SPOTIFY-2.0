@@ -730,6 +730,9 @@ class Api constructor(
         return url
     }
 
+    /** The Canvas already looked up for [trackId]: null when never asked, else its url (or none). */
+    fun knownCanvas(trackId: String): Result<String?>? = CanvasCache.map[trackId]?.let { Result.success(it.value) }
+
     private object CanvasCache {
         class Entry(val value: String?)
         val map = java.util.concurrent.ConcurrentHashMap<String, Entry>()

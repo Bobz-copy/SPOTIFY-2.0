@@ -242,6 +242,10 @@ fun PlayerScreen(navController: NavController) {
     val canvasUrl = canvas.url.takeIf {
         energy.policy.allowCanvas && !com.music.spotui.data.DataSaver.active && displayedTrackId.isNotBlank() && canvas.trackId == displayedTrackId
     }
+    // The cover stays until the Canvas has drawn its first frame: hiding it earlier showed
+    // the bare background for a moment (a flash) between the cover and the clip.
+    var canvasShown by remember(canvasUrl) { mutableStateOf(canvasUrl != null && CanvasPlayer.hasFrame(canvasUrl)) }
+    val coverAlpha by androidx.compose.animation.core.animateFloatAsState(if (canvasUrl != null && canvasShown) 0f else 1f, label = "cover")
     // Music video (YouTube, synced to the Spotify playback): looked up for every track
     // shown here, offered once its time map is known, shown in place of the artwork.
     val mv = com.music.spotui.video.MusicVideoController
@@ -286,10 +290,11 @@ fun PlayerScreen(navController: NavController) {
                 )
             )
     ) {
-        val pillAboveTitle = canvasUrl != null && !videoOn && mediaReady
-        if (canvasUrl != null && !videoOn && mediaReady) {
+        val pillAboveTitle = canvasUrl != null && !videoOn
+        if (canvasUrl != null && !videoOn) {
             CanvasVideo(
                 url = canvasUrl,
+                onFirstFrame = { canvasShown = true },
                 playing = songPlayingState && !showLyrics && !audioBuffering,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -387,7 +392,7 @@ fun PlayerScreen(navController: NavController) {
                             .padding(horizontal = 24.dp)
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .alpha(if (canvasUrl != null && mediaReady) 0f else 1f),
+                            .alpha(coverAlpha),
                         model = cover,
                         contentScale = ContentScale.Crop,
                         contentDescription = "")
@@ -1222,26 +1227,71 @@ fun PlayerMenuRow(
  * clip, and since ExoPlayer ignores the activity lifecycle it kept doing so in the
  * background (#87, gigabytes per hour). It also pauses while the app is not visible.
  */
+/**
+ * One Canvas player for the whole app: closing and reopening the player screen keeps the
+ * clip loaded (and its last frame), instead of building a new player that starts from nothing.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private object CanvasPlayer {
+    private var exo: androidx.media3.exoplayer.ExoPlayer? = null
+    private var url: String? = null
+    private var framed: String? = null
+    private val firstFrame = mutableListOf<() -> Unit>()
+
+    /** [url]'s first frame is already drawn (the clip was on screen before). */
+    fun hasFrame(url: String) = framed == url && exo != null
+
+    fun get(context: android.content.Context, url: String): androidx.media3.exoplayer.ExoPlayer {
+        val player = exo ?: run {
+            val cached = androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(SongPlayer.mediaCache(context.applicationContext))
+                .setUpstreamDataSourceFactory(androidx.media3.datasource.DefaultHttpDataSource.Factory())
+            androidx.media3.exoplayer.ExoPlayer.Builder(context.applicationContext)
+                .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cached))
+                .build().apply {
+                    repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+                    volume = 0f
+                    playWhenReady = false
+                    addListener(object : androidx.media3.common.Player.Listener {
+                        override fun onRenderedFirstFrame() {
+                            framed = this@CanvasPlayer.url
+                            firstFrame.toList().forEach { it() }
+                        }
+                    })
+                }.also { exo = it }
+        }
+        if (url != this.url) {
+            this.url = url
+            framed = null
+            player.setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            player.prepare()
+        }
+        return player
+    }
+
+    fun onFirstFrame(listener: () -> Unit): () -> Unit {
+        firstFrame += listener
+        return { firstFrame -= listener }
+    }
+}
+
+/**
+ * Plays a Spotify Canvas clip: a short, muted, looping video filling the
+ * now-playing background, on the shared [CanvasPlayer] (separate from the audio engine),
+ * paused when the composable leaves. [onFirstFrame]: the clip is visible.
+ *
+ * Loops are served from the media cache: without it every loop re-downloaded the
+ * clip, and since ExoPlayer ignores the activity lifecycle it kept doing so in the
+ * background (#87, gigabytes per hour). It also pauses while the app is not visible.
+ */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun CanvasVideo(url: String, playing: Boolean, modifier: Modifier = Modifier) {
+private fun CanvasVideo(url: String, playing: Boolean, onFirstFrame: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val exo = remember(url) {
-        val cached = androidx.media3.datasource.cache.CacheDataSource.Factory()
-            .setCache(SongPlayer.mediaCache(context.applicationContext))
-            .setUpstreamDataSourceFactory(androidx.media3.datasource.DefaultHttpDataSource.Factory())
-        androidx.media3.exoplayer.ExoPlayer.Builder(context)
-            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cached))
-            .build().apply {
-                setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
-                repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
-                volume = 0f
-                playWhenReady = false
-                prepare()
-            }
-    }
+    val exo = remember(url) { CanvasPlayer.get(context, url) }
     val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     val requested by androidx.compose.runtime.rememberUpdatedState(playing)
+    val shown by androidx.compose.runtime.rememberUpdatedState(onFirstFrame)
     LaunchedEffect(exo, playing, lifecycle) {
         exo.playWhenReady = playing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
     }
@@ -1250,9 +1300,11 @@ private fun CanvasVideo(url: String, playing: Boolean, modifier: Modifier = Modi
             exo.playWhenReady = requested && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
         }
         lifecycle.addObserver(observer)
+        val removeFrame = CanvasPlayer.onFirstFrame { shown() }
         onDispose {
             lifecycle.removeObserver(observer)
-            exo.release()
+            removeFrame()
+            exo.playWhenReady = false
         }
     }
     androidx.compose.ui.viewinterop.AndroidView(

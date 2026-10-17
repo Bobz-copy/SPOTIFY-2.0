@@ -14,7 +14,7 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **Fast scrollbar** on long playlists and the library.
 - **Share as image** (Instagram story and more); swipe up on the cover for the lyrics; player fits foldables and wide screens.
 - **Settings**: autoplay on or off, accent colour, screen rotation (portrait, automatic, landscape).
-- **Canvas**: the video's previous / next buttons no longer flash when you come back to the player.
+- **Canvas**: looked up when the song starts and kept between openings of the player, it shows without a flash after the cover; its previous / next buttons no longer appear.
 
 ## 2.0.0-beta.6
 

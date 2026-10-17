@@ -149,6 +149,11 @@ object SongPlayer {
         }
         scope.launch { api.player.queue.collect { q -> if (acceptsSessionUpdates()) applyQueue(q) } }
         scope.launch { api.library.changes.collect { refreshCurrentLiked() } }
+        scope.launch {
+            MyspotiRuntime.spotify.player.refused.collect {
+                android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.play_refused, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         PlaybackService.controls = Controls
     }
 
@@ -282,6 +287,9 @@ object SongPlayer {
             playing = isPlaying())
     }
 
+    /** The autoplay item already paused on, so it is paused once, not on every state. */
+    private var autoplayHandledUri = ""
+
     private fun applyState(s: PlayerState?) {
         if (s == null) return
         stateSeen = true
@@ -316,6 +324,11 @@ object SongPlayer {
             positionAt = SystemClock.elapsedRealtime()
         }
         val trackChanged = uri != _nowPlaying.value.uri
+        // Autoplay off: stop once, when the player moves on to a track it picked itself.
+        if (item != null && item.provider == "autoplay" && uri != autoplayHandledUri && !com.music.spotui.data.preferences.AutoplayPref.on) {
+            autoplayHandledUri = uri
+            if (!s.isPaused) pauseSilently()
+        }
         currentContextUri = s.contextUri.orEmpty()
         if (item != null) { checkEndOfTrackTimer(id); currentTrackId = id }
         _nowPlaying.value = NowPlaying(
@@ -486,7 +499,7 @@ object SongPlayer {
      * the list it was picked from; when null, the last list that registered this track is used.
      */
     /** [order]: the context's track uris in the order to play them (a sorted playlist). */
-    fun playSong(song: String, context: Context? = null, contextUri: String? = null, order: List<String>? = null) {
+    fun playSong(song: String, context: Context? = null, contextUri: String? = null, order: List<String>? = null, positionMs: Long? = null) {
         // Data saver on mobile data: Spotify can't stream, only downloads and Local Files play.
         if (com.music.spotui.data.DataSaver.active) {
             main.post {
@@ -502,7 +515,7 @@ object SongPlayer {
         markPending(if (episodeId != null) "" else trackId, itemUri)
         transport { isLatest ->
             playChecked(itemUri, isLatest) {
-                if (ctx != null) api.player.play(ctx, trackUri = itemUri, order = order?.takeIf { ctx == contextUri })
+                if (ctx != null) api.player.play(ctx, trackUri = itemUri, positionMs = positionMs, order = order?.takeIf { ctx == contextUri })
                 else api.player.play(itemUri)
             }
         }

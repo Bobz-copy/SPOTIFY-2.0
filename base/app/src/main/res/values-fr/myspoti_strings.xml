@@ -281,6 +281,9 @@
     </plurals>
     <string name="profile_following_count">%1$d abonnements</string>
     <string name="profile_public_playlists">Playlists publiques</string>
+    <string name="profile_followers_title">Abonnés</string>
+    <string name="profile_following_title">Abonnements</string>
+    <string name="profile_list_empty">Personne pour l\'instant</string>
     <string name="artist_ban">Ne pas jouer cet artiste</string>
     <string name="artist_unban">Rejouer cet artiste</string>
     <string name="artist_banned">%1$s ne passera plus dans vos mix et radios</string>
@@ -306,4 +309,18 @@
     <string name="retry_button">Réessayer</string>
     <string name="page_load_failed">Impossible de charger cette page.\nVérifie ta connexion et réessaie.</string>
     <string name="jam_paste_link">Rejoindre avec un lien copié</string>
+    <string name="play_refused">Spotify a refusé cette lecture sur ton compte. Dans certains pays, un compte gratuit ne joue qu’en aléatoire : essaie le bouton aléatoire.</string>
+    <string name="artist_liked_songs">Titres likés</string>
+    <plurals name="artist_liked_songs_count">
+        <item quantity="one">%1$d titre de %2$s</item>
+        <item quantity="other">%1$d titres de %2$s</item>
+    </plurals>
+    <string name="share_link">Partager le lien</string>
+    <string name="share_as_image">Partager en image</string>
+    <string name="settings_autoplay_title">Lecture automatique</string>
+    <string name="settings_autoplay_detail">Quand ta musique se termine, continuer avec des titres similaires</string>
+    <string name="settings_rotation_title">Rotation de l\'écran</string>
+    <string name="settings_rotation_portrait">Portrait</string>
+    <string name="settings_rotation_auto">Automatique</string>
+    <string name="settings_rotation_landscape">Paysage</string>
 </resources>

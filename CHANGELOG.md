@@ -5,6 +5,15 @@ Each release on GitHub shows its section below. The app shows it too when it off
 ## Unreleased
 
 - **Myspoti's icon in the notification** and in Samsung's Now Bar, instead of a generic music note.
+- **Music no longer stops for a minute**: a Web Player page that stops answering is reloaded at once, and playback goes on.
+- **No more silent songs**: the sound comes back by itself if a skip or a muted ad left it at zero; after a skip it comes back as soon as the next song is there.
+- **Smart shuffle** goes on from where the song is (no restart), adds songs to every playlist, and has its own icon in the player.
+- **Free accounts refused by Spotify** (some countries): the list plays from its start instead, and a message explains why.
+- **GrapheneOS**: the player loads with "secure app spawning" on.
+- **Followers and following** lists on profiles; **your liked songs** on artist pages; **episodes** in playlists; unavailable songs greyed out.
+- **Fast scrollbar** on long playlists and the library.
+- **Share as image** (Instagram story and more); swipe up on the cover for the lyrics; player fits foldables and wide screens.
+- **Settings**: autoplay on or off, accent colour, screen rotation (portrait, automatic, landscape).
 
 ## 2.0.0-beta.6
 

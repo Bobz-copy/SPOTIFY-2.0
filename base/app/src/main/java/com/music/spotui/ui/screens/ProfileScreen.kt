@@ -100,12 +100,21 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
                 com.music.spotui.ui.components.FitText(p?.name ?: userName, fontSize = 28.sp, minSize = 18.sp,
                     fontWeight = FontWeight.Bold, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 if (p != null) {
-                    val parts = listOfNotNull(
-                        p.followers?.let { pluralStringResource(R.plurals.profile_followers, it, it) },
-                        p.following?.let { stringResource(R.string.profile_following_count, it) },
-                    )
-                    if (parts.isNotEmpty()) Text(parts.joinToString(" • "), color = Color(0xFFB3B3B3), fontSize = 14.sp,
-                        modifier = Modifier.padding(top = 6.dp))
+                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        p.followers?.let {
+                            Text(pluralStringResource(R.plurals.profile_followers, it, it), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                                    .pressable(0.96f) { navController.navigate(followListRoute(userId, followers = true)) }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp))
+                        }
+                        if (p.followers != null && p.following != null) Text("•", color = Color(0xFFB3B3B3), fontSize = 14.sp)
+                        p.following?.let {
+                            Text(stringResource(R.string.profile_following_count, it), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                                    .pressable(0.96f) { navController.navigate(followListRoute(userId, followers = false)) }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp))
+                        }
+                    }
                 }
                 val f = following
                 if (!me && f != null) {

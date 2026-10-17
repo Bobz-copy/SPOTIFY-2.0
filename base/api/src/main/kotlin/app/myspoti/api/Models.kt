@@ -113,6 +113,8 @@ data class NowPlaying(
     val imageUrl: String?,
     val durationMs: Long,
     val explicit: Boolean = false,
+    /** Where the player took this item from ("context", "queue", "autoplay"...), when it says. */
+    val provider: String? = null,
 )
 
 data class PlayerRestrictions(

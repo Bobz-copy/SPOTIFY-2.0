@@ -71,6 +71,8 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
             }
             "state" -> _events.tryEmit("state" to (msg["state"] ?: JsonNull))
             "queue" -> _events.tryEmit("queue" to (msg["queue"] ?: JsonNull))
+            // Spotify refused a playback command (HTTP 402/403 on Connect), see ControlRelay.
+            "refused" -> _events.tryEmit("refused" to msg)
             "error" -> _ready.value = false
         }
     }
@@ -80,6 +82,16 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         _ready.value = false
         host.evaluate(BridgeScript.source)
     }
+
+    /** When a call last timed out (0: never). A frozen page times out every call. */
+    @Volatile var lastTimeoutAt = 0L
+        private set
+
+    /**
+     * True when the page answers a trivial call within [timeoutMs]. `bridge.version` is
+     * synchronous in the page: no answer means the page itself is frozen, not the player busy.
+     */
+    suspend fun ping(timeoutMs: Long = 3_000): Boolean = runCatching { call("bridge.version", timeoutMs = timeoutMs) }.isSuccess
 
     suspend fun call(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000): JsonElement {
         val id = ids.incrementAndGet()
@@ -101,6 +113,7 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
                     logger?.invoke("call #$id $method ok in ${System.currentTimeMillis() - started} ms: $shown")
                 }
             } catch (e: Exception) {
+                if (e is BridgeException && e.message?.startsWith("timeout") == true) lastTimeoutAt = System.currentTimeMillis()
                 logger?.invoke("call #$id $method FAILED after ${System.currentTimeMillis() - started} ms: ${e.message}")
                 throw e
             }

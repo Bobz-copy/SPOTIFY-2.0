@@ -45,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -346,7 +347,9 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         )
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         item {
             Column(
                 modifier = Modifier
@@ -571,6 +574,8 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         if (p.type == "album") item(key = "similar") { SimilarAlbums(navController, p.tracks.firstOrNull()?.spotifyTrackId.orEmpty(), p.uri) }
         item { Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace())) }
     }
+    com.music.spotui.ui.components.FastScrollbar(listState, Modifier.align(Alignment.CenterEnd))
+    }
 }
 
 @OptIn(ExperimentalGlideComposeApi::class)
@@ -589,6 +594,7 @@ private fun TrackRow(
         horizontalArrangement = Arrangement.Start,
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (song.playable) Modifier else Modifier.alpha(0.4f))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
@@ -670,7 +676,7 @@ object SmartShuffle {
      * Smart shuffle (Spotify keeps its own for Premium): the playlist shuffled, with one of
      * Spotify's recommendations for it after every [EVERY] songs.
      */
-    suspend fun start(p: ContextPageModel, first: SongsModel?) {
+    suspend fun start(p: ContextPageModel, first: SongsModel?, fromPositionMs: Long? = null) {
         val api = Graph.api
         val state = Graph.currentSongState
         on.value = p.uri
@@ -680,6 +686,8 @@ object SmartShuffle {
                 // Spotify's playlist extender refuses Liked Songs: the radios of a few liked songs instead.
                 p.tracks.shuffled().take(3).flatMap { api.getRecommendations(listOf(it.spotifyTrackId)).take(8) }
             } else runCatching { MyspotiRuntime.api.playlists.recommended(p.uri, limit = 20) }.getOrDefault(emptyList()).map(api::songOf)
+                // Spotify's extender gives nothing for some playlists: the radios of a few of its songs.
+                .ifEmpty { p.tracks.shuffled().take(3).flatMap { runCatching { api.getRecommendations(listOf(it.spotifyTrackId)).take(8) }.getOrDefault(emptyList()) } }
         }.filter { it.spotifyTrackId !in inList }.distinctBy { it.spotifyTrackId }.shuffled()
         val shuffled = p.tracks.shuffled().let { list -> first?.let { f -> listOf(f) + (list - f) } ?: list }
         if (shuffled.isEmpty()) return
@@ -694,7 +702,9 @@ object SmartShuffle {
         SongPlayer.setShuffle(false); state.shuffle.value = false
         state.updateQueue(mixed)
         val startSong = mixed.first()
-        SongPlayer.playSong(startSong.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" })
+        // Turned on from the player: the song playing goes on where it is, not from its start.
+        val position = fromPositionMs?.takeIf { first != null && it > 0 }
+        SongPlayer.playSong(startSong.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" }, positionMs = position)
         state.updateSongState(startSong.coverUri, startSong.title, startSong.singer, true, startSong.id, 0, startSong.album)
     }
 
@@ -707,7 +717,7 @@ object SmartShuffle {
             else -> return false
         }
         val page = (withContext(Dispatchers.IO) { flow.first { it !is Response.Loading } } as? Response.Success)?.data ?: return false
-        start(page, page.tracks.firstOrNull { it.spotifyTrackId == currentTrackId })
+        start(page, page.tracks.firstOrNull { it.spotifyTrackId == currentTrackId }, SongPlayer.getCurrentPosition())
         return true
     }
 }

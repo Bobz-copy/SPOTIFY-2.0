@@ -125,6 +125,7 @@ class WebPlayerHost(context: Context) : BridgeHost {
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 android.util.Log.d(LOG, "page start ${url.take(120)}")
+                pageStarts++
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
                 if (url.startsWith(PLAYER_URL)) relay.injectNow()
@@ -161,7 +162,32 @@ class WebPlayerHost(context: Context) : BridgeHost {
     private fun isLoginPage(url: String?) =
         url != null && (url.contains("accounts.spotify.com") || url.contains("/login") || url.contains("challenge.spotify.com"))
 
-    fun load() = main.post { view.loadUrl(PLAYER_URL) }
+    fun load() = main.post {
+        pageStarts = 0
+        loadAsked = true
+        view.loadUrl(PLAYER_URL)
+        watchLoad(PLAYER_URL, attempt = 1)
+    }
+
+    /** Page starts since the last [load]; the load watchdog looks at it. */
+    private var pageStarts = 0
+    /** [load] was called and no [unload] since (data saver keeps the page off). */
+    private var loadAsked = false
+
+    /**
+     * An exec-spawned process (GrapheneOS "secure app spawning") can lose the first
+     * navigation of a WebView made in Application.onCreate: no page start, ever. When
+     * nothing started after a while, the page is asked for again (a few times, further apart).
+     */
+    private fun watchLoad(url: String, attempt: Int) {
+        main.postDelayed({
+            if (pageStarts > 0 || !loadAsked || attempt > LOAD_RETRIES) return@postDelayed
+            android.util.Log.d(LOG, "page never started: loading again (attempt $attempt)")
+            if (attempt > 1) view.stopLoading()
+            view.loadUrl(url)
+            watchLoad(url, attempt + 1)
+        }, LOAD_WATCH_MS * attempt)
+    }
 
     fun reload() = main.post { view.reload() }
 
@@ -207,17 +233,21 @@ class WebPlayerHost(context: Context) : BridgeHost {
         view.descendantFocusability = if (visible) ViewGroup.FOCUS_AFTER_DESCENDANTS else ViewGroup.FOCUS_BLOCK_DESCENDANTS
         if (visible) view.requestFocus()
         view.requestLayout()
+        // Now in a window: a first navigation that never started gets another go.
+        if (loadAsked && _url.value.isEmpty() && pageStarts == 0) view.loadUrl(PLAYER_URL)
     }
 
     fun detach() = main.post { (view.parent as? ViewGroup)?.removeView(view) }
 
     /** Frees the page (data saver, low memory). [load] brings it back. */
-    fun unload() = main.post { view.loadUrl("about:blank") }
+    fun unload() = main.post { loadAsked = false; view.loadUrl("about:blank") }
 
     companion object {
         /** Logcat tag of the engine: `adb logcat -s Myspoti`. */
         const val LOG = "Myspoti"
         const val PLAYER_URL = "https://open.spotify.com/"
+        private const val LOAD_WATCH_MS = 4_000L
+        private const val LOAD_RETRIES = 4
         const val LOGIN_URL = "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F"
         const val DESKTOP_UA =
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"

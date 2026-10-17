@@ -2,7 +2,15 @@ package com.music.spotui.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,6 +67,12 @@ fun SettingsScreen(navController: NavController) {
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             Section(R.string.settings_section_playback)
             StreamingQualityPicker()
+            OptionRow(
+                label = stringResource(R.string.settings_autoplay_title),
+                detail = stringResource(R.string.settings_autoplay_detail),
+                checked = com.music.spotui.data.preferences.AutoplayPref.on,
+                onChecked = { com.music.spotui.data.preferences.AutoplayPref.set(ctx, it) },
+            )
             Divider()
 
             Section(R.string.settings_section_downloads)
@@ -129,6 +143,8 @@ fun SettingsScreen(navController: NavController) {
                 checked = com.music.spotui.data.preferences.SolidNavBar.on,
                 onChecked = { com.music.spotui.data.preferences.SolidNavBar.set(ctx, it) },
             )
+            AccentRow()
+            OrientationRow()
             LanguageRow()
             Divider()
 
@@ -154,6 +170,61 @@ private fun Section(title: Int) {
 
 @Composable
 private fun Divider() = HorizontalDivider(color = Color(0xFF2A2A2A), modifier = Modifier.padding(top = 8.dp))
+
+/** The app's accent colour, for everyone (the same palette the supporter sheet uses). */
+@Composable
+private fun AccentRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Text(stringResource(R.string.supporter_accent), color = Color.White, fontSize = 16.sp)
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 10.dp)) {
+            for (a in com.music.spotui.data.api.SupportReminder.Accent.entries) {
+                val selected = com.music.spotui.data.api.SupportReminder.accent == a
+                val name = stringResource(when (a) {
+                    com.music.spotui.data.api.SupportReminder.Accent.GREEN -> R.string.color_green
+                    com.music.spotui.data.api.SupportReminder.Accent.BLUE -> R.string.color_blue
+                    com.music.spotui.data.api.SupportReminder.Accent.PURPLE -> R.string.color_purple
+                    com.music.spotui.data.api.SupportReminder.Accent.PINK -> R.string.color_pink
+                    com.music.spotui.data.api.SupportReminder.Accent.ORANGE -> R.string.color_orange
+                })
+                Box(
+                    Modifier.size(40.dp)
+                        .semantics { contentDescription = name; role = Role.RadioButton }
+                        .clip(CircleShape).background(a.color)
+                        .then(if (selected) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
+                        .clickable { com.music.spotui.data.api.SupportReminder.setAccent(ctx, a) },
+                )
+            }
+        }
+    }
+}
+
+/** Screen rotation: portrait (default), automatic or landscape. */
+@Composable
+private fun OrientationRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pref = com.music.spotui.data.preferences.OrientationPref
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Text(stringResource(R.string.settings_rotation_title), color = Color.White, fontSize = 16.sp)
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
+            for ((value, label) in listOf(
+                pref.PORTRAIT to R.string.settings_rotation_portrait,
+                pref.AUTO to R.string.settings_rotation_auto,
+                pref.LANDSCAPE to R.string.settings_rotation_landscape,
+            )) {
+                val selected = pref.mode == value
+                Text(
+                    stringResource(label),
+                    color = if (selected) Color.Black else Color.White, fontSize = 14.sp,
+                    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else Color(0xFF2A2A2A))
+                        .clickable { pref.set(ctx, value) }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
 
 /** "App language": Automatic (French or English) or any language with Spotify's labels. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)

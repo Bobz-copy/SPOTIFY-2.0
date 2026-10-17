@@ -6,6 +6,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.positionChange
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -313,10 +316,19 @@ fun PlayerScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
         item {
+        // Sized from the real space (foldables, tablets), not the screen: wide windows centre
+        // the content in a capped column and the cover fits both the width and the height.
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            modifier = Modifier.fillParentMaxHeight().fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        val wide = maxWidth > 600.dp && maxWidth > maxHeight
+        val contentWidth = if (wide) maxWidth.coerceAtMost(520.dp) else maxWidth
+        val artSide = minOf(contentWidth, maxHeight - PLAYER_CONTROLS_DP.dp).coerceAtLeast(160.dp)
         Column(
             modifier = Modifier
-                .fillParentMaxHeight()
-                .fillMaxWidth()
+                .fillMaxHeight()
+                .width(contentWidth)
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -331,9 +343,28 @@ fun PlayerScreen(navController: NavController) {
             // Spotify's "Passer à la vidéo" pill over it (black, like the official app).
             // Square, but never taller than what the controls leave (foldables, landscape-ish
             // screens): otherwise play / pause ends up under the lyrics card.
-            val screen = androidx.compose.ui.platform.LocalConfiguration.current
-            val artMax = (screen.screenHeightDp - PLAYER_CONTROLS_DP).coerceAtLeast(160).dp
-            Box(modifier = Modifier.widthIn(max = artMax).fillMaxWidth().aspectRatio(1f)) {
+            // A clear upward drag on the artwork opens the lyrics (observed on the initial pass,
+            // never consumed, so the pager and the pull-to-close keep working).
+            Box(modifier = Modifier.size(artSide).pointerInput(Unit) {
+                val threshold = 80.dp.toPx()
+                while (true) awaitPointerEventScope {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    var dx = 0f
+                    var dy = 0f
+                    var fired = false
+                    while (true) {
+                        val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val d = change.positionChange()
+                        dx += d.x; dy += d.y
+                        if (!fired && -dy > threshold && -dy > kotlin.math.abs(dx) * 2f) {
+                            fired = true
+                            showLyrics = true
+                        }
+                    }
+                }
+            }) {
             if (showVideo) Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize(),
@@ -445,10 +476,14 @@ fun PlayerScreen(navController: NavController) {
 
             PlayerConnectRow(
                 context = context,
+                title = songTitle,
+                artist = songSinger,
+                coverUri = songCoverUri,
                 onDevices = { showDevices = true },
                 onQueue = { showQueue = true },
             )
             Spacer(modifier = Modifier.height(20.dp))
+        }
         }
         }
         item {
@@ -848,6 +883,7 @@ fun PlayerFull(
         modifier = Modifier
             .fillMaxWidth()
             .padding(20.dp)
+            .height(64.dp)
     ) {
         Icon(
             modifier = Modifier
@@ -882,7 +918,8 @@ fun PlayerFull(
             else{
                 Color.White
             },
-            painter = painterResource(id = R.drawable.ic_player_shuffle),
+            // Smart shuffle has its own glyph (shuffle + sparkle), so it reads differently from plain shuffle.
+            painter = painterResource(id = if (smartOn) R.drawable.ic_shuffle_smart_active else R.drawable.ic_player_shuffle),
             contentDescription = stringResource(when { smartOn -> R.string.notif_shuffle_disable_smart; shuffle -> R.string.notif_shuffle_disable; else -> R.string.notif_shuffle_enable }))
         
         Icon(
@@ -901,7 +938,7 @@ fun PlayerFull(
             modifier = Modifier
                 // requiredSize forces an exact 64×64 square even if the parent Column
                 // constrains height — .size() alone let it get squished into an ellipse.
-                .requiredSize(64.dp)
+                .requiredSize(64.dp)  // never below 56dp
                 .pressable(pressedScale = 0.92f) {
                     if (songPlayingState) {
                         SongPlayer.pause()
@@ -980,6 +1017,9 @@ fun PlayerFull(
 @Composable
 fun PlayerConnectRow(
     context: Context,
+    title: String,
+    artist: String,
+    coverUri: String,
     onDevices: () -> Unit,
     onQueue: () -> Unit,
 ) {
@@ -1016,28 +1056,50 @@ fun PlayerConnectRow(
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_share),
-                tint = Color.White,
-                modifier = Modifier
-                    .size(22.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {
-                        // Songs and episodes alike: the link follows what plays (spotify:<kind>:<id>).
-                        val parts = SongPlayer.nowPlaying.value.uri.split(':')
-                        val link = if (parts.size == 3 && parts[0] == "spotify") "https://open.spotify.com/${parts[1]}/${parts[2]}"
-                            else SongPlayer.currentTrackId.takeIf { it.isNotBlank() }?.let { "https://open.spotify.com/track/$it" }
-                        if (link == null) return@clickable
-                        val send = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, link)
-                        }
-                        context.startActivity(Intent.createChooser(send, context.getString(R.string.action_share_label)))
-                    },
-                contentDescription = stringResource(R.string.action_share_label),
-            )
+            var shareMenu by remember { mutableStateOf(false) }
+            val shareScope = androidx.compose.runtime.rememberCoroutineScope()
+            Box {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_share),
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { shareMenu = true },
+                    contentDescription = stringResource(R.string.action_share_label),
+                )
+                androidx.compose.material3.DropdownMenu(expanded = shareMenu, onDismissRequest = { shareMenu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(stringResource(R.string.share_link)) },
+                        onClick = {
+                            shareMenu = false
+                            // Songs and episodes alike: the link follows what plays (spotify:<kind>:<id>).
+                            val parts = SongPlayer.nowPlaying.value.uri.split(':')
+                            val link = if (parts.size == 3 && parts[0] == "spotify") "https://open.spotify.com/${parts[1]}/${parts[2]}"
+                                else SongPlayer.currentTrackId.takeIf { it.isNotBlank() }?.let { "https://open.spotify.com/track/$it" }
+                            if (link != null) {
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, link)
+                                }
+                                context.startActivity(Intent.createChooser(send, context.getString(R.string.action_share_label)))
+                            }
+                        },
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(stringResource(R.string.share_as_image)) },
+                        onClick = {
+                            shareMenu = false
+                            shareScope.launch {
+                                com.music.spotui.ui.components.ShareCard.share(
+                                    context, title, artist, coverUri, context.getString(R.string.action_share_label))
+                            }
+                        },
+                    )
+                }
+            }
             Spacer(modifier = Modifier.width(24.dp))
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.List,

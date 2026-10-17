@@ -5,6 +5,8 @@ import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.material.icons.filled.Check
+import kotlinx.coroutines.flow.first
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -49,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -149,6 +152,22 @@ private fun ArtistOverviewContent(
         following = "spotify:artist:${overview.id}" in res
     }
     var showAllPopular by remember { mutableStateOf(false) }
+    // The user's liked songs by this artist: from the session cache, else loaded once in the background.
+    var likedByArtist by remember(overview.id) { mutableStateOf<List<com.music.spotui.data.entity.SongsModel>>(emptyList()) }
+    var showLiked by remember(overview.id) { mutableStateOf(false) }
+    LaunchedEffect(overview.id) {
+        val all = com.music.spotui.data.api.Api.LikedCache.tracks
+            ?: runCatching {
+                com.music.spotui.di.Graph.api.getLikedPage()
+                    .first { it is Response.Success && it.data.complete }
+                    .let { (it as? Response.Success)?.data?.tracks }
+            }.getOrNull()
+            ?: return@LaunchedEffect
+        likedByArtist = all.filter { s ->
+            if (s.artistIds.isNotEmpty()) overview.id in s.artistIds
+            else displayName.isNotBlank() && s.singer.split(", ").any { it.equals(displayName, ignoreCase = true) }
+        }
+    }
     val np by SongPlayer.nowPlaying
     val isThisArtist = np.contextUri == "spotify:artist:${overview.id}"
     val playingNow = artistViewModel.currentSongPlayingState.value
@@ -371,6 +390,52 @@ private fun ArtistOverviewContent(
                             .padding(horizontal = 20.dp, vertical = 8.dp),
                     ) {
                         Text(if (showAllPopular) stringResource(R.string.profile_bio_show_less) else stringResource(R.string.audiobook_series_see_more_button), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // ── Liked songs by this artist ──
+        if (likedByArtist.isNotEmpty()) {
+            item(key = "liked-by-artist") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { showLiked = !showLiked }.padding(16.dp, 8.dp),
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(4.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF450AF5), Color(0xFF8E8EE5), Color(0xFFC4EFD9)))),
+                    ) {
+                        androidx.compose.material3.Icon(Icons.Default.Favorite, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.artist_liked_songs), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            androidx.compose.ui.res.pluralStringResource(R.plurals.artist_liked_songs_count, likedByArtist.size, likedByArtist.size, displayName),
+                            color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            if (showLiked) itemsIndexed(likedByArtist, key = { i, s -> "liked:$i:${s.id}" }) { _, song ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable {
+                            SongPlayer.registerLikedSongs(com.music.spotui.data.api.Api.LikedCache.tracks.orEmpty().map { it.url })
+                            artistViewModel.updateQueue(likedByArtist)
+                            SongPlayer.playSong(song.url, context, contextUri = "spotify:collection:tracks")
+                            artistViewModel.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
+                        }
+                        .padding(16.dp, 8.dp),
+                ) {
+                    GlideImage(model = song.coverUri, contentDescription = "", contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(song.title, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(song.album, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

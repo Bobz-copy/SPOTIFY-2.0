@@ -240,6 +240,18 @@ fun MyNavHost(
         }
 
         page(
+            "${com.music.spotui.ui.screens.FOLLOW_LIST_ROUTE}/{uId}/{mode}",
+        ) { navBackStackEntry ->
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            val uId = navBackStackEntry.arguments?.getString("uId")
+            val mode = navBackStackEntry.arguments?.getString("mode")
+            uId?.let { com.music.spotui.ui.screens.FollowListScreen(navHostController, userId = it, followers = mode == "followers") }
+        }
+
+        page(
             "${Routes.Show.route}/{sId}?name={name}",
             arguments = listOf(navArgument("name") { defaultValue = "" }),
         ) { navBackStackEntry ->

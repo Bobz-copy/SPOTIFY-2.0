@@ -35,6 +35,16 @@
             android:name="com.music.spotui.di.ArtworkProvider"
             android:authorities="${applicationId}.artwork"
             android:exported="true" />
+        <!-- Share-as-image cards, handed to the target app through a read grant. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Lets the system profiler (Perfetto, Android Studio) trace release builds; no debugging. -->
         <profileable android:shell="true" />
 
@@ -57,7 +67,7 @@
             android:name="app.myspoti.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
+            android:screenOrientation="unspecified"
             android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:windowSoftInputMode="adjustResize"

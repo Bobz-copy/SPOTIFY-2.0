@@ -30,6 +30,40 @@ object SolidNavBar {
     }
 }
 
+/** "When your music ends, keep playing similar songs" (on by default). Read by the player. */
+object AutoplayPref {
+    private const val KEY = "autoplay_similar"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, true))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+    }
+}
+
+/** Screen rotation: portrait (the default), automatic (follows the system), or landscape. */
+object OrientationPref {
+    private const val KEY = "screen_orientation"
+    const val PORTRAIT = "portrait"
+    const val AUTO = "auto"
+    const val LANDSCAPE = "landscape"
+    var mode by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getString(KEY, PORTRAIT) ?: PORTRAIT)
+        private set
+
+    fun set(c: Context, value: String) {
+        mode = value
+        prefs(c).edit().putString(KEY, value).apply()
+    }
+
+    /** The [android.content.pm.ActivityInfo] value for the chosen mode. */
+    fun requested(): Int = when (mode) {
+        AUTO -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        LANDSCAPE -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }
+}
+
 /** Library layout: false = rows (default), true = Spotify-style 3-column grid. */
 fun isLibraryGridView(c: Context): Boolean = prefs(c).getBoolean(KEY_LIBRARY_GRID, false)
 fun setLibraryGridView(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_LIBRARY_GRID, v).apply()

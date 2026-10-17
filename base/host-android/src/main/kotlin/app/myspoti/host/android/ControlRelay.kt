@@ -119,6 +119,10 @@ internal class ControlRelay(private val view: WebView) {
                 if (!p) return;
                 pending.delete(id);
                 if (!status) return p.reject(new TypeError('Failed to fetch'));
+                // A refused play or transfer (free accounts in some countries): the app tries another way.
+                if ((status === 402 || status === 403) && /player\/command|connect\/transfer/.test(p.url) && window.MyspotiHost) {
+                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, path: p.url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
+                }
                 const noBody = status === 204 || status === 205 || status === 304;
                 p.resolve(new Response(noBody ? null : body, { status, headers: JSON.parse(headers) }));
               };
@@ -132,7 +136,7 @@ internal class ControlRelay(private val view: WebView) {
                 const method = ((init && init.method) || 'GET').toUpperCase();
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
-                  pending.set(id, { resolve, reject });
+                  pending.set(id, { resolve, reject, url });
                   window.MyspotiNet.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body }));
                 });
               };

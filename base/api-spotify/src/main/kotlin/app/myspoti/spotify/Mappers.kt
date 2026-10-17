@@ -47,6 +47,23 @@ internal fun track(d: JsonElement?, uid: String? = null): Track? {
     )
 }
 
+/** A playlist row: a track, or an episode shaped as a `Track` (show name as the artist, show/episode art as the album). */
+internal fun playlistItem(d: JsonElement?, uid: String? = null): Track? {
+    if (d.str("uri")?.startsWith("spotify:episode:") != true) return track(d, uid)
+    val e = episode(d) ?: return null
+    val cover = e.images.ifEmpty { e.show?.images.orEmpty() }
+    return Track(
+        uri = e.uri,
+        name = e.name,
+        durationMs = e.durationMs,
+        artists = e.show?.let { listOf(ArtistRef(it.uri, it.name)) }.orEmpty(),
+        album = AlbumRef("", e.show?.name ?: "", cover),
+        explicit = e.explicit,
+        playable = e.playable,
+        uid = uid,
+    )
+}
+
 internal fun artist(d: JsonElement?): Artist? {
     val uri = d.str("uri") ?: return null
     return Artist(
@@ -118,6 +135,7 @@ internal fun nowPlaying(t: JsonElement?): NowPlaying? {
         imageUrl = t.str("image"),
         durationMs = t.long("durationMs") ?: 0,
         explicit = t.bool("explicit") ?: false,
+        provider = t.str("provider"),
     )
 }
 

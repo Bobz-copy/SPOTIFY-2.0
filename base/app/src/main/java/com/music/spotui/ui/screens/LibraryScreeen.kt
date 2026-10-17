@@ -415,12 +415,12 @@ fun SumUpLibraryScreen(
         }
     }
 
+    Box(Modifier.fillMaxSize().padding(padding)) {
     LazyColumn(
         state = listState,
         contentPadding = PaddingValues(top = 10.dp, bottom = com.music.spotui.ui.components.bottomBarsSpace()),
         modifier = Modifier
             .fillMaxSize()
-            .padding(padding)
             .background(com.music.spotui.ui.theme.AppBackground)
     ) {
         itemsIndexed(rows, key = { _, e -> LibraryOrder.key(e) }) { index, entry ->
@@ -510,6 +510,8 @@ fun SumUpLibraryScreen(
                 }
             }
         }
+    }
+    com.music.spotui.ui.components.FastScrollbar(listState, Modifier.align(Alignment.CenterEnd))
     }
 }
 

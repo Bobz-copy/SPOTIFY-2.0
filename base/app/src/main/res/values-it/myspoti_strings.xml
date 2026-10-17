@@ -281,6 +281,9 @@
     </plurals>
     <string name="profile_following_count">%1$d seguiti</string>
     <string name="profile_public_playlists">Playlist pubbliche</string>
+    <string name="profile_followers_title">Follower</string>
+    <string name="profile_following_title">Seguiti</string>
+    <string name="profile_list_empty">Ancora nessuno</string>
     <string name="artist_ban">Non riprodurre questo artista</string>
     <string name="artist_unban">Riproduci di nuovo questo artista</string>
     <string name="artist_banned">%1$s non verrà più riprodotto nei tuoi mix e radio</string>
@@ -306,4 +309,18 @@
     <string name="retry_button">Riprova</string>
     <string name="page_load_failed">Impossibile caricare questa pagina.\nControlla la connessione e riprova.</string>
     <string name="jam_paste_link">Partecipa con un link copiato</string>
+    <string name="play_refused">Spotify ha rifiutato questa riproduzione sul tuo account. In alcuni paesi gli account gratuiti riproducono solo in ordine casuale: prova il pulsante casuale.</string>
+    <string name="artist_liked_songs">Brani che ti piacciono</string>
+    <plurals name="artist_liked_songs_count">
+        <item quantity="one">%1$d brano di %2$s</item>
+        <item quantity="other">%1$d brani di %2$s</item>
+    </plurals>
+    <string name="share_link">Condividi il link</string>
+    <string name="share_as_image">Condividi come immagine</string>
+    <string name="settings_autoplay_title">Riproduzione automatica</string>
+    <string name="settings_autoplay_detail">Quando la musica finisce, continua con brani simili</string>
+    <string name="settings_rotation_title">Rotazione dello schermo</string>
+    <string name="settings_rotation_portrait">Verticale</string>
+    <string name="settings_rotation_auto">Automatica</string>
+    <string name="settings_rotation_landscape">Orizzontale</string>
 </resources>

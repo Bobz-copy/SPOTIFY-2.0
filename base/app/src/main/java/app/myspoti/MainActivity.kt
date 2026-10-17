@@ -48,12 +48,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The user's rotation choice (portrait by default); changes are applied from the UI below.
+        requestedOrientation = com.music.spotui.data.preferences.OrientationPref.requested()
         signedIn = prefs.getBoolean("LoggedIn", false)
         setupNeeded = com.music.spotui.ui.screens.Setup.needed(this)
         root = FrameLayout(this)
         val compose = ComposeView(this).apply {
             setContent {
                 SpotuiTheme {
+                    val orientation = com.music.spotui.data.preferences.OrientationPref.mode
+                    androidx.compose.runtime.LaunchedEffect(orientation) {
+                        requestedOrientation = com.music.spotui.data.preferences.OrientationPref.requested()
+                    }
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                         when {
                             showSpotiflac -> com.music.spotui.ui.screens.SpotiflacScreen(onClose = { showSpotiflac = false })

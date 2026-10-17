@@ -206,6 +206,18 @@ class SpotifyUsers(private val gql: Gql, private val bridge: Bridge, private val
         )
     }
 
+    override suspend fun followers(userUri: Uri): List<UserRef> = profileList(userUri, "followers")
+    override suspend fun following(userUri: Uri): List<UserRef> = profileList(userUri, "following")
+
+    private suspend fun profileList(userUri: Uri, kind: String): List<UserRef> {
+        val id = URLEncoder.encode(idOf(userUri), "UTF-8")
+        val r = http.getJson("https://spclient.wg.spotify.com/user-profile-view/v3/profile/$id/$kind?market=from_token") ?: return emptyList()
+        return r.list("profiles").mapNotNull { f ->
+            val uri = f.str("uri") ?: return@mapNotNull null
+            UserRef(uri, f.str("name") ?: idOf(uri), f.str("image_url"))
+        }.distinctBy { it.uri }
+    }
+
     override suspend fun top(range: TimeRange, limit: Int): TopContent {
         val input = mapOf("offset" to 0, "limit" to limit, "sortBy" to "AFFINITY", "timeRange" to range.name)
         val p = gql.query("userTopContent", vars(

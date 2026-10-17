@@ -21,6 +21,10 @@ data class SongsModel(
     val albumId : String = "",
     // When it was added to the playlist or to Liked Songs (ISO 8601), for "Sort by date added".
     val addedAt : String = "",
+    // False when Spotify marks the track unavailable (region, removed); rows are dimmed.
+    val playable : Boolean = true,
+    // Spotify ids of the artists, for "liked songs by this artist". Empty in older caches.
+    val artistIds : List<String> = emptyList(),
 ){
     constructor() : this(-1 ,"" ,"" ,"" ,"" ,"", "")
 }

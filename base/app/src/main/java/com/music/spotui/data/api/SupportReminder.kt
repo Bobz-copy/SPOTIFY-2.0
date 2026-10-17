@@ -49,8 +49,8 @@ object SupportReminder {
     var icon by mutableStateOf(Accent.GREEN)
         private set
 
-    /** The colour the whole app uses for its accent (Spotify green unless a supporter chose another). */
-    val accentColor: Color get() = if (level != Level.NONE) accent.color else Accent.GREEN.color
+    /** The colour the whole app uses for its accent (Spotify green unless another was chosen in Settings). */
+    val accentColor: Color get() = accent.color
 
     /** When the next reminder is due. */
     fun nextAt(firstSeen: Long, lastShown: Long, level: Level, supportedAt: Long): Long = when (level) {

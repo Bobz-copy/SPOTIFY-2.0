@@ -178,6 +178,10 @@ interface Podcasts {
 interface Users {
     suspend fun me(): Account
     suspend fun profile(userUri: Uri): UserProfile
+    /** People following this user. */
+    suspend fun followers(userUri: Uri): List<UserRef>
+    /** People this user follows. */
+    suspend fun following(userUri: Uri): List<UserRef>
     suspend fun top(range: TimeRange = TimeRange.SHORT_TERM, limit: Int = 10): TopContent
     suspend fun follow(userUris: List<Uri>)
     suspend fun unfollow(userUris: List<Uri>)

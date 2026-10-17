@@ -281,6 +281,9 @@
     </plurals>
     <string name="profile_following_count">%1$d following</string>
     <string name="profile_public_playlists">Public playlists</string>
+    <string name="profile_followers_title">Followers</string>
+    <string name="profile_following_title">Following</string>
+    <string name="profile_list_empty">Nobody here yet</string>
     <string name="artist_ban">Don\'t play this artist</string>
     <string name="artist_unban">Allow playing this artist</string>
     <string name="artist_banned">%1$s won\'t play in your mixes and radios</string>
@@ -306,4 +309,18 @@
     <string name="retry_button">Try again</string>
     <string name="page_load_failed">Couldn\'t load this page.\nCheck your connection and try again.</string>
     <string name="jam_paste_link">Join with a copied link</string>
+    <string name="play_refused">Spotify refused to play this on your account. Free accounts in some countries can only play shuffled: try the shuffle button.</string>
+    <string name="artist_liked_songs">Liked songs</string>
+    <plurals name="artist_liked_songs_count">
+        <item quantity="one">%1$d song by %2$s</item>
+        <item quantity="other">%1$d songs by %2$s</item>
+    </plurals>
+    <string name="share_link">Share link</string>
+    <string name="share_as_image">Share as image</string>
+    <string name="settings_autoplay_title">Autoplay</string>
+    <string name="settings_autoplay_detail">When your music ends, keep playing similar songs</string>
+    <string name="settings_rotation_title">Screen rotation</string>
+    <string name="settings_rotation_portrait">Portrait</string>
+    <string name="settings_rotation_auto">Automatic</string>
+    <string name="settings_rotation_landscape">Landscape</string>
 </resources>

@@ -114,6 +114,18 @@ class Api constructor(
     fun songOf(t: Track): SongsModel {
         val id = t.uri.substringAfterLast(':')
         val singer = t.artists.joinToString(", ") { it.name }
+        if (t.uri.startsWith("spotify:episode:")) return SongsModel(
+            id = stableId("episode:$id"),
+            title = t.name.take(128),
+            album = t.album?.name.orEmpty(),
+            singer = singer,
+            coverUri = cover(t.album?.images.orEmpty()),
+            url = "episode:$id",
+            explicit = t.explicit,
+            durationMs = t.durationMs.toInt(),
+            addedAt = t.addedAt.orEmpty(),
+            playable = t.playable,
+        )
         return SongsModel(
             id = stableId("track:$id"),
             title = t.name.take(128),
@@ -126,6 +138,8 @@ class Api constructor(
             durationMs = t.durationMs.toInt(),
             albumId = t.album?.uri?.substringAfterLast(':').orEmpty(),
             addedAt = t.addedAt.orEmpty(),
+            playable = t.playable,
+            artistIds = t.artists.map { it.uri.substringAfterLast(':') },
         )
     }
 

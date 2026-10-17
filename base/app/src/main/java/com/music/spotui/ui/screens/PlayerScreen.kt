@@ -262,6 +262,11 @@ fun PlayerScreen(navController: NavController) {
     }
     val canvasAlpha = canvasProgress.value
     val coverAlpha = 1f - canvasProgress.value
+    // A tap on the Canvas hides the player (title, controls, progress) to watch the clip,
+    // brighter; another tap anywhere brings everything back.
+    var canvasOnly by remember(canvasUrl) { mutableStateOf(false) }
+    val chrome by androidx.compose.animation.core.animateFloatAsState(
+        if (canvasOnly) 0f else 1f, androidx.compose.animation.core.tween(CANVAS_FADE_MS / 2), label = "chrome")
     // Music video (YouTube, synced to the Spotify playback): looked up for every track
     // shown here, offered once its time map is known, shown in place of the artwork.
     val mv = com.music.spotui.video.MusicVideoController
@@ -314,17 +319,19 @@ fun PlayerScreen(navController: NavController) {
                 playing = songPlayingState && !showLyrics && !audioBuffering,
                 modifier = Modifier.fillMaxSize().alpha(canvasAlpha),
             )
+            // Darker than the clip itself while the player shows over it, so the text reads;
+            // gone when the Canvas is shown alone.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .alpha(canvasAlpha)
+                    .alpha(canvasAlpha * chrome)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
+                                Color.Black.copy(alpha = 0.60f),
+                                Color.Black.copy(alpha = 0.25f),
                                 Color.Black.copy(alpha = 0.50f),
-                                Color.Black.copy(alpha = 0.10f),
-                                Color.Black.copy(alpha = 0.35f),
-                                Color.Black.copy(alpha = 0.80f),
+                                Color.Black.copy(alpha = 0.85f),
                             )
                         )
                     )
@@ -333,6 +340,7 @@ fun PlayerScreen(navController: NavController) {
         androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer { alpha = chrome }
                 .nestedScroll(pullToClose.connection)
                 .statusBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -367,7 +375,11 @@ fun PlayerScreen(navController: NavController) {
             // screens): otherwise play / pause ends up under the lyrics card.
             // A clear upward drag on the artwork opens the lyrics (observed on the initial pass,
             // never consumed, so the pager and the pull-to-close keep working).
-            Box(modifier = Modifier.size(artSide).pointerInput(Unit) {
+            Box(modifier = Modifier.size(artSide).pointerInput(canvasUrl, videoOn) {
+                detectTapGestures(onTap = {
+                    if (canvasUrl != null && !videoOn) canvasOnly = true
+                })
+            }.pointerInput(Unit) {
                 val threshold = 80.dp.toPx()
                 while (true) awaitPointerEventScope {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
@@ -522,6 +534,12 @@ fun PlayerScreen(navController: NavController) {
             )
         }
         }
+        // The Canvas alone: any tap brings the player back.
+        if (canvasOnly) Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) { detectTapGestures(onTap = { canvasOnly = false }) }
+        )
 
         AnimatedVisibility(
             visible = showLyrics,

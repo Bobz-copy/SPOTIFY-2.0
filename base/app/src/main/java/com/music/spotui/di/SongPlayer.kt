@@ -453,6 +453,7 @@ object SongPlayer {
         scope.launch {
             transportLock.withLock {
                 if (gen != transportGen.get()) return@withLock
+                takeBackPlayback()
                 runCatching { kotlinx.coroutines.withTimeout(TRANSPORT_TIMEOUT_MS) { block { gen == transportGen.get() } } }
                     .onFailure { Log.w(TAG, "transport failed: ${it.message}") }
             }
@@ -563,6 +564,8 @@ object SongPlayer {
 
     /** Tracks shufflePlay plays without a context: the first one, plus up to 49 queued. */
     private const val SHUFFLE_QUEUE_MAX = 50
+    /** After pulling playback back, the page needs a moment before it takes commands. */
+    private const val PULL_BACK_SETTLE_MS = 600L
 
     /** Shuffle-play a list: Spotify picks the first track of its own shuffled context. */
     fun shufflePlay(songs: List<SongsModel>) {
@@ -796,9 +799,28 @@ object SongPlayer {
         return list
     }
 
+    /** The other device picked in Myspoti to play on; null: this phone. */
+    @Volatile private var chosenRemote: String? = null
+
+    /**
+     * Another device took playback without being picked here (the Spotify app opened on the
+     * same account, for instance): Myspoti's play, skip and previous then drove that device,
+     * where a free account's commands are refused. The music comes back to this phone first.
+     */
+    private suspend fun takeBackPlayback() {
+        val remote = _activeDevice.value ?: return
+        if (remote.id == chosenRemote) return
+        Log.i(TAG, "playback taken by ${remote.name}: pulled back here")
+        runCatching { api.devices.pullHere() }.onFailure { Log.w(TAG, "pull here failed: ${it.message}") }
+        _activeDevice.value = null
+        PlaybackService.setPlaybackDevice(false, remoteVolume)
+        kotlinx.coroutines.delay(PULL_BACK_SETTLE_MS)
+    }
+
     /** Move playback to [device] (Spotify Connect transfer). */
     fun transferTo(device: ConnectDevice) {
         Haptics.confirm()
+        chosenRemote = if (device.isSelf) null else device.id
         _activeDevice.value = if (device.isSelf) null else device
         command { if (device.isSelf) api.devices.pullHere() else api.devices.transfer(device.id) }
     }

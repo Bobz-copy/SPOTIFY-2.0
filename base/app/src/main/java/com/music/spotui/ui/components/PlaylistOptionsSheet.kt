@@ -66,6 +66,7 @@ import com.music.spotui.data.entity.ContextPageModel
 import com.music.spotui.ui.theme.AppAccent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -93,6 +94,23 @@ fun PlaylistOptionsSheet(
         if (mine) access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
     }
 
+    // Taps are sent one at a time, in order; a refused one puts back what Spotify really has.
+    val accessWrites = remember { kotlinx.coroutines.sync.Mutex() }
+    fun setAccess(target: PlaylistAccess) {
+        if (access == target) return
+        access = target
+        scope.launch {
+            accessWrites.withLock {
+                runCatching { MyspotiRuntime.api.playlists.setAccess(page.uri, target) }
+                    .onSuccess { onChanged() }
+                    .onFailure {
+                        access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
+                        android.widget.Toast.makeText(context, R.string.playlist_change_refused, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+            }
+        }
+    }
+
     fun run(block: suspend () -> Unit, after: () -> Unit = onChanged) = scope.launch {
         runCatching { block() }
             .onSuccess { after() }
@@ -108,13 +126,13 @@ fun PlaylistOptionsSheet(
                 Text(stringResource(R.string.playlist_access_title), color = Color(0xFFB3B3B3), fontSize = 13.sp,
                     modifier = Modifier.padding(20.dp, 12.dp, 20.dp, 4.dp))
                 AccessRow(Icons.Outlined.Public, R.string.playlist_access_public, R.string.playlist_access_public_detail, access == PlaylistAccess.PUBLIC) {
-                    access = PlaylistAccess.PUBLIC; run({ MyspotiRuntime.api.playlists.setAccess(page.uri, PlaylistAccess.PUBLIC) }, {})
+                    setAccess(PlaylistAccess.PUBLIC)
                 }
                 AccessRow(Icons.Outlined.Lock, R.string.playlist_access_private, R.string.playlist_access_private_detail, access == PlaylistAccess.PRIVATE) {
-                    access = PlaylistAccess.PRIVATE; run({ MyspotiRuntime.api.playlists.setAccess(page.uri, PlaylistAccess.PRIVATE) }, {})
+                    setAccess(PlaylistAccess.PRIVATE)
                 }
                 AccessRow(Icons.Outlined.Group, R.string.playlist_access_collaborative, R.string.playlist_access_collaborative_detail, access == PlaylistAccess.COLLABORATIVE) {
-                    access = PlaylistAccess.COLLABORATIVE; run({ MyspotiRuntime.api.playlists.setAccess(page.uri, PlaylistAccess.COLLABORATIVE) }, {})
+                    setAccess(PlaylistAccess.COLLABORATIVE)
                 }
                 Spacer(Modifier.height(8.dp))
                 OptionRow(Icons.Outlined.Delete, stringResource(R.string.local_delete_playlist)) { deleting = true }

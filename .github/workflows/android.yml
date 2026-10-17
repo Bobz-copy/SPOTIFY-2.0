@@ -32,8 +32,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # App unit tests, plus the JVM modules (API contracts, ad block, offline index, GraphQL
+      # errors). The live tests in host-cdp skip themselves without a browser to drive.
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDebugUnitTest :api:test :api-spotify:test :host-cdp:test
 
       - name: Debug APK
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}

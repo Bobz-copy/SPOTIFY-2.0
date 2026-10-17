@@ -16,6 +16,7 @@ import app.myspoti.host.android.NowPlayingInfo
 import app.myspoti.host.android.PlaybackService
 import com.music.spotui.data.entity.SongsModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -652,15 +653,31 @@ object SongPlayer {
         intentUntil = SystemClock.elapsedRealtime() + 3000
         onLibraryItem(uri, on)
         val track = uri.startsWith(SPOTIFY_TRACK_PREFIX)
-        command {
-            if (uri.startsWith("spotify:playlist:")) {
-                if (on) api.playlists.follow(uri) else api.playlists.unfollow(uri)
-            } else {
-                if (on) api.library.add(listOf(uri)) else api.library.remove(listOf(uri))
+        val write = libraryWrites.incrementAndGet()
+        scope.launch {
+            // One write at a time; a refused one is undone on screen if no newer tap replaced it.
+            libraryLock.withLock {
+                runCatching {
+                    if (uri.startsWith("spotify:playlist:")) {
+                        if (on) api.playlists.follow(uri) else api.playlists.unfollow(uri)
+                    } else {
+                        if (on) api.library.add(listOf(uri)) else api.library.remove(listOf(uri))
+                    }
+                }.onSuccess {
+                    if (track) likedChanges.value++
+                }.onFailure {
+                    Log.w(TAG, "library change failed: ${it.message}")
+                    if (write == libraryWrites.get()) {
+                        intentUntil = 0
+                        onLibraryItem(uri, !on)
+                        android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.library_change_failed, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
-            if (track) likedChanges.value++
         }
     }
+    private val libraryLock = kotlinx.coroutines.sync.Mutex()
+    private val libraryWrites = java.util.concurrent.atomic.AtomicInteger()
 
     // ── Music video: Spotify's own clips are not played by this engine; the YouTube
     // clips (MusicVideoController) are. These keep the player screen's contract. ──

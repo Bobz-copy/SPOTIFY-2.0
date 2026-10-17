@@ -74,28 +74,47 @@ object OfflineStore {
 
     fun init(context: Context) {
         if (::root.isInitialized) return
-        root = File(context.filesDir, "offline")
-        audioDir.mkdirs(); coverDir.mkdirs()
-        // The index lists only finished files; anything else in the folders is a leftover.
-        val list = readIndex()
-        val kept = list.filter { File(audioDir, it.file).isFile }
-        kept.forEach { tracks[it.trackId] = it }
-        if (kept.size != list.size) writeIndex()
-        val names = kept.map { it.file }.toSet()
-        audioDir.listFiles()?.forEach { if (it.name !in names) it.delete() }
-        val covers = kept.map { it.cover }.toSet()
-        coverDir.listFiles()?.forEach { if (it.name !in covers) it.delete() }
+        val plain = load(File(context.filesDir, "offline"))
         // Songs downloaded before encryption existed: encrypted once, in the background.
-        val plain = kept.map { File(audioDir, it.file) }
         if (plain.isNotEmpty()) Thread {
             plain.forEach { f -> runCatching { OfflineCrypto.encryptInPlace(context.applicationContext, f) }
                 .onFailure { android.util.Log.w("Offline", "could not encrypt ${f.name}: ${it.message}") } }
         }.apply { name = "offline-encrypt"; priority = Thread.MIN_PRIORITY }.start()
     }
 
+    /** Reads the downloads in [dir] into [tracks]; returns the audio files of the songs found. */
+    internal fun load(dir: File): List<File> {
+        root = dir
+        tracks.clear()
+        audioDir.mkdirs(); coverDir.mkdirs()
+        // The index lists only finished files; anything else in the folders is a leftover.
+        // An index that cannot be read fully is never trusted to delete anything: the last
+        // good copy is used instead, and if that fails too the files are all kept.
+        val read = readIndex(indexFile) ?: run {
+            if (indexFile.exists()) {
+                indexFile.copyTo(File(root, "index.corrupt-${System.currentTimeMillis()}.json"), overwrite = true)
+                runCatching { android.util.Log.w("Offline", "download index unreadable; using the backup, no file deleted") }
+            }
+            readIndex(backupFile)
+        }
+        val list = read?.tracks.orEmpty()
+        val kept = list.filter { File(audioDir, it.file).isFile }
+        kept.forEach { tracks[it.trackId] = it }
+        if (read != null && read.complete) {
+            if (kept.size != list.size || read.file == backupFile) writeIndex()
+            val names = kept.map { it.file }.toSet()
+            audioDir.listFiles()?.forEach { if (it.name !in names) it.delete() }
+            val covers = kept.map { it.cover }.toSet()
+            coverDir.listFiles()?.forEach { if (it.name !in covers) it.delete() }
+        }
+        return kept.map { File(audioDir, it.file) }
+    }
+
     val audioDir: File get() = File(root, "audio")
     val coverDir: File get() = File(root, "covers")
     private val indexFile: File get() = File(root, "index.json")
+    /** The index before the last write, the fallback when [indexFile] is damaged. */
+    private val backupFile: File get() = File(root, "index.json.bak")
     internal val pendingFile: File get() = File(root, "pending.json")
     val tmpDir: File get() = File(root, "tmp").apply { mkdirs() }
 
@@ -178,16 +197,25 @@ object OfflineStore {
     fun byLocalId(id: Long): OfflineTrack? =
         tracks.values.firstOrNull { localIdOf(it.trackId) == id }
 
-    private fun readIndex(): List<OfflineTrack> = runCatching {
-        val a = JSONArray(indexFile.readText())
-        (0 until a.length()).mapNotNull { runCatching { OfflineTrack.fromJson(a.getJSONObject(it)) }.getOrNull() }
-    }.getOrDefault(emptyList())
+    /** An index read from [file]; [complete] is false when some entries could not be read. */
+    internal class IndexRead(val file: File, val tracks: List<OfflineTrack>, val complete: Boolean)
+
+    /** [file] read, an empty index when it does not exist, null when it cannot be parsed. */
+    internal fun readIndex(file: File): IndexRead? {
+        if (!file.exists()) return if (file == indexFile && !backupFile.exists()) IndexRead(file, emptyList(), true) else null
+        return runCatching {
+            val a = JSONArray(file.readText())
+            val all = (0 until a.length()).map { runCatching { OfflineTrack.fromJson(a.getJSONObject(it)) }.getOrNull() }
+            IndexRead(file, all.filterNotNull(), all.none { it == null })
+        }.getOrNull()
+    }
 
     private fun writeIndex() {
         val a = JSONArray()
         tracks.values.forEach { a.put(it.toJson()) }
         val tmp = File(root, "index.json.tmp")
         tmp.writeText(a.toString())
+        if (indexFile.exists() && readIndex(indexFile)?.complete == true) indexFile.copyTo(backupFile, overwrite = true)
         tmp.renameTo(indexFile)
     }
 }

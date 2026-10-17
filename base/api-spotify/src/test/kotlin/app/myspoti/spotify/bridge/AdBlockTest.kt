@@ -14,6 +14,18 @@ class AdBlockTest {
     }
 
     @Test
+    fun `blocks foreign ad servers and spclient ad paths`() {
+        assertTrue(AdBlock.isBlocked("https://pubads.g.doubleclick.net/gampad/ads?x=1"))
+        assertTrue(AdBlock.isBlocked("https://imasdk.googleapis.com/js/sdkloader/ima3.js"))
+        assertTrue(AdBlock.isBlocked("https://spclient.wg.spotify.com/ads/v2/config"))
+        assertTrue(AdBlock.isBlocked("https://gew4-spclient.spotify.com/ad-logic/state/config?a=b"))
+        assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/track-playback/v1/devices"))
+        assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/metadata/4/track/abc?ads=1"))
+        assertFalse(AdBlock.isBlocked("https://api-partner.spotify.com/pathfinder/v2/query"))
+        assertFalse(AdBlock.isBlocked("https://open.spotify.com/ads/"))
+    }
+
+    @Test
     fun `base62 ids convert to metadata gids`() {
         // Pair checked against a captured metadata/4 request.
         assertTrue(app.myspoti.spotify.base62ToHex("55vPnuXfuzXNW75JpuSczF") == "a734c1d4e4d84c4093c32d5bce9797a3")

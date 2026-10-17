@@ -77,6 +77,8 @@ class ArtistViewModel constructor(private val repository: AppRepository = Graph.
         viewModelScope.launch(Dispatchers.IO) {
             repository.provideArtistOverview(artistName, artistId).collect { overview ->
                 _overview.value = overview
+                // A failed page may be loaded again (Try again, or opening it anew).
+                if (overview is Response.Error) loadedOverview = null
                 // Keep the legacy songs flow in sync (popular tracks) so any
                 // other consumer and the play/queue helpers still work.
                 if (overview is Response.Success) {

@@ -1,7 +1,9 @@
 package com.music.spotui.di
 
 import app.myspoti.host.android.MyspotiRuntime
+import app.myspoti.host.android.PlaybackService
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 
 /** Session-wide actions the screens trigger. */
@@ -20,6 +22,12 @@ object SessionActions {
         val app = context.applicationContext
         app.getSharedPreferences("myspoti_prefs", android.content.Context.MODE_PRIVATE)
             .edit().putBoolean("LoggedIn", false).remove("CurrentAccountName").apply()
+        // Nothing of the account keeps playing or showing: local songs, the clip, the notification.
+        LocalPlayer.stop()
+        com.music.spotui.video.MusicVideoController.clearSession()
+        PlaybackService.end()
+        runCatching { MyspotiRuntime.scope.launch { runCatching { MyspotiRuntime.api.player.pause() } } }
+        com.music.spotui.ui.screens.ContextViewModel.clearCache()
         com.music.spotui.data.api.Api.HomeCache.clear()
         com.music.spotui.data.api.Api.LikedCache.tracks = null
         com.music.spotui.data.api.ProfileCache.clearSession()

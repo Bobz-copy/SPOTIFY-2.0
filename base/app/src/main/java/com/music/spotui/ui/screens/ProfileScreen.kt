@@ -68,7 +68,9 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
     var following by remember(userId) { mutableStateOf<Boolean?>(null) }
     val me = com.music.spotui.data.api.ProfileCache.id == userId
     val scope = rememberCoroutineScope()
-    LaunchedEffect(userId) {
+    var attempt by remember(userId) { mutableStateOf(0) }
+    LaunchedEffect(userId, attempt) {
+        failed = false
         runCatching { MyspotiRuntime.api.users.profile(uri) }
             .onSuccess { profile = it }.onFailure { failed = true }
         if (!me) following = runCatching { MyspotiRuntime.api.users.isFollowing(listOf(uri)).single() }.getOrNull()
@@ -134,7 +136,7 @@ fun ProfileScreen(navController: NavController, userId: String, userName: String
                 }
             }
             p == null -> item {
-                Text(stringResource(R.string.home_error), color = Color.White, modifier = Modifier.padding(16.dp))
+                com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.page_load_failed)) { attempt++ }
             }
             p.publicPlaylists.isNotEmpty() -> {
                 item {

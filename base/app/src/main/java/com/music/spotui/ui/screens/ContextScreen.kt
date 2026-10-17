@@ -100,6 +100,9 @@ class ContextViewModel(
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Response<ContextPageModel>>?) = size > 12
         }.let { java.util.Collections.synchronizedMap(it) }
 
+        /** Signed out: the pages shown belong to the old account. */
+        fun clearCache() { recent.clear(); inflight.values.forEach { it.cancel() }; inflight.clear() }
+
         // Look-ups started by a touch (see pressHint), joined by the page when it opens.
         private val inflight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Unit>>()
         private val prefetchScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)

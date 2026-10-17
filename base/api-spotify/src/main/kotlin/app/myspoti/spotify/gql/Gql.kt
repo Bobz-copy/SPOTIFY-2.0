@@ -17,6 +17,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.UUID
@@ -51,9 +52,11 @@ class BridgeGql(private val bridge: Bridge, private val source: OpsSource) : Gql
     override suspend fun query(name: String, variables: JsonObject): JsonElement =
         bridge.call("gql.query", buildJsonObject {
             put("name", name)
+            // The page's own definitions say "mutation" for writes (never cached or deduplicated).
+            put("operation", if (isMutation(name)) "mutation" else "query")
             put("hash", ops.hash(name))
             put("variables", variables)
-        })
+        }).also { checkErrors(name, it) }
 }
 
 class HttpException(val code: Int, message: String) : Exception("HTTP $code: $message")
@@ -80,6 +83,9 @@ class SpotifyHttp(
 
     /** Sends a request with browser headers. Returns the status and body text. */
     suspend fun send(method: String, url: String, body: String? = null, contentType: String = JSON_TYPE, accept: String = "application/json"): Pair<Int, String> {
+        // The account's token only ever goes to Spotify itself.
+        val host = url.toHttpUrl().host
+        require(host == "spotify.com" || host.endsWith(".spotify.com")) { "not a Spotify host: $host" }
         val (w, c) = tokens()
         val builder = Request.Builder().url(url)
             .header("authorization", "Bearer ${w.access}")
@@ -159,6 +165,25 @@ class SpotifyHttp(
     }
 }
 
+/** Operations that change something: not replayed when their outcome is unknown, and any error fails them. */
+fun isMutation(name: String): Boolean =
+    Regex("^(add|remove|move|update|delete|set|create|follow|unfollow|pin|unpin|edit|save|ban|unban|clear)[A-Z]").containsMatchIn(name)
+
+/**
+ * Throws when [response] reports a failure: errors without data for a read, any error or
+ * no data at all for a mutation, where partial data would otherwise pass for a success.
+ */
+fun checkErrors(name: String, response: JsonElement) {
+    val obj = response as? JsonObject ?: return
+    val errors = obj["errors"]?.let { it as? kotlinx.serialization.json.JsonArray }?.takeIf { it.isNotEmpty() }
+    val data = obj["data"]?.takeIf { it !is kotlinx.serialization.json.JsonNull } as? JsonObject
+    val failed = if (isMutation(name)) errors != null || data == null
+    else errors != null && data == null
+    if (!failed) return
+    val message = runCatching { errors!!.first().jsonObject["message"]!!.jsonPrimitive.content }.getOrDefault("no result")
+    throw GqlException(name, message)
+}
+
 /** GraphQL straight to api-partner: fastest, parallel, independent of the page. Falls back to [fallback]. */
 class HttpGql(private val http: SpotifyHttp, private val source: OpsSource, private val fallback: Gql) : Gql {
     private val ops get() = source.ops
@@ -177,16 +202,26 @@ class HttpGql(private val http: SpotifyHttp, private val source: OpsSource, priv
                 }
             }
         }
-        val (code, text) = runCatching { http.send("POST", "https://api-partner.spotify.com/pathfinder/v2/query", body.toString()) }
-            .getOrElse { fellBack.incrementAndGet(); return fallback.query(name, variables) }
-        if (code != 200) { fellBack.incrementAndGet(); return fallback.query(name, variables) }
+        val mutation = isMutation(name)
+        val (code, text) = try {
+            http.send("POST", "https://api-partner.spotify.com/pathfinder/v2/query", body.toString())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: java.io.IOException) {
+            // The write may have reached Spotify before the connection broke: never sent twice.
+            if (mutation) throw GqlException(name, "no answer: ${e.message}")
+            fellBack.incrementAndGet(); return fallback.query(name, variables)
+        } catch (e: Exception) {
+            fellBack.incrementAndGet(); return fallback.query(name, variables)
+        }
+        if (code != 200) {
+            // A server error may come after the write was done; a refusal (4xx) was not applied.
+            if (mutation && code >= 500) throw GqlException(name, "HTTP $code")
+            fellBack.incrementAndGet(); return fallback.query(name, variables)
+        }
         direct.incrementAndGet()
         val response = Bridge.json.parseToJsonElement(text)
-        val errors = (response as? JsonObject)?.get("errors")
-        if (errors != null && (response as JsonObject)["data"].let { it == null || it is kotlinx.serialization.json.JsonNull }) {
-            val message = runCatching { errors.jsonArray.first().jsonObject["message"]!!.jsonPrimitive.content }.getOrDefault("error")
-            throw GqlException(name, message)
-        }
+        checkErrors(name, response)
         return response
     }
 }

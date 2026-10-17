@@ -95,6 +95,17 @@ class MainActivity : AppCompatActivity() {
         handle(intent)
     }
 
+    // The clip player follows the app on screen: paused with its side jobs in the background.
+    override fun onStart() {
+        super.onStart()
+        com.music.spotui.video.MusicVideoController.onForeground()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) com.music.spotui.video.MusicVideoController.onBackground()
+    }
+
     override fun onDestroy() {
         // The process-wide WebView lives in this activity's root while attached:
         // detach it, or view.parent -> root keeps the destroyed activity (and its

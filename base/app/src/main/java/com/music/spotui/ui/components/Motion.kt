@@ -28,7 +28,7 @@ fun Modifier.pressable(
 ): Modifier = composed {
     val source = remember { MutableInteractionSource() }
     val hinted = if (onPressHint == null) Modifier else Modifier.pressHint(onPressHint)
-    hinted.then(pressScale(source, pressedScale)).clickable(source, indication = null, enabled = enabled, onClick = onClick)
+    hinted.then(pressScale(source, pressedScale)).clickable(source, indication = null, enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
 }
 
 /**

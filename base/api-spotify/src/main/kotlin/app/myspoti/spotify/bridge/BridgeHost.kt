@@ -39,14 +39,33 @@ object BridgeScript {
  * [app.myspoti.spotify.SpotifyPlayer] starts the next song.
  */
 object AdBlock {
-    val blockedHosts = listOf("adstudio-assets.scdn.co")
+    /**
+     * Ad audio and ad servers. Outside Switzerland ads also come from Google's ad servers
+     * (audio and video ads) and the ad event tracker, so these are refused too.
+     */
+    val blockedHosts = listOf(
+        "adstudio-assets.scdn.co",
+        "adeventtracker.spotify.com",
+        "pubads.g.doubleclick.net",
+        "securepubads.g.doubleclick.net",
+        "googleads.g.doubleclick.net",
+        "pagead2.googlesyndication.com",
+        "imasdk.googleapis.com",
+    )
+
+    /** Ad endpoints on Spotify's api hosts (spclient): ad slots, ad logic and ad delivery. */
+    val blockedPaths = listOf("/ads/", "/ad-logic/")
 
     /** Formats only ads use: the ad mp3 links and the ad manifests. Songs and episodes use others. */
     val adFormats = setOf("manifest_urls_audio_ad", "file_urls_mp3")
 
     fun isBlocked(url: String): Boolean {
-        val host = url.substringAfter("://").substringBefore('/').substringBefore(':')
-        return blockedHosts.any { host == it || host.endsWith(".$it") }
+        val rest = url.substringAfter("://")
+        val host = rest.substringBefore('/').substringBefore('?').substringBefore(':').lowercase()
+        if (blockedHosts.any { host == it || host.endsWith(".$it") }) return true
+        if (!host.endsWith(".spotify.com") || "spclient" !in host) return false
+        val path = "/" + rest.substringAfter('/', "").substringBefore('?')
+        return blockedPaths.any { path.startsWith(it) }
     }
 
     /** The player's registration (POST track-playback/v1/devices), to rewrite with [withoutAdFormats]. */

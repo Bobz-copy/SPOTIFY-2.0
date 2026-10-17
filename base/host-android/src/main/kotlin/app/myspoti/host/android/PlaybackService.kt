@@ -375,6 +375,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
             svc.show(info)
         }
 
+        /** Signed out: the notification and the media session go, nothing of the account stays. */
+        fun end() {
+            current = null
+            instance?.let { svc ->
+                svc.handler.removeCallbacksAndMessages(null)
+                ServiceCompat.stopForeground(svc, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                svc.foreground = false
+                svc.session.isActive = false
+                svc.stopSelf()
+            }
+        }
+
         /** [remote] when a Connect device plays; [volume] 0..100. */
         fun setPlaybackDevice(remote: Boolean, volume: Int) { instance?.setRemote(remote, volume) }
     }

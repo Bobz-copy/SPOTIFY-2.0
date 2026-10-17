@@ -298,4 +298,12 @@
     <string name="more_like_this">Dans le même style</string>
     <string name="library_sort_recents">Récents</string>
     <string name="library_sort_recently_added">Ajoutés récemment</string>
+    <string name="library_change_failed">Impossible de mettre à jour ta bibliothèque, réessaie</string>
+    <string name="a11y_close_player">Fermer le lecteur</string>
+    <string name="a11y_devices">Appareils</string>
+    <string name="a11y_share">Partager</string>
+    <string name="search_failed">La recherche a échoué. Vérifie ta connexion.</string>
+    <string name="retry_button">Réessayer</string>
+    <string name="page_load_failed">Impossible de charger cette page.\nVérifie ta connexion et réessaie.</string>
+    <string name="jam_paste_link">Rejoindre avec un lien copié</string>
 </resources>

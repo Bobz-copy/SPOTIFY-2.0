@@ -12,8 +12,10 @@ object Graph {
 
     fun init(application: Application) {
         app = application
+        // The data saver first: on a metered network with it on, nothing may go out, not even the page.
+        com.music.spotui.data.DataSaver.init(application)
         // The Spotify session: hidden Web Player + API (operation hashes refresh themselves).
-        MyspotiRuntime.start(application)
+        MyspotiRuntime.start(application, loadPage = !com.music.spotui.data.DataSaver.active)
         // The streaming quality the user chose, set on the player at every page load.
         com.music.spotui.data.preferences.applyStreamingQuality(com.music.spotui.data.preferences.getStreamingQuality(application))
         com.music.spotui.data.local.ListenHistory.init(application)
@@ -25,7 +27,6 @@ object Graph {
         com.music.spotui.data.offline.OfflineCollections.refreshAll(application)
         com.music.spotui.data.local.LocalPlaylists.init(application)
         com.music.spotui.data.local.LibraryOrder.init(application)
-        com.music.spotui.data.DataSaver.init(application)
         runCatching { com.music.spotui.data.DataSaverGlide.install(application) }
         com.music.spotui.data.offline.OfflineDownloader.resumePending()
     }

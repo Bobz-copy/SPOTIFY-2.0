@@ -298,4 +298,12 @@
     <string name="more_like_this">More like this</string>
     <string name="library_sort_recents">Recents</string>
     <string name="library_sort_recently_added">Recently added</string>
+    <string name="library_change_failed">Could not update your library, try again</string>
+    <string name="a11y_close_player">Close the player</string>
+    <string name="a11y_devices">Devices</string>
+    <string name="a11y_share">Share</string>
+    <string name="search_failed">Search failed. Check your connection.</string>
+    <string name="retry_button">Try again</string>
+    <string name="page_load_failed">Couldn\'t load this page.\nCheck your connection and try again.</string>
+    <string name="jam_paste_link">Join with a copied link</string>
 </resources>

@@ -25,7 +25,8 @@ object MyspotiRuntime {
     val isStarted: Boolean get() = ::host.isInitialized
     val loginRequired: StateFlow<Boolean> get() = host.loginRequired
 
-    fun start(context: Context) {
+    /** [loadPage] false (data saver on a metered network): nothing goes out until [resume]. */
+    fun start(context: Context, loadPage: Boolean = true) {
         if (isStarted) return
         val updater = app.myspoti.spotify.gql.GqlOpsUpdater(okhttp3.OkHttpClient(), java.io.File(context.filesDir, "spotify/gql-ops.json"))
         host = WebPlayerHost(context)
@@ -42,6 +43,7 @@ object MyspotiRuntime {
                     "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} url=${host.url.value.take(60)}")
             }
         }
+        if (!loadPage) return
         host.load()
         // New Spotify build: pick up its operation hashes (public bundles, no account).
         scope.launch {

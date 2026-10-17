@@ -2,6 +2,17 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.0-beta.6
+
+- **Fewer ads abroad**: ads from other countries' ad servers are blocked too; an ad that still gets through is muted and skipped.
+- **A pause stays a pause**, even right at the end of a song.
+- **Downloads are safe**: a damaged download list no longer deletes your downloaded songs.
+- **Changes Spotify refuses are undone on screen** (likes, playlist visibility), with a message.
+- **Search** keeps your query when you come back, and says when it is loading, empty or failed (with Try again). Artist and profile pages can be reloaded too.
+- **Lyrics button** in the player; **Jam**: join with a copied link; sharing an episode works.
+- **Logout** stops everything (local songs, video, notification); the data saver applies from launch.
+- Player buttons are named for TalkBack.
+
 ## 2.0.0-beta.5
 
 - **Encrypted downloads**: downloaded songs only play in Myspoti, on your phone.

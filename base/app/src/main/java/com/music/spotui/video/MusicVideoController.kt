@@ -529,7 +529,8 @@ object MusicVideoController {
                 }
             }
         }
-    @Volatile private var appVisible = true
+    // Set by the activity's onStart / onStop; nothing is on screen before the first start.
+    @Volatile private var appVisible = false
     /** The app is on screen (look-ups at track start then, not in the background). */
     val inForeground: Boolean get() = appVisible
 
@@ -768,6 +769,19 @@ object MusicVideoController {
             if (on.value && appVisible) (state.value as? State.Ready)?.let(::start)
             else if (!EnergySettings.state.value.policy.allowBackgroundLookups) player?.stop()
         }
+    }
+
+    /** Signed out: no clip, no lookups, nothing kept from the account's songs. */
+    fun clearSession() {
+        wantVideo = false
+        on.value = false
+        prepareJob?.cancel()
+        prefetchJobs.values.forEach { it.cancel() }
+        stop()
+        player?.stop()
+        currentTrackId = ""
+        warmedFor = null
+        state.value = State.Idle
     }
 
     /** App in the background: the video pauses (nothing to show), video mode stays. */

@@ -97,7 +97,8 @@ fun SearchScreen(navController: NavController) {
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
     ) {
-        SumUpSearchScreen(navController = navController, searchResults, searchViewModel)
+        SumUpSearchScreen(navController = navController, searchResults, searchViewModel,
+            loading = results is Response.Loading, failed = results is Response.Error)
     }
 }
 
@@ -108,12 +109,12 @@ fun SumUpSearchScreen(
     navController: NavController,
     results: SearchResults,
     searchViewModel: SearchViewModel,
+    loading: Boolean = false,
+    failed: Boolean = false,
 ) {
     val context = LocalContext.current
 
-    var text by remember {
-        mutableStateOf("")
-    }
+    val text = searchViewModel.query
     // Recents are the *items opened from results* (songs/artists/albums), not the
     // typed queries, and only appear once the user taps into the search bar.
     var searchFocused by remember { mutableStateOf(false) }
@@ -122,7 +123,7 @@ fun SumUpSearchScreen(
     }
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
     // Spotify's filter chips: Top (mixed), or one kind of result.
-    var filter by remember { mutableStateOf(SearchFilter.Top) }
+    val filter = searchViewModel.filter
     menuSong?.let { sel ->
         SongOptionsSheet(
             song = sel,
@@ -172,7 +173,6 @@ fun SumUpSearchScreen(
                 text,
                 onFocusChange = { searchFocused = it },
             ) {
-                text = it
                 searchViewModel.search(it)
             }
         }
@@ -275,7 +275,7 @@ fun SumUpSearchScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2A2A2A))
-                                .pressable(0.96f) { text = q; searchViewModel.search(q) }
+                                .pressable(0.96f) { searchViewModel.search(q) }
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                         ) {
                             Icon(androidx.compose.material.icons.Icons.Default.Search, null, tint = Color(0xFFB3B3B3), modifier = Modifier.size(14.dp))
@@ -285,7 +285,11 @@ fun SumUpSearchScreen(
                     }
                 }
             }
-            item { SearchFilterChips(filter) { filter = it } }
+            item { SearchFilterChips(filter) { searchViewModel.filter = it } }
+            // Loading, nothing found and a failure each say what they are (never an empty page).
+            if (filter != SearchFilter.Profiles && mixed.isEmpty() && results.shows.isEmpty() && results.episodes.isEmpty()) item {
+                SearchStatus(text, loading, failed) { searchViewModel.retry() }
+            }
             if (filter == SearchFilter.Profiles) {
                 items(profiles.size) { i ->
                     val u = profiles[i]
@@ -374,6 +378,19 @@ sealed class SearchRow {
 }
 
 /** The search filter chips (official labels). Podcasts shows shows + episodes. */
+@Composable
+private fun SearchStatus(query: String, loading: Boolean, failed: Boolean, onRetry: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(24.dp, 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        when {
+            loading -> androidx.compose.material3.CircularProgressIndicator(color = com.music.spotui.ui.theme.AppAccent)
+            failed -> com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.search_failed), Modifier.padding(0.dp), onRetry)
+            else -> Text(stringResource(R.string.assisted_curation_search_empty_view_no_result_title, query.trim()),
+                color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+}
+
 enum class SearchFilter(@androidx.annotation.StringRes val label: Int) {
     Top(R.string.assisted_curation_search_filter_top),
     Songs(R.string.assisted_curation_search_filter_songs),

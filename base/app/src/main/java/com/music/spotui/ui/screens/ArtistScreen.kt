@@ -99,10 +99,16 @@ fun ArtistScreen(navController: NavController, artistName: String, artistId: Str
     ) {
         when (val state = overview) {
             is Response.Loading -> Loader(SkeletonKind.Header)
-            is Response.Error -> ArtistOverviewContent(
-                navController, artistViewModel,
-                ArtistOverviewModel(name = artistName), artistName,
-            )
+            is Response.Error -> androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                    stringResource(R.string.accessibility_navigate_back), tint = Color.White,
+                    modifier = Modifier.pressable(0.96f) { navController.navigateUp() }.padding(16.dp).size(26.dp),
+                )
+                com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.page_load_failed)) {
+                    artistViewModel.loadArtistOverview(artistName, artistId)
+                }
+            }
             is Response.Success -> ArtistOverviewContent(
                 navController, artistViewModel, state.data, artistName,
             )

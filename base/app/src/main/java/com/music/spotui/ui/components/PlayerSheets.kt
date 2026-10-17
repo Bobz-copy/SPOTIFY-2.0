@@ -311,6 +311,18 @@ private fun JamSection(onDismiss: () -> Unit) {
                             if (token == null || runCatching { jam.join(token) }.isFailure) failed() else onDismiss()
                         }
                     }
+                    // No scanner on this phone (Play services missing or too old): say so.
+                    .addOnFailureListener { failed() }
+            }.padding(vertical = 10.dp))
+        // Join: an invite link copied from a message.
+        Text(stringResource(R.string.jam_paste_link), color = Green, fontSize = 15.sp,
+            modifier = Modifier.fillMaxWidth().clickable {
+                val clip = context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip
+                val raw = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                scope.launch {
+                    val token = JamLinks.token(raw)
+                    if (token == null || runCatching { jam.join(token) }.isFailure) failed() else onDismiss()
+                }
             }.padding(vertical = 10.dp))
     }
 }

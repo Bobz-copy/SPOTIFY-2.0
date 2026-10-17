@@ -74,6 +74,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.music.spotui.ui.components.pressable
+import androidx.compose.material.icons.outlined.Lyrics
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.setValue
@@ -446,6 +447,7 @@ fun PlayerScreen(navController: NavController) {
                 context = context,
                 onDevices = { showDevices = true },
                 onQueue = { showQueue = true },
+                onLyrics = { showLyrics = true },
             )
             Spacer(modifier = Modifier.height(20.dp))
         }
@@ -569,7 +571,7 @@ fun PlayerTopBar(
             },
             painter = painterResource(id = R.drawable.ic_down),
             tint = Color.White,
-            contentDescription = "")
+            contentDescription = stringResource(R.string.a11y_close_player))
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -827,28 +829,6 @@ fun CustomSlider(
 }
 
 @Composable
-fun PlayerEndInfo() {
-    Row(verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(20.dp)){
-        Icon(
-            modifier = Modifier
-                .size(22.dp),
-            painter = painterResource(id = R.drawable.ic_devices),
-            tint = Color.White,
-            contentDescription = "")
-        Icon(
-            modifier = Modifier
-                .size(16.dp),
-            painter = painterResource(id = R.drawable.ic_share),
-            tint = Color.White,
-            contentDescription = "")
-    }
-}
-
-@Composable
 fun PlayerFull(
     songPlayingState: Boolean,
     playerViewModel: PlayerViewModel,
@@ -892,7 +872,7 @@ fun PlayerFull(
                 Color.White
             },
             painter = painterResource(id = R.drawable.ic_player_shuffle),
-            contentDescription = "")
+            contentDescription = stringResource(if (shuffle) R.string.notif_shuffle_disable else R.string.notif_shuffle_enable))
         
         Icon(
             modifier = Modifier
@@ -905,7 +885,7 @@ fun PlayerFull(
             ,
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_back),
-            contentDescription = "")
+            contentDescription = stringResource(R.string.np_content_desc_prev))
         androidx.compose.foundation.layout.Box(
             modifier = Modifier
                 // requiredSize forces an exact 64×64 square even if the parent Column
@@ -952,7 +932,7 @@ fun PlayerFull(
                 else
                     painterResource(id = R.drawable.play_svgrepo_com)
                 ,
-                contentDescription = "")
+                contentDescription = stringResource(if (songPlayingState) R.string.notif_action_pause else R.string.notif_action_play))
         }
 
         Icon(
@@ -965,7 +945,7 @@ fun PlayerFull(
             ,
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_skip),
-            contentDescription = "")
+            contentDescription = stringResource(R.string.np_content_desc_next))
         Icon(
             modifier = Modifier
                 .size(20.dp)
@@ -991,6 +971,7 @@ fun PlayerConnectRow(
     context: Context,
     onDevices: () -> Unit,
     onQueue: () -> Unit,
+    onLyrics: () -> Unit = {},
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1025,6 +1006,14 @@ fun PlayerConnectRow(
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Lyrics also show below the player; this button makes them easy to find.
+            Icon(
+                imageVector = androidx.compose.material.icons.Icons.Outlined.Lyrics,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp).pressable { onLyrics() },
+                contentDescription = stringResource(R.string.lyrics_fullscreen),
+            )
+            Spacer(modifier = Modifier.width(24.dp))
             Icon(
                 painter = painterResource(id = R.drawable.ic_share),
                 tint = Color.White,
@@ -1034,11 +1023,14 @@ fun PlayerConnectRow(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                     ) {
-                        val id = SongPlayer.currentTrackId
-                        if (id.isBlank()) return@clickable
+                        // Songs and episodes alike: the link follows what plays (spotify:<kind>:<id>).
+                        val parts = SongPlayer.nowPlaying.value.uri.split(':')
+                        val link = if (parts.size == 3 && parts[0] == "spotify") "https://open.spotify.com/${parts[1]}/${parts[2]}"
+                            else SongPlayer.currentTrackId.takeIf { it.isNotBlank() }?.let { "https://open.spotify.com/track/$it" }
+                        if (link == null) return@clickable
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$id")
+                            putExtra(Intent.EXTRA_TEXT, link)
                         }
                         context.startActivity(Intent.createChooser(send, context.getString(R.string.action_share_label)))
                     },

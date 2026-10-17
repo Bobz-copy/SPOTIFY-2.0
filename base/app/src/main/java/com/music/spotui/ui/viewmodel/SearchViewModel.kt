@@ -2,6 +2,8 @@ package com.music.spotui.ui.viewmodel
 
 import com.music.spotui.di.Graph
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.spotui.data.api.Response
@@ -34,6 +36,13 @@ class SearchViewModel constructor(private val repository: AppRepository = Graph.
     }
 
     private var searchJob: Job? = null
+
+    /** What is typed and the chip picked: kept here so they are still there back from a result. */
+    var query by androidx.compose.runtime.mutableStateOf("")
+    var filter by androidx.compose.runtime.mutableStateOf(com.music.spotui.ui.screens.SearchFilter.Top)
+
+    /** Runs the last search again (after an error). */
+    fun retry() = search(query)
 
     init {
         // Start empty — results come from live searches, not the rate-limited
@@ -70,11 +79,14 @@ class SearchViewModel constructor(private val repository: AppRepository = Graph.
     }
 
     fun search(query: String) {
+        this.query = query
         searchJob?.cancel()
         searchJob = viewModelScope.launch(Dispatchers.IO) {
             delay(150) // short debounce for snappy real-time results
             repository.searchEverything(query).collect { result ->
-                _results.value = result
+                // While the next results load, the last ones stay on screen.
+                val keep = result is Response.Loading && (_results.value as? Response.Success)?.data?.let { it != SearchResults() } == true
+                if (!keep) _results.value = result
                 // Keep the legacy songs flow in sync for any remaining consumers.
                 _songs.value = when (result) {
                     is Response.Success -> Response.Success(result.data.songs)

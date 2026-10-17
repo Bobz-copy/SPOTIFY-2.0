@@ -2,6 +2,10 @@
 
 Every change, release by release. The short version is in [CHANGELOG.md](../CHANGELOG.md), which the app and the GitHub releases show.
 
+## Unreleased
+
+- **Notification icon**: the media notification (status bar, Samsung Now Bar) showed the engine's generic two-note icon; the app now ships its wave mark under the same resource name, so it replaces it.
+
 ## 2.0.0-beta.6
 
 - **Ads in other countries**: Google's ad servers (audio and video ads), the ad event tracker and Spotify's ad endpoints (`/ads/`, `/ad-logic/` on spclient) are refused. An ad that plays anyway is muted at once and skipped after 1.5 s; if the page holds on to it after one reload, it stays muted until it ends. The volume comes back after the ad, and after a restart if the app was closed during one.

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Status bar mark: the launcher's wave line. -->
+<!-- Status bar and Samsung Now Bar mark: the launcher's wave line. Same name as the
+     engine's generic icon (host-android), so the app's own replaces it in the notification. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
     android:viewportWidth="24" android:viewportHeight="24">

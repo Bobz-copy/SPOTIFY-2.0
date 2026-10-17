@@ -1312,23 +1312,10 @@ private fun CanvasVideo(url: String, playing: Boolean, onFirstFrame: () -> Unit,
         // factory runs once; a new track's clip gets a new player, so rebind it here.
         update = { it.player = exo },
         factory = { ctx ->
-            androidx.media3.ui.PlayerView(ctx).apply {
-                // Strip ALL chrome: no controller, no buffering spinner, and no
-                // artwork/placeholder icon (that "play icon" overlay) — just video.
-                // The controller goes off before the player is set: a player given to a
-                // view with its controller on shows the prev / next buttons for a moment.
-                useController = false
-                controllerAutoShow = false
-                setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_NEVER)
+            // Inflated: the surface type (texture view) can only be set from XML.
+            (android.view.LayoutInflater.from(ctx).inflate(R.layout.canvas_player_view, null) as androidx.media3.ui.PlayerView).apply {
                 setArtworkDisplayMode(androidx.media3.ui.PlayerView.ARTWORK_DISPLAY_MODE_OFF)
-                setUseArtwork(false)
                 setDefaultArtwork(null)
-                hideController()
-                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                // Until a clip's first frame, show the screen behind, not a black shutter.
-                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
-                setKeepContentOnPlayerReset(true)
                 player = exo
             }
         },

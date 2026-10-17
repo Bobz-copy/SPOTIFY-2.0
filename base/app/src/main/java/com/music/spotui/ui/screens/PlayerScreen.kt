@@ -1261,9 +1261,10 @@ private fun CanvasVideo(url: String, playing: Boolean, modifier: Modifier = Modi
         update = { it.player = exo },
         factory = { ctx ->
             androidx.media3.ui.PlayerView(ctx).apply {
-                player = exo
                 // Strip ALL chrome: no controller, no buffering spinner, and no
                 // artwork/placeholder icon (that "play icon" overlay) — just video.
+                // The controller goes off before the player is set: a player given to a
+                // view with its controller on shows the prev / next buttons for a moment.
                 useController = false
                 controllerAutoShow = false
                 setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_NEVER)
@@ -1276,6 +1277,7 @@ private fun CanvasVideo(url: String, playing: Boolean, modifier: Modifier = Modi
                 // Until a clip's first frame, show the screen behind, not a black shutter.
                 setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                 setKeepContentOnPlayerReset(true)
+                player = exo
             }
         },
     )

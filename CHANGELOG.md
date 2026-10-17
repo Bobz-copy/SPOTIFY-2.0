@@ -8,7 +8,6 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **Steadier player**: play, pause and skips go one at a time (fast taps no longer jam it), and a song that did not start is asked again.
 - **No more "pop" between songs**: a very short fade on every skip.
 - **Smart shuffle from the player**: tap shuffle twice on a playlist or Liked Songs.
-- **Word-by-word lyrics from Apple Music** when they exist, replacing line-by-line ones as soon as they arrive.
 - **Remote control**: with another device playing, the notification and the slider keep up.
 - **Sleep timer "end of track"** works with episodes, local files and repeat one; artist pages load the whole discography.
 - **Artist discography** (Releases) shows albums and singles again.

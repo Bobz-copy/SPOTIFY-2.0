@@ -32,7 +32,7 @@
     <string name="verified_artist">Artista verificato</string>
     <string name="lyrics_share">Condividi il testo</string>
     <string name="lyrics_extra_title">Altre fonti per i testi</string>
-    <string name="lyrics_extra_summary">NetEase e Genius, quando né Spotify né Apple Music hanno il testo</string>
+    <string name="lyrics_extra_summary">NetEase e Genius, quando Spotify non ha il testo</string>
     <string name="lyrics_reload">Ricarica il testo</string>
     <string name="lyrics_fullscreen">Apri il testo a schermo intero</string>
     <string name="browse_all">Sfoglia tutto</string>

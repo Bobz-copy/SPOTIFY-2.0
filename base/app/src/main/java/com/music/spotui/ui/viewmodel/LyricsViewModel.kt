@@ -33,15 +33,6 @@ class LyricsViewModel constructor() : ViewModel() {
 
     private var loadedKey: String? = null
 
-    init {
-        // Apple's word-by-word lyrics came after the first ones: shown in their place.
-        viewModelScope.launch {
-            LyricsApi.upgrades.collect { (key, lyrics) ->
-                if (key == loadedKey && _state.value !is State.Loading) _state.value = loadedState(lyrics)
-            }
-        }
-    }
-
     fun load(track: LyricsApi.Track, force: Boolean = false) {
         val key = track.key
         if (!force && loadedKey == key && _state.value !is State.NotFound) return

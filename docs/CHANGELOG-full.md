@@ -9,7 +9,6 @@ Every change, release by release. The short version is in [CHANGELOG.md](../CHAN
 - **Transport commands** (play, pause, next, previous, skip to) run one at a time and only the newest counts; a play is checked against the page's state and sent once more when it did not take (the old song kept playing).
 - **Fades**: every skip or play lowers the sound over ~0.1 s and brings it back once the next song plays (always within 4 s): the "pop" heard in the phone's speaker is gone. Ads and user volume changes are taken into account.
 - **Smart shuffle in the player**: the shuffle button goes off → shuffle → smart shuffle on playlists and Liked Songs; the smart mix is shared with the playlist page.
-- **Lyrics**: Apple Music's word-synced lyrics (LyricsPlus) are always looked up; Spotify's show first and are replaced when Apple's arrive. The dead LyricsPlus mirror is gone; the "more sources" setting now covers NetEase and Genius.
 - **Remote control (#40)**: while another device plays, the state is read every 3 s.
 - **Sleep timer "end of track"**: based on the media uri and the clock, so episodes, local files and repeat one stop too.
 - **Artist pages** load every page of the discography (up to 300 releases).

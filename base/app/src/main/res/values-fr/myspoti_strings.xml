@@ -32,7 +32,7 @@
     <string name="verified_artist">Artiste vérifié</string>
     <string name="lyrics_share">Partager des paroles</string>
     <string name="lyrics_extra_title">Plus de sources de paroles</string>
-    <string name="lyrics_extra_summary">NetEase et Genius, quand ni Spotify ni Apple Music n\'ont les paroles</string>
+    <string name="lyrics_extra_summary">NetEase et Genius, quand Spotify n\'a pas les paroles</string>
     <string name="lyrics_reload">Recharger les paroles</string>
     <string name="lyrics_fullscreen">Ouvrir les paroles en plein écran</string>
     <string name="browse_all">Parcourir tout</string>

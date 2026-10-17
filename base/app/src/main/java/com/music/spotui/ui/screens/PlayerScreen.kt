@@ -74,6 +74,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.music.spotui.ui.components.pressable
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.setValue
@@ -836,6 +837,8 @@ fun PlayerFull(
     repeat: Boolean,
     queueSongs: List<SongsModel>
 ) {
+    val smartOn = SmartShuffle.on.value != null && SmartShuffle.on.value == SongPlayer.nowPlaying.value.contextUri
+    val smartScope = androidx.compose.runtime.rememberCoroutineScope()
 
 
 
@@ -851,26 +854,36 @@ fun PlayerFull(
                 .size(25.dp)
                 .drawWithContent {
                     drawContent()
-                    if (shuffle) drawCircle(com.music.spotui.ui.theme.AppAccent, radius = 2.dp.toPx(),
+                    if (shuffle || smartOn) drawCircle(com.music.spotui.ui.theme.AppAccent, radius = 2.dp.toPx(),
                         center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height + 7.dp.toPx()))
                 }
                 .pressable {
-                    if (shuffle) {
-                        playerViewModel.updateShuffleState(false)
-                    } else {
-                        playerViewModel.updateShuffleState(true)
+                    // As in Spotify: off → shuffle → smart shuffle (playlists, Liked Songs) → off.
+                    val ctx = SongPlayer.nowPlaying.value.contextUri
+                    when {
+                        smartOn -> { SmartShuffle.on.value = null; playerViewModel.updateShuffleState(false) }
+                        shuffle && SmartShuffle.canPlay(ctx) -> {
+                            SmartShuffle.on.value = ctx
+                            android.widget.Toast.makeText(context, context.getString(R.string.smart_shuffle_on), android.widget.Toast.LENGTH_SHORT).show()
+                            smartScope.launch {
+                                if (!SmartShuffle.startFor(ctx, SongPlayer.currentTrackId)) {
+                                    SmartShuffle.on.value = null
+                                    android.widget.Toast.makeText(context, context.getString(R.string.page_load_failed), android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        else -> playerViewModel.updateShuffleState(!shuffle)
                     }
-
                 }
             ,
-            tint = if (shuffle){
+            tint = if (shuffle || smartOn){
                 com.music.spotui.ui.theme.AppAccent
             }
             else{
                 Color.White
             },
             painter = painterResource(id = R.drawable.ic_player_shuffle),
-            contentDescription = stringResource(if (shuffle) R.string.notif_shuffle_disable else R.string.notif_shuffle_enable))
+            contentDescription = stringResource(when { smartOn -> R.string.notif_shuffle_disable_smart; shuffle -> R.string.notif_shuffle_disable; else -> R.string.notif_shuffle_enable }))
         
         Icon(
             modifier = Modifier

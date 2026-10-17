@@ -16,6 +16,8 @@ import app.myspoti.host.android.NowPlayingInfo
 import app.myspoti.host.android.PlaybackService
 import com.music.spotui.data.entity.SongsModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
@@ -30,6 +32,14 @@ import java.util.concurrent.ConcurrentHashMap
 object SongPlayer {
     private const val SPOTIFY_TRACK_PREFIX = "spotify:track:"
     private const val PENDING_MS = 6000L
+    /** The end-of-track timer pauses this close to the end (before the next item starts). */
+    private const val END_OF_TRACK_MARGIN_MS = 600L
+    /** How often the state is read again while another device plays. */
+    private const val REMOTE_REFRESH_MS = 3_000L
+    /** A transport command that has not answered by then is given up (the next one runs). */
+    private const val TRANSPORT_TIMEOUT_MS = 15_000L
+    /** How long a play has to show up in the page's state before it is sent again. */
+    private const val PLAY_CHECK_MS = 4_000L
     /** "Next" taps closer than this are sent as one jump. */
     private const val SKIP_BURST_MS = 350L
     /** After a local file starts, engine states this recent still predate the pause. */
@@ -125,6 +135,18 @@ object SongPlayer {
             com.music.spotui.data.preferences.isLyricsExtraSources(Graph.app)
         restoreLastTrack(state)
         scope.launch { api.player.state.collect { s -> if (acceptsSessionUpdates()) applyState(s) } }
+        // Another device plays (the phone as a remote): the page does not always report its
+        // changes, so the state is read again every few seconds and the notification, the
+        // mini player and the slider follow that device.
+        scope.launch {
+            androidx.compose.runtime.snapshotFlow { _activeDevice.value }.collectLatest { remote ->
+                if (remote == null) return@collectLatest
+                while (true) {
+                    kotlinx.coroutines.delay(REMOTE_REFRESH_MS)
+                    runCatching { MyspotiRuntime.spotify.player.refresh() }
+                }
+            }
+        }
         scope.launch { api.player.queue.collect { q -> if (acceptsSessionUpdates()) applyQueue(q) } }
         scope.launch { api.library.changes.collect { refreshCurrentLiked() } }
         PlaybackService.controls = Controls
@@ -267,7 +289,7 @@ object SongPlayer {
         if (resumeWhenReady) {
             resumeWhenReady = false
             // The Web Player restored the last session paused: play what was tapped.
-            if (s.isPaused) command { api.player.resume() }
+            if (s.isPaused) transport { api.player.resume() }
         }
         val item = s.item
         val uri = item?.uri.orEmpty()
@@ -405,6 +427,40 @@ object SongPlayer {
         }
     }
 
+    private val transportLock = kotlinx.coroutines.sync.Mutex()
+    private val transportGen = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * Play, pause, skip: sent one at a time and only the newest one counts. Taps sent all
+     * at once raced in the Web Player (a skip and a play crossing, a player stuck on one
+     * song until restarted); one still waiting when a newer one comes is dropped.
+     */
+    private fun transport(block: suspend (isLatest: () -> Boolean) -> Unit) {
+        val gen = transportGen.incrementAndGet()
+        scope.launch {
+            transportLock.withLock {
+                if (gen != transportGen.get()) return@withLock
+                runCatching { kotlinx.coroutines.withTimeout(TRANSPORT_TIMEOUT_MS) { block { gen == transportGen.get() } } }
+                    .onFailure { Log.w(TAG, "transport failed: ${it.message}") }
+            }
+        }
+    }
+
+    /**
+     * Plays [itemUri], then checks that the page really moved to it; a play the page lost
+     * (busy, reloading) is sent once more instead of leaving the old song playing.
+     */
+    private suspend fun playChecked(itemUri: String, isLatest: () -> Boolean, play: suspend () -> Unit) {
+        play()
+        repeat(2) { attempt ->
+            val moved = kotlinx.coroutines.withTimeoutOrNull(PLAY_CHECK_MS) {
+                api.player.state.first { it?.item?.uri == itemUri || !isLatest() }
+            }
+            if (moved != null || !isLatest()) return
+            if (attempt == 0) { Log.w(TAG, "play of $itemUri not taken: sent again"); play() }
+        }
+    }
+
     /** Remember the Spotify context the given play keys belong to. */
     fun registerContext(urls: List<String>, contextUri: String) {
         urls.forEach { contextRegistry[it] = contextUri }
@@ -444,9 +500,11 @@ object SongPlayer {
         val itemUri = if (episodeId != null) "spotify:episode:$episodeId" else SPOTIFY_TRACK_PREFIX + trackId
         val ctx = contextUri ?: contextRegistry[song]
         markPending(if (episodeId != null) "" else trackId, itemUri)
-        command {
-            if (ctx != null) api.player.play(ctx, trackUri = itemUri, order = order?.takeIf { ctx == contextUri })
-            else api.player.play(itemUri)
+        transport { isLatest ->
+            playChecked(itemUri, isLatest) {
+                if (ctx != null) api.player.play(ctx, trackUri = itemUri, order = order?.takeIf { ctx == contextUri })
+                else api.player.play(itemUri)
+            }
         }
     }
 
@@ -455,7 +513,7 @@ object SongPlayer {
         Haptics.click(); intendPlaying(); playing = true; positionAt = SystemClock.elapsedRealtime()
         // Tapped on the restored mini player while the Web Player is still loading.
         if (!stateSeen) resumeWhenReady = true
-        command { api.player.resume() }
+        transport { api.player.resume() }
     }
 
     fun pause() { Haptics.click(); pauseSilently() }
@@ -464,7 +522,7 @@ object SongPlayer {
         if (LocalPlayer.active.value) { LocalPlayer.pause(); return }
         intendPaused()
         positionMs = getCurrentPosition(); positionAt = SystemClock.elapsedRealtime(); playing = false
-        command { api.player.pause() }
+        transport { api.player.pause() }
     }
 
     fun stop() = pause()
@@ -486,9 +544,9 @@ object SongPlayer {
         if (n <= 0) return@Runnable
         val upcoming = apiQueue?.let { it.queued + it.nextUp }.orEmpty()
         val target = upcoming.getOrNull(n - 1)
-        command { if (n == 1 || target == null) api.player.next() else api.player.skipTo(target) }
+        transport { if (n == 1 || target == null) api.player.next() else api.player.skipTo(target) }
     }
-    fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); command { api.player.previous() } }
+    fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); transport { api.player.previous() } }
 
     /** Tracks shufflePlay plays without a context: the first one, plus up to 49 queued. */
     private const val SHUFFLE_QUEUE_MAX = 50
@@ -499,7 +557,7 @@ object SongPlayer {
         LocalPlayer.stop()
         val ctx = contextRegistry[songs.first().url]
         intendPlaying()
-        command {
+        transport {
             api.player.setShuffle(true)
             if (ctx == null) {
                 // No registered context: play the list in a shuffled order (first
@@ -754,10 +812,16 @@ object SongPlayer {
     /** [minutes] null = off, 0 = at the end of the current track. */
     fun setSleepTimer(minutes: Int?) {
         main.removeCallbacks(sleepRunnable)
+        main.removeCallbacks(endOfTrackWatch)
         sleepTrackId = null
         when {
             minutes == null -> _sleepEndsAt.value = null
-            minutes == 0 -> { sleepTrackId = currentTrackId; _sleepEndsAt.value = -1L }
+            minutes == 0 -> {
+                // Any source (song, episode, local file, repeat one): the uri and the clock.
+                sleepTrackId = _nowPlaying.value.uri.ifBlank { currentTrackId }
+                _sleepEndsAt.value = -1L
+                main.removeCallbacks(endOfTrackWatch); main.post(endOfTrackWatch)
+            }
             else -> {
                 _sleepEndsAt.value = SystemClock.elapsedRealtime() + minutes * 60_000L
                 main.postDelayed(sleepRunnable, minutes * 60_000L)
@@ -765,12 +829,25 @@ object SongPlayer {
         }
     }
 
-    private fun checkEndOfTrackTimer(newTrackId: String) {
-        val t = sleepTrackId ?: return
-        if (newTrackId.isNotBlank() && newTrackId != t) {
-            sleepTrackId = null
-            _sleepEndsAt.value = null
-            pauseSilently()
+    private fun checkEndOfTrackTimer(@Suppress("UNUSED_PARAMETER") newTrackId: String) {
+        // Done by [endOfTrackWatch], which pauses before the next item starts.
+    }
+
+    /** "End of track": pauses just before the item ends, or as soon as another one plays. */
+    private val endOfTrackWatch = object : Runnable {
+        override fun run() {
+            val t = sleepTrackId ?: return
+            val uri = _nowPlaying.value.uri.ifBlank { currentTrackId }
+            val duration = getDuration()
+            val moved = uri.isNotBlank() && uri != t
+            val atEnd = duration > 0 && isPlaying() && getCurrentPosition() >= duration - END_OF_TRACK_MARGIN_MS
+            if (moved || atEnd) {
+                sleepTrackId = null
+                _sleepEndsAt.value = null
+                pauseSilently()
+                return
+            }
+            main.postDelayed(this, 250)
         }
     }
 
@@ -802,7 +879,7 @@ object SongPlayer {
         durationMs = item.song.durationMs.toLong()
         pushNotification(item.song, false)
         val target = apiItem(item) ?: return
-        command { api.player.skipTo(target) }
+        transport { api.player.skipTo(target) }
     }
 
     /** "Clear queue": drops the tracks the user queued (not the context's next ones). */

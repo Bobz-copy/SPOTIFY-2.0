@@ -240,29 +240,7 @@ class ContextViewModel(
      * Spotify's recommendations for it after every [SmartShuffle.EVERY] songs.
      */
     fun playSmart(p: ContextPageModel, first: SongsModel?) {
-        viewModelScope.launch {
-            val inList = p.tracks.map { it.spotifyTrackId }.toSet()
-            val recs = withContext(Dispatchers.IO) {
-                if (p.type == "liked") {
-                    // Spotify's playlist extender refuses Liked Songs: the radios of a few liked songs instead.
-                    p.tracks.shuffled().take(3).flatMap { api.getRecommendations(listOf(it.spotifyTrackId)).take(8) }
-                } else runCatching { MyspotiRuntime.api.playlists.recommended(p.uri, limit = 20) }.getOrDefault(emptyList()).map(api::songOf)
-            }.filter { it.spotifyTrackId !in inList }.distinctBy { it.spotifyTrackId }.shuffled()
-            val shuffled = p.tracks.shuffled().let { list -> first?.let { f -> listOf(f) + (list - f) } ?: list }
-            val mixed = ArrayList<SongsModel>()
-            val more = recs.iterator()
-            shuffled.forEachIndexed { i, s ->
-                mixed += s
-                if ((i + 1) % SmartShuffle.EVERY == 0 && more.hasNext()) mixed += more.next()
-            }
-            SmartShuffle.recommended.value = recs.map { it.spotifyTrackId }.toSet()
-            // Spotify's shuffle would mix the given order again.
-            SongPlayer.setShuffle(false); state.shuffle.value = false
-            state.updateQueue(mixed)
-            val start = mixed.first()
-            SongPlayer.playSong(start.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" })
-            state.updateSongState(start.coverUri, start.title, start.singer, true, start.id, 0, start.album)
-        }
+        viewModelScope.launch { SmartShuffle.start(p, first) }
     }
 
     fun play(p: ContextPageModel, song: SongsModel, sort: TrackOrder = TrackOrder()) {
@@ -684,6 +662,54 @@ object SmartShuffle {
     val on = androidx.compose.runtime.mutableStateOf<String?>(null)
     /** The recommendations mixed into the playing list. */
     val recommended = androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet())
+
+    /** Smart shuffle can play [contextUri]: a playlist or Liked Songs. */
+    fun canPlay(contextUri: String): Boolean = contextUri.startsWith("spotify:playlist:") || contextUri.contains(":collection")
+
+    /**
+     * Smart shuffle (Spotify keeps its own for Premium): the playlist shuffled, with one of
+     * Spotify's recommendations for it after every [EVERY] songs.
+     */
+    suspend fun start(p: ContextPageModel, first: SongsModel?) {
+        val api = Graph.api
+        val state = Graph.currentSongState
+        on.value = p.uri
+        val inList = p.tracks.map { it.spotifyTrackId }.toSet()
+        val recs = withContext(Dispatchers.IO) {
+            if (p.type == "liked") {
+                // Spotify's playlist extender refuses Liked Songs: the radios of a few liked songs instead.
+                p.tracks.shuffled().take(3).flatMap { api.getRecommendations(listOf(it.spotifyTrackId)).take(8) }
+            } else runCatching { MyspotiRuntime.api.playlists.recommended(p.uri, limit = 20) }.getOrDefault(emptyList()).map(api::songOf)
+        }.filter { it.spotifyTrackId !in inList }.distinctBy { it.spotifyTrackId }.shuffled()
+        val shuffled = p.tracks.shuffled().let { list -> first?.let { f -> listOf(f) + (list - f) } ?: list }
+        if (shuffled.isEmpty()) return
+        val mixed = ArrayList<SongsModel>()
+        val more = recs.iterator()
+        shuffled.forEachIndexed { i, s ->
+            mixed += s
+            if ((i + 1) % EVERY == 0 && more.hasNext()) mixed += more.next()
+        }
+        recommended.value = recs.map { it.spotifyTrackId }.toSet()
+        // Spotify's shuffle would mix the given order again.
+        SongPlayer.setShuffle(false); state.shuffle.value = false
+        state.updateQueue(mixed)
+        val startSong = mixed.first()
+        SongPlayer.playSong(startSong.url, contextUri = p.uri, order = mixed.map { "spotify:track:${it.spotifyTrackId}" })
+        state.updateSongState(startSong.coverUri, startSong.title, startSong.singer, true, startSong.id, 0, startSong.album)
+    }
+
+    /** From the player: loads the playing list, then smart-shuffles it, the current song first. */
+    suspend fun startFor(contextUri: String, currentTrackId: String): Boolean {
+        val api = Graph.api
+        val flow = when {
+            contextUri.contains(":collection") -> api.getLikedPage()
+            contextUri.startsWith("spotify:playlist:") -> api.getPlaylistPage(contextUri.substringAfterLast(':'))
+            else -> return false
+        }
+        val page = (withContext(Dispatchers.IO) { flow.first { it !is Response.Loading } } as? Response.Success)?.data ?: return false
+        start(page, page.tracks.firstOrNull { it.spotifyTrackId == currentTrackId })
+        return true
+    }
 }
 
 enum class TrackSort(val label: Int) {

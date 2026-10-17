@@ -50,6 +50,8 @@ class Api constructor(
 
     /** Process-level caches: screens show the last result at once, then refresh. */
     companion object HomeCache {
+        /** Releases loaded for an artist page, at most. */
+        const val DISCOGRAPHY_MAX = 300
         /** Sentinel id for the pinned "Liked Songs" library entry. */
         const val LIKED_SONGS_ID = "liked-songs"
         /** The "Local Files" folder pinned under Liked Songs in the library (not a Spotify item). */
@@ -430,7 +432,18 @@ class Api constructor(
         )
         emit(Response.Success(model))
         // The overview carries only part of the discography: the whole list follows.
-        val all = runCatching { api.catalog.discography(uri, 0, 50).items }.getOrNull().orEmpty()
+        // Every page of it (big artists have hundreds of singles), up to a sane cap.
+        val all = runCatching {
+            val out = ArrayList<app.myspoti.api.Album>()
+            var offset: Int? = 0
+            while (offset != null && out.size < DISCOGRAPHY_MAX) {
+                val page = api.catalog.discography(uri, offset, 50)
+                if (page.items.isEmpty()) break
+                out += page.items
+                offset = page.nextOffset
+            }
+            out
+        }.getOrNull().orEmpty()
         val known = page.popularReleases.map { it.uri }.toSet()
         if (all.any { it.uri !in known }) {
             val merged = (page.popularReleases + all).distinctBy { it.uri }.sortedByDescending { it.releaseDate.orEmpty() }

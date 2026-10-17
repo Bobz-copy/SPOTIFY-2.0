@@ -32,7 +32,7 @@
     <string name="verified_artist">Verified Artist</string>
     <string name="lyrics_share">Share lyrics</string>
     <string name="lyrics_extra_title">More lyrics sources</string>
-    <string name="lyrics_extra_summary">Apple Music (word by word), NetEase and Genius, when Spotify has no lyrics</string>
+    <string name="lyrics_extra_summary">NetEase and Genius, when neither Spotify nor Apple Music has the lyrics</string>
     <string name="lyrics_reload">Reload lyrics</string>
     <string name="lyrics_fullscreen">Open lyrics full screen</string>
     <string name="browse_all">Browse all</string>

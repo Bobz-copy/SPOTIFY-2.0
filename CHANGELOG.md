@@ -4,7 +4,13 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 ## 2.0.0-beta.6
 
-- **Fewer ads abroad**: ads from other countries' ad servers, sponsored playlists and promotion shelves are blocked; ads are recognised even when they look like songs; an ad that still gets through is muted and skipped.
+- **Fewer ads abroad**: ads from other countries' ad servers are blocked, sponsored playlists and promotion shelves are hidden; ads are recognised even when they look like songs; an ad that still gets through is muted and skipped.
+- **Steadier player**: play, pause and skips go one at a time (fast taps no longer jam it), and a song that did not start is asked again.
+- **No more "pop" between songs**: a very short fade on every skip.
+- **Smart shuffle from the player**: tap shuffle twice on a playlist or Liked Songs.
+- **Word-by-word lyrics from Apple Music** when they exist, replacing line-by-line ones as soon as they arrive.
+- **Remote control**: with another device playing, the notification and the slider keep up.
+- **Sleep timer "end of track"** works with episodes, local files and repeat one; artist pages load the whole discography.
 - **Artist discography** (Releases) shows albums and singles again.
 - **Long names fit**: long playlist names and artist mixes no longer push the layout; big titles shrink to fit, cards in a row keep the same height.
 - **A pause stays a pause**, even right at the end of a song.

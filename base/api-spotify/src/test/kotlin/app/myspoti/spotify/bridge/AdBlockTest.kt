@@ -14,11 +14,14 @@ class AdBlockTest {
     }
 
     @Test
-    fun `blocks foreign ad servers and spclient ad paths`() {
+    fun `blocks foreign ad servers only`() {
         assertTrue(AdBlock.isBlocked("https://pubads.g.doubleclick.net/gampad/ads?x=1"))
         assertTrue(AdBlock.isBlocked("https://imasdk.googleapis.com/js/sdkloader/ima3.js"))
-        assertTrue(AdBlock.isBlocked("https://spclient.wg.spotify.com/ads/v2/config"))
-        assertTrue(AdBlock.isBlocked("https://gew4-spclient.spotify.com/ad-logic/state/config?a=b"))
+        // Spotify's own ad endpoints stay reachable: a client that never calls them stands out.
+        assertFalse(AdBlock.isBlocked("https://spclient.wg.spotify.com/ads/v2/config"))
+        assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/ad-logic/state/config?a=b"))
+        assertFalse(AdBlock.isBlocked("https://adeventtracker.spotify.com/x"))
+        assertFalse(AdBlock.isBlocked("https://sponsored-recommendations.spotify.com/x"))
         assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/track-playback/v1/devices"))
         assertFalse(AdBlock.isBlocked("https://gew4-spclient.spotify.com/metadata/4/track/abc?ads=1"))
         assertFalse(AdBlock.isBlocked("https://api-partner.spotify.com/pathfinder/v2/query"))

@@ -180,8 +180,43 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
 
+    // ── Fades: a song cut off at full volume pops in the phone's speaker. Each skip or play
+    // lowers the sound over ~0.1 s first and brings it back once the next song plays. ──
+
+    /** The volume a fade comes back to, while one is under way. */
+    @Volatile private var fadeBackTo: Double? = null
+    private var fadeBack: kotlinx.coroutines.Job? = null
+
+    private suspend fun setLevel(level: Double) {
+        bridge.call("volume.set", buildJsonObject { put("level", level.coerceIn(0.0, 1.0)) })
+    }
+
+    private suspend fun withFade(block: suspend () -> Unit) {
+        val s = _state.value
+        // Nothing heard (paused, an ad muted): nothing to fade.
+        if (s == null || s.isPaused || _adPlaying.value || volumeBeforeAd != null) { block(); return }
+        val target = fadeBackTo ?: runCatching { volume() }.getOrNull()?.takeIf { it > 0.0 } ?: run { block(); return }
+        fadeBackTo = target
+        fadeBack?.cancel()
+        runCatching { for (f in FADE_STEPS) { setLevel(target * f); delay(FADE_STEP_MS) } }
+        try {
+            block()
+        } finally {
+            fadeBack = scope.launch {
+                delay(FADE_STEP_MS * 3)
+                // The next song really plays (or give up waiting): the sound comes back.
+                withTimeoutOrNull(FADE_BACK_MAX_MS) { _state.first { it != null && !it.isBuffering && !it.isPaused } }
+                if (_adPlaying.value) { if (volumeBeforeAd == null) volumeBeforeAd = target; fadeBackTo = null; return@launch }
+                val back = fadeBackTo ?: target
+                runCatching { for (f in FADE_STEPS.reversed().drop(1)) { setLevel(back * f); delay(FADE_STEP_MS) }; setLevel(back) }
+                    .onFailure { runCatching { setLevel(back) } }
+                fadeBackTo = null
+            }
+        }
+    }
+
     private suspend fun muteForAd() = runCatching {
-        if (volumeBeforeAd == null) volumeBeforeAd = volume().takeIf { it > 0.0 } ?: 1.0
+        if (volumeBeforeAd == null) volumeBeforeAd = fadeBackTo ?: volume().takeIf { it > 0.0 } ?: 1.0
         bridge.call("volume.set", buildJsonObject { put("level", 0.0) })
     }
 
@@ -194,20 +229,22 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?, order: List<Uri>?) {
         lastOrder = order?.let { contextUri to it }
         pausedByUser = false
-        bridge.call("player.play", buildJsonObject {
-            put("contextUri", contextUri)
-            order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
-            trackUri?.let { put("trackUri", it) }
-            index?.let { put("index", it) }
-            positionMs?.let { put("positionMs", it) }
-        })
+        withFade {
+            bridge.call("player.play", buildJsonObject {
+                put("contextUri", contextUri)
+                order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
+                trackUri?.let { put("trackUri", it) }
+                index?.let { put("index", it) }
+                positionMs?.let { put("positionMs", it) }
+            })
+        }
     }
 
     override suspend fun pause() { pausedByUser = true; bridge.call("player.pause") }
     override suspend fun resume() { pausedByUser = false; bridge.call("player.resume") }
     override suspend fun seek(positionMs: Long) { bridge.call("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
-    override suspend fun next() { pausedByUser = false; bridge.call("player.next") }
-    override suspend fun previous() { pausedByUser = false; bridge.call("player.previous") }
+    override suspend fun next() { pausedByUser = false; withFade { bridge.call("player.next") } }
+    override suspend fun previous() { pausedByUser = false; withFade { bridge.call("player.previous") } }
     override suspend fun setShuffle(on: Boolean) { bridge.call("player.setShuffle", buildJsonObject { put("on", on) }) }
 
     override suspend fun setRepeat(mode: Repeat) {
@@ -230,7 +267,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     private fun ref(item: NowPlaying) = buildJsonObject { put("uri", item.uri); item.uid?.let { put("uid", it) } }
 
-    override suspend fun skipTo(item: NowPlaying) { pausedByUser = false; bridge.call("queue.skipTo", ref(item)) }
+    override suspend fun skipTo(item: NowPlaying) { pausedByUser = false; withFade { bridge.call("queue.skipTo", ref(item)) } }
 
     override suspend fun playNext(uris: List<Uri>) {
         val first = _queue.value?.queued?.firstOrNull()
@@ -255,6 +292,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     override suspend fun volume(): Double = bridge.call("volume.get").jsonPrimitive.double
 
     override suspend fun setVolume(level: Double) {
+        if (fadeBackTo != null) fadeBackTo = level.coerceIn(0.0, 1.0)
         bridge.call("volume.set", buildJsonObject { put("level", level.coerceIn(0.0, 1.0)) })
     }
 
@@ -286,6 +324,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val AD_STUCK_MS = 4_000L
         /** Longer than any ad break: the page is stuck in it. */
         const val AD_BREAK_MAX_MS = 4 * 60_000L
+        /** Volume steps of a fade (down; reversed to come back). */
+        val FADE_STEPS = listOf(0.55, 0.25, 0.08, 0.0)
+        const val FADE_STEP_MS = 25L
+        /** The sound always comes back after that long, whatever the page does. */
+        const val FADE_BACK_MAX_MS = 4_000L
         /** An ad that really plays (muted) is skipped after that long. */
         const val AD_PLAYING_SKIP_MS = 1_500L
         const val STUCK_MS = 8_000L

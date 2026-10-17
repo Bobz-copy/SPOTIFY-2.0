@@ -40,28 +40,29 @@ object BridgeScript {
  */
 object AdBlock {
     /**
-     * Ad audio and ad servers. Outside Switzerland ads also come from Google's ad servers
-     * (audio and video ads) and the ad event tracker, so these are refused too.
+     * Only ad media and third-party ad servers are refused. Spotify's own ad endpoints (ad
+     * config, ad events, sponsored recommendations) are left alone on purpose: a client that
+     * never calls them stands out. Ads that come anyway are muted and skipped by the player,
+     * and sponsored content is dropped from the screens.
      */
     val blockedHosts = listOf(
+        // The ad audio files.
         "adstudio-assets.scdn.co",
-        "adeventtracker.spotify.com",
+        // Google's ad servers (audio and video ads served in other markets).
         "pubads.g.doubleclick.net",
         "securepubads.g.doubleclick.net",
         "googleads.g.doubleclick.net",
         "pagead2.googlesyndication.com",
         "imasdk.googleapis.com",
-        // Sponsored playlists and recommendations.
-        "sponsored-recommendations.spotify.com",
-        // Ad and audience trackers the page loads (nothing it needs to play).
+        // Third-party audience trackers the page loads (nothing it needs to play).
         "googletagmanager.com",
         "google-analytics.com",
         "scorecardresearch.com",
         "fastly-insights.com",
     )
 
-    /** Ad endpoints on Spotify's api hosts (spclient): ad slots, ad logic and ad delivery. */
-    val blockedPaths = listOf("/ads/", "/ad-logic/")
+    /** Paths refused on Spotify's api hosts; none, see [blockedHosts]. */
+    val blockedPaths = emptyList<String>()
 
     /** Formats only ads use: the ad mp3 links and the ad manifests. Songs and episodes use others. */
     val adFormats = setOf("manifest_urls_audio_ad", "file_urls_mp3")

@@ -21,8 +21,11 @@ import java.net.URLEncoder
  * 1. Spotify's own color-lyrics, by track id: exactly what the official app shows,
  *    with its colours and credits.
  * 2. LRCLIB (lrclib.net, open API for third-party apps), line-synced or plain.
- * 3. Opt-in ("sources supplémentaires"): LyricsPlus (Apple Music word-synced lyrics),
- *    NetEase Cloud Music (line-synced LRC) and Genius (plain text). Off by default.
+ * Apple Music's word-synced lyrics (LyricsPlus mirrors) are always asked too: Spotify's
+ * lyrics show at once, and are swapped for Apple's word-by-word ones when those arrive
+ * ([upgrades]), since they follow every word.
+ * 3. Opt-in ("sources supplémentaires"): NetEase Cloud Music (line-synced LRC) and
+ *    Genius (plain text). Off by default.
  *
  * Fallback results are only kept when title, artist and length match the track.
  * LRCLIB asks clients to send a descriptive User-Agent; we oblige.
@@ -32,7 +35,6 @@ object LyricsApi {
     private const val UA = "Myspoti (https://github.com/)"
     private val LYRICSPLUS = listOf(
         "https://lyricsplus.binimum.org",
-        "https://lyricsplus.atomix.one",
         "https://lyricsplus.prjktla.my.id",
     )
 
@@ -58,8 +60,22 @@ object LyricsApi {
     private val scope =
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
-    /** Set by the settings: also ask the word-synced Apple Music mirrors. */
+    /** Set by the settings: also ask NetEase and Genius when nothing better is found. */
     @Volatile var extraSources: Boolean = false
+
+    /** Word-synced lyrics that replaced a track's first ones after the fact (track key, lyrics). */
+    val upgrades = kotlinx.coroutines.flow.MutableSharedFlow<Pair<String, Lyrics>>(extraBufferCapacity = 8)
+
+    /** Looks for Apple's word-synced lyrics behind line-synced ones; a better result replaces them. */
+    private fun upgradeLater(track: Track, first: Lyrics) {
+        if (first.wordSynced) return
+        scope.launch {
+            val apple = runCatching { fromLyricsPlus(cleanTitle(track.title), track.artist.substringBefore(",").trim(), (track.durationMs / 1000).toInt()) }.getOrNull()
+            if (apple == null || !apple.wordSynced || apple.isEmpty) return@launch
+            cache[track.key] = apple
+            upgrades.tryEmit(track.key to apple)
+        }
+    }
 
     fun cached(track: Track): Lyrics? = cache[track.key] as? Lyrics
 
@@ -95,18 +111,20 @@ object LyricsApi {
     }
 
     private suspend fun resolve(track: Track): Lyrics? {
-        val result = fromSpotify(track) ?: coroutineScope {
+        val spotify = fromSpotify(track)
+        if (spotify != null) upgradeLater(track, spotify)
+        val result = spotify ?: coroutineScope {
             val title = cleanTitle(track.title)
             val artist = track.artist.substringBefore(",").trim()
             val durationSec = (track.durationMs / 1000).toInt()
-            val extra = if (extraSources) async { fromLyricsPlus(title, artist, durationSec) } else null
+            val extra = async { fromLyricsPlus(title, artist, durationSec) }
             val netease = if (extraSources) async { fromNetEase(title, artist, durationSec) } else null
             val genius = if (extraSources) async { fromGenius(title, artist) } else null
             val exact = async { lrclibGet(title, artist, track.album, durationSec) }
             val fuzzy = async { lrclibSearch("$LRCLIB/search?track_name=${enc(title)}&artist_name=${enc(artist)}", title, artist, durationSec) }
             val lrclib = exact.await() ?: fuzzy.await()
                 ?: lrclibSearch("$LRCLIB/search?track_name=${enc(title)}", title, artist, durationSec)
-            val word = extra?.await()
+            val word = extra.await()
             val ne = netease?.await()
             // Word-synced beats line-synced beats plain.
             when {
@@ -247,7 +265,8 @@ object LyricsApi {
         for (server in LYRICSPLUS) {
             val url = "$server/v2/lyrics/get?title=${enc(title)}&artist=${enc(artist)}" +
                 (if (durationSec > 0) "&duration=$durationSec" else "")
-            val o = httpGet(url, timeoutMs = 6000)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: continue
+            // The mirror asks Apple then its other sources: a slow answer is still worth it.
+            val o = httpGet(url, timeoutMs = 12_000)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: continue
             val meta = o.optJSONObject("metadata")
             val gotTitle = meta?.optString("title").orEmpty().ifBlank { o.optString("trackName") }
             if (gotTitle.isNotBlank() && !overlaps(matchKey(cleanTitle(gotTitle)), matchKey(title))) continue

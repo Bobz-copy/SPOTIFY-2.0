@@ -5,6 +5,14 @@ Every change, release by release. The short version is in [CHANGELOG.md](../CHAN
 ## 2.0.0-beta.6
 
 - **Ads in other countries**: Google's ad servers (audio and video ads), the ad event tracker and Spotify's ad endpoints (`/ads/`, `/ad-logic/` on spclient) are refused. An ad that plays anyway is muted at once and skipped after 1.5 s; if the page holds on to it after one reload, it stays muted until it ends. The volume comes back after the ad, and after a restart if the app was closed during one.
+- **Ad blocking stays discreet**: only ad media and third-party ad servers are refused; Spotify's own ad endpoints (ad config, ad events, sponsored recommendations) are left alone, so the client looks like any other. Sponsored content is dropped from the screens instead.
+- **Transport commands** (play, pause, next, previous, skip to) run one at a time and only the newest counts; a play is checked against the page's state and sent once more when it did not take (the old song kept playing).
+- **Fades**: every skip or play lowers the sound over ~0.1 s and brings it back once the next song plays (always within 4 s): the "pop" heard in the phone's speaker is gone. Ads and user volume changes are taken into account.
+- **Smart shuffle in the player**: the shuffle button goes off → shuffle → smart shuffle on playlists and Liked Songs; the smart mix is shared with the playlist page.
+- **Lyrics**: Apple Music's word-synced lyrics (LyricsPlus) are always looked up; Spotify's show first and are replaced when Apple's arrive. The dead LyricsPlus mirror is gone; the "more sources" setting now covers NetEase and Genius.
+- **Remote control (#40)**: while another device plays, the state is read every 3 s.
+- **Sleep timer "end of track"**: based on the media uri and the clock, so episodes, local files and repeat one stop too.
+- **Artist pages** load every page of the discography (up to 300 releases).
 - **Ads, continued**: an ad is recognised by its metadata too (`is_advertisement`, `ad_id`, advertiser), not only by a `spotify:ad:` uri. Home promotion shelves and sponsored cards are dropped. Sponsored recommendations and the page's ad/audience trackers (Google Tag Manager, Google Analytics, Scorecard Research, Fastly Insights) are blocked.
 - **Artist discography**: the Releases page filtered on lowercase kinds while Spotify sends "ALBUM", "SINGLE"…, so it stayed empty; it also opens by artist id now, and kinds are shown translated.
 - **Long names**: every line-limited text ends with "…"; home cards keep two subtitle lines so a row never jumps; shortcut tiles, category and discover grids get a fixed text height; playlist, album, artist and profile titles shrink to fit two lines (`FitText`) before being cut.

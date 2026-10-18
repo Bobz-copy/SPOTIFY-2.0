@@ -154,7 +154,6 @@ private fun ArtistOverviewContent(
     var showAllPopular by remember { mutableStateOf(false) }
     // The user's liked songs by this artist: from the session cache, else loaded once in the background.
     var likedByArtist by remember(overview.id) { mutableStateOf<List<com.music.spotui.data.entity.SongsModel>>(emptyList()) }
-    var showLiked by remember(overview.id) { mutableStateOf(false) }
     LaunchedEffect(overview.id) {
         // Loaded once per session, shared by every artist page, after this page is shown.
         val all = com.music.spotui.data.api.Api.LikedCache.tracks
@@ -358,7 +357,9 @@ private fun ArtistOverviewContent(
             item(key = "liked-by-artist") {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { showLiked = !showLiked }.padding(16.dp, 8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { navController.navigate(com.music.spotui.ui.navigation.likedByArtistRoute(overview.id, displayName)) }
+                        .padding(16.dp, 8.dp),
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -374,26 +375,6 @@ private fun ArtistOverviewContent(
                             androidx.compose.ui.res.pluralStringResource(R.plurals.artist_liked_songs_count, likedByArtist.size, likedByArtist.size, displayName),
                             color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                }
-            }
-            if (showLiked) itemsIndexed(likedByArtist, key = { i, s -> "liked:$i:${s.id}" }) { _, song ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable {
-                            SongPlayer.registerLikedSongs(com.music.spotui.data.api.Api.LikedCache.tracks.orEmpty().map { it.url })
-                            artistViewModel.updateQueue(likedByArtist)
-                            SongPlayer.playSong(song.url, context, contextUri = "spotify:collection:tracks")
-                            artistViewModel.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
-                        }
-                        .padding(16.dp, 8.dp),
-                ) {
-                    GlideImage(model = song.coverUri, contentDescription = "", contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(song.title, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(song.album, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

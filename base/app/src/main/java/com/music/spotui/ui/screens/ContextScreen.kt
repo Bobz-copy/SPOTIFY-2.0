@@ -186,6 +186,8 @@ class ContextViewModel(
             val flow = when (type) {
                 "album" -> api.getAlbumPage(id)
                 "liked" -> api.getLikedPage()
+                // id: "<artist id>|<artist name>"
+                "liked-artist" -> api.getLikedByArtistPage(id.substringBefore('|'), id.substringAfter('|', ""))
                 else -> api.getPlaylistPage(id)
             }
             // Liked Songs: a like or unlike anywhere puts the list right at once.
@@ -259,9 +261,10 @@ class ContextViewModel(
             return
         }
         state.updateQueue(p.tracks)
-        if (p.type == "liked") SongPlayer.registerLikedSongs(p.tracks.map { it.url })
-        // Sorted by the user: Spotify plays the list in that order, not the playlist's.
-        val order = if (sort.isCustom) null else sort.apply(p.tracks).map { "spotify:track:${it.spotifyTrackId}" }
+        if (p.type == "liked" || p.type == "liked-artist") SongPlayer.registerLikedSongs(p.tracks.map { it.url })
+        // Sorted by the user: Spotify plays the list in that order, not the playlist's. An
+        // artist's liked songs are a part of Liked Songs: always given, so only they play.
+        val order = if (sort.isCustom && p.type != "liked-artist") null else sort.apply(p.tracks).map { "spotify:track:${it.spotifyTrackId}" }
         if (order != null) state.updateQueue(sort.apply(p.tracks))
         SongPlayer.playSong(song.url, contextUri = p.uri, order = order)
         state.updateSongState(song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
@@ -297,7 +300,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     val playing = playerVm.currentSongPlayingState.value
     val shuffle = playerVm.shuffleState.value
     val np by SongPlayer.nowPlaying
-    val isThisContext = np.contextUri == p.uri || (p.type == "liked" && np.contextUri.contains(":collection"))
+    val isThisContext = np.contextUri == p.uri || ((p.type == "liked" || p.type == "liked-artist") && np.contextUri.contains(":collection"))
     val saved by vm.savedUris
     val contextSaved by vm.contextSaved
 
@@ -397,7 +400,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
                 }
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
-                    if (p.type == "liked") LikedCover(Modifier.fillMaxWidth(0.66f).aspectRatio(1f).shadow(16.dp, RoundedCornerShape(4.dp))) else
+                    if (p.type == "liked" || p.type == "liked-artist") LikedCover(Modifier.fillMaxWidth(0.66f).aspectRatio(1f).shadow(16.dp, RoundedCornerShape(4.dp))) else
                     GlideImage(
                         model = p.coverUri,
                         contentDescription = "",

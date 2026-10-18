@@ -237,6 +237,14 @@ fun MyNavHost(
             uId?.let { com.music.spotui.ui.screens.ProfileScreen(navHostController, userId = it, userName = name) }
         }
 
+        page("$LIKED_BY_ARTIST_ROUTE/{key}") { navBackStackEntry ->
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            navBackStackEntry.arguments?.getString("key")?.let { ContextScreen(navHostController, type = "liked-artist", id = it) }
+        }
+
         page(
             "${com.music.spotui.ui.screens.FOLLOW_LIST_ROUTE}/{uId}/{mode}",
         ) { navBackStackEntry ->

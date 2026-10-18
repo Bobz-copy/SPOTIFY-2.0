@@ -533,6 +533,31 @@ class Api constructor(
         return pickAlbum(hits, albumName, artist)?.uri?.substringAfterLast(':')
     }
 
+    /**
+     * The user's liked songs by one artist, as their own page (Spotify's "Liked Songs" row on an
+     * artist page). They play inside Liked Songs, in this list's order, so only they play.
+     */
+    suspend fun getLikedByArtistPage(artistId: String, artistName: String): Flow<Response<ContextPageModel>> = flow {
+        emit(Response.Loading())
+        val all = LikedCache.tracks ?: LikedCache.loadOnce().await()
+            ?: run { emit(Response.Error(context.getString(R.string.page_load_failed))); return@flow }
+        val songs = all.filter { s ->
+            if (s.artistIds.isNotEmpty()) artistId in s.artistIds
+            else artistName.isNotBlank() && s.singer.split(", ").any { it.equals(artistName, ignoreCase = true) }
+        }
+        emit(Response.Success(ContextPageModel(
+            uri = "spotify:collection:tracks",
+            type = "liked-artist",
+            name = context.getString(R.string.artist_liked_songs),
+            coverUri = "",
+            ownerName = ProfileCache.name.orEmpty(),
+            ownerAvatar = ProfileCache.imageUrl.orEmpty(),
+            metaLine = context.resources.getQuantityString(R.plurals.artist_liked_songs_count, songs.size, songs.size, artistName),
+            tracks = songs,
+            complete = true,
+        )))
+    }
+
     /** Liked Songs as a page: cached list shown instantly, then refreshed page by page. */
     suspend fun getLikedPage(): Flow<Response<ContextPageModel>> = flow {
         fun page(tracks: List<SongsModel>, complete: Boolean) = ContextPageModel(

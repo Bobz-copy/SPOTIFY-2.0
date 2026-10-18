@@ -42,6 +42,11 @@ fun profileRoute(userId: String, name: String = ""): String =
 fun categoryRoute(genre: String, title: String): String =
     "${Routes.Category.route}/${android.net.Uri.encode(genre)}?title=${android.net.Uri.encode(title)}"
 
+/** An artist's liked songs, their own page (see Api.getLikedByArtistPage). */
+const val LIKED_BY_ARTIST_ROUTE = "liked_by_artist"
+fun likedByArtistRoute(artistId: String, artistName: String): String =
+    "$LIKED_BY_ARTIST_ROUTE/${android.net.Uri.encode("$artistId|$artistName")}"
+
 /** Builds a playlist route carrying the Spotify playlist id (and a display name). */
 fun playlistRoute(id: String, name: String = ""): String =
     "${Routes.Playlist.route}/${android.net.Uri.encode(id)}?name=${android.net.Uri.encode(name)}"

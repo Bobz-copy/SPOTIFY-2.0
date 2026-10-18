@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -70,7 +71,7 @@ class SpotifyHttp(
     private val bridge: Bridge,
     private val language: String = "en",
 ) {
-    private data class WebToken(val access: String, val expiresAtMs: Long, val clientId: String, val appVersion: String)
+    private data class WebToken(val access: String, val expiresAtMs: Long, val clientId: String, val appVersion: String, val anonymous: Boolean)
     private data class ClientToken(val value: String, val expiresAtMs: Long)
 
     private val lock = Mutex()
@@ -80,6 +81,24 @@ class SpotifyHttp(
 
     /** Drops the cached web token (it belongs to one account); the client token is kept. */
     suspend fun forgetWebToken() = lock.withLock { web = null }
+
+    /** True when the page's token belongs to a signed-in user (the cached one is reused). */
+    suspend fun isSignedIn(): Boolean = lock.withLock { !webToken().anonymous }
+
+    /** The account's token, fetched again only when the cached one is missing or stale. */
+    private suspend fun webToken(): WebToken {
+        val now = System.currentTimeMillis()
+        return web?.takeIf { it.expiresAtMs - now > 60_000 } ?: run {
+            val t = bridge.call("token.get").jsonObject
+            WebToken(
+                access = t["accessToken"]!!.jsonPrimitive.content,
+                expiresAtMs = t["expiresAtMs"]!!.jsonPrimitive.long,
+                clientId = t["clientId"]!!.jsonPrimitive.content,
+                appVersion = t["appVersion"]!!.jsonPrimitive.content,
+                anonymous = t["isAnonymous"]?.jsonPrimitive?.contentOrNull == "true",
+            ).also { web = it }
+        }
+    }
 
     /** Sends a request with browser headers. Returns the status and body text. */
     suspend fun send(method: String, url: String, body: String? = null, contentType: String = JSON_TYPE, accept: String = "application/json"): Pair<Int, String> {
@@ -116,15 +135,7 @@ class SpotifyHttp(
 
     private suspend fun tokens(): Pair<WebToken, ClientToken> = lock.withLock {
         val now = System.currentTimeMillis()
-        val w = web?.takeIf { it.expiresAtMs - now > 60_000 } ?: run {
-            val t = bridge.call("token.get").jsonObject
-            WebToken(
-                access = t["accessToken"]!!.jsonPrimitive.content,
-                expiresAtMs = t["expiresAtMs"]!!.jsonPrimitive.long,
-                clientId = t["clientId"]!!.jsonPrimitive.content,
-                appVersion = t["appVersion"]!!.jsonPrimitive.content,
-            ).also { web = it }
-        }
+        val w = webToken()
         val c = client?.takeIf { it.expiresAtMs - now > 3_600_000 } ?: mintClientToken(w).also { client = it }
         w to c
     }

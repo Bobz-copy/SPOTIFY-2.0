@@ -79,8 +79,11 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
 
     /** Injects the bridge into the current page. Hosts call this after each page load. */
     suspend fun inject() {
-        _ready.value = false
-        host.evaluate(BridgeScript.source)
+        // onPageFinished can fire twice for one page load (a redirect settling): a second
+        // injection into the SAME page must not announce "ready" again, or every ready
+        // collector (state refresh, web token, audio quality, volume) runs twice. The page
+        // re-announces only when the host is not ready (a page it thought it had lost).
+        host.evaluate("window.__mspReannounce = ${!_ready.value}; ${BridgeScript.source}")
     }
 
     /**

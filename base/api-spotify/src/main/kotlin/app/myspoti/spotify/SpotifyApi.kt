@@ -73,7 +73,16 @@ class SpotifyApi(
         scope.launch {
             // Each page load may be another account (logout, then a new sign-in): the next
             // direct call asks the page for its current token.
-            ready.filter { it }.collect { this@SpotifyApi.http.forgetWebToken(); runCatching { player.refresh() } }
+            ready.filter { it }.collect {
+                this@SpotifyApi.http.forgetWebToken()
+                try {
+                    player.refresh()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // No state now: the page's next state event brings it anyway.
+                }
+            }
         }
     }
 
@@ -81,6 +90,9 @@ class SpotifyApi(
 
     /** The host calls this when a Web Player page load starts (reload, renderer back). */
     fun onPageStarting() = bridge.pageGone()
+
+    /** True when the page's token belongs to a signed-in user (the cached one is reused). */
+    suspend fun isSignedIn(): Boolean = http.isSignedIn()
 
     suspend fun awaitReady() { ready.first { it } }
 }

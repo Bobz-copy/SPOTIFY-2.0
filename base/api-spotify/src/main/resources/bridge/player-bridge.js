@@ -15,9 +15,15 @@
  * The bridge only reads the page's own service registry; it patches nothing.
  */
 (() => {
-  // Injected again (each page load event): say ready again instead of staying silent.
+  // Injected again (a second page-finished event for the same page): say ready again only
+  // when the host asks for it (window.__mspReannounce, set when it is not ready). A second
+  // "ready" for one page load would run every ready collector twice (state refresh, web
+  // token, audio quality, volume).
   if (window.Myspoti && window.Myspoti.version) {
-    if (window.Myspoti.announce) window.Myspoti.announce();
+    if (window.Myspoti.announce && window.__mspReannounce) {
+      window.__mspReannounce = false;
+      window.Myspoti.announce();
+    }
     return;
   }
 
@@ -208,6 +214,21 @@
   // Not heard, yet not "muted audio" to Chromium (see 'media.mute').
   const SILENT = 0.001;
 
+  // "Is this page Spotify Connect's active device": a full device-list round trip, so it is
+  // read at most once every ACTIVE_CACHE_MS and reused (a transfer happens minutes apart).
+  const ACTIVE_CACHE_MS = 6000;
+  let activeValue = null, activeAt = 0;
+  const activeDevice = async () => {
+    const now = Date.now();
+    if (activeValue !== null && now - activeAt < ACTIVE_CACHE_MS) return activeValue;
+    try {
+      const me = (await need().resolve('ConnectDevicesAPI').getDevices()).find(d => d.isLocal);
+      activeValue = !!(me && me.isActive);
+      activeAt = now;
+    } catch (e) { /* unknown: the caller keeps the last answer */ }
+    return activeValue;
+  };
+
   // The element volume the page player itself sets for its volume (cubic curve or not).
   const ownLevel = player => {
     const v = typeof player._playerVolume === 'number' ? player._playerVolume : 1;
@@ -312,15 +333,16 @@
     // The page player's own media element now: what is really heard, whatever the state says.
     // active: this page is Spotify Connect's active device (else the state is another device's).
     // level: the element's volume (0..1), which local fades move; own: the level the page
-    // player itself wants there.
-    // -> {paused, muted, volume, level, own, time, readyState, ended, active} | null (no element yet)
+    // player itself wants there. playerVolume: what the page player itself is set to, read
+    // here too so the host's periodic volume check costs no second call.
+    // -> {paused, muted, volume, level, own, time, readyState, ended, playerVolume, active} | null (no element yet)
     'media.state': async () => {
       const player = await localPlayer();
       const el = player && player._player;
       if (!(el instanceof HTMLMediaElement)) return null;
-      let active = null;
-      try { const me = (await need().resolve('ConnectDevicesAPI').getDevices()).find(d => d.isLocal); active = !!(me && me.isActive); } catch (e) { /* unknown */ }
-      return { paused: el.paused, muted: el.muted, volume: el.volume, level: el.volume, own: ownLevel(player), time: el.currentTime, readyState: el.readyState, ended: el.ended, active };
+      let playerVolume = null;
+      try { playerVolume = await need().playback.getVolume(); } catch (e) { /* unknown */ }
+      return { paused: el.paused, muted: el.muted, volume: el.volume, level: el.volume, own: ownLevel(player), time: el.currentTime, readyState: el.readyState, ended: el.ended, playerVolume, active: await activeDevice() };
     },
     // The media element's volume, on this phone only: no Spotify Connect command (refused on
     // some accounts, slow on a busy network) and nothing reported to Spotify, as the player's
@@ -333,6 +355,21 @@
       // Never 0: see 'media.mute'.
       el.volume = a.restore ? ownLevel(player) : Math.min(1, Math.max(SILENT, Number(a.level) || 0));
       return el.volume;
+    },
+
+    // A whole fade in one call: the page applies the steps itself, so the host sends the play
+    // command while the sound goes down instead of waiting for every step (a round trip each).
+    // {steps: [level, ...], ms, restore: true?} -> true. Levels are never 0: see 'media.mute'.
+    'media.fade': async a => {
+      const player = await localPlayer();
+      const el = player && player._player;
+      if (!(el instanceof HTMLMediaElement)) return null;
+      const steps = (Array.isArray(a.steps) ? a.steps : []).map(Number);
+      const per = Math.max(1, Number(a.ms) || 12);
+      const set = v => { el.volume = Math.min(1, Math.max(SILENT, v)); };
+      steps.forEach((v, i) => setTimeout(() => set(v), i * per));
+      if (a.restore) setTimeout(() => { el.volume = ownLevel(player); }, steps.length * per);
+      return true;
     },
 
     'volume.get': () => need().playback.getVolume(),

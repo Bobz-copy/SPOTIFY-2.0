@@ -4,6 +4,7 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 ## Unreleased
 
+- **Far fewer calls to the player page**: "ready" is announced once per page load (twice meant every listener of it ran twice: state, token, quality, volume), the web token is fetched once and shared, and the Connect device list is read at most every 6 s in the page instead of every 2 s.
 - **Myspoti's icon in the notification** and in Samsung's Now Bar, instead of a generic music note.
 - **Ads that get through are silent**: they are muted on the page itself, no longer through a Spotify Connect volume command that some accounts refuse (the ad was heard). The song after the ad no longer stays paused.
 - **Previous no longer pauses**: "previous" in the middle of a song restarts it and keeps playing (the skip fade left the sound at zero, and Android's WebView pauses silent media in the background).

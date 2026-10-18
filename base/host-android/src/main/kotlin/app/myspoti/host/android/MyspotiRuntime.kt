@@ -35,13 +35,19 @@ object MyspotiRuntime {
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
         host.onPageStarting = { spotify.onPageStarting() }
         spotify.player.reloadHost = { host.reload() }
-        // Every 10 s: is the bridge ready, what does the player say (diagnostics in Logcat).
+        // The bridge, the page and the player in Logcat (diagnostics of a bug report): what
+        // changes is logged when it changes, not once every 10 s whether or not anything happened.
         scope.launch {
+            var last = ""
             while (true) {
                 kotlinx.coroutines.delay(10_000)
                 val s = spotify.player.state.value
-                android.util.Log.d(WebPlayerHost.LOG, "status ready=${spotify.ready.value} login=${host.loginRequired.value} " +
-                    "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} url=${host.url.value.take(60)}")
+                val line = "status ready=${spotify.ready.value} login=${host.loginRequired.value} " +
+                    "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} url=${host.url.value.take(60)}"
+                if (line != last) {
+                    last = line
+                    android.util.Log.d(WebPlayerHost.LOG, line)
+                }
             }
         }
         if (!loadPage) return
@@ -53,12 +59,7 @@ object MyspotiRuntime {
     }
 
     /** True when the Web Player holds a signed-in user's token (not an anonymous one). */
-    suspend fun isSignedIn(): Boolean {
-        val token = spotify.bridge.call("token.get")
-        return (token as? kotlinx.serialization.json.JsonObject)?.get("isAnonymous")?.let {
-            (it as? kotlinx.serialization.json.JsonPrimitive)?.content == "false"
-        } ?: false
-    }
+    suspend fun isSignedIn(): Boolean = spotify.isSignedIn()
 
     /** Data saver: frees the page; [resume] loads it again. */
     fun suspendPlayer() = host.unload()

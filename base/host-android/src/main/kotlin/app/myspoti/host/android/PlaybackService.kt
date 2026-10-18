@@ -45,7 +45,12 @@ data class NowPlayingInfo(
     val buffering: Boolean = false,
     val liked: Boolean = false,
     val shuffle: Boolean = false,
-)
+) {
+    /** Everything but the position: a moving position alone is not a new state. */
+    fun sameAs(other: NowPlayingInfo) = id == other.id && title == other.title && artist == other.artist &&
+        album == other.album && coverUrl == other.coverUrl && durationMs == other.durationMs &&
+        playing == other.playing && buffering == other.buffering && liked == other.liked && shuffle == other.shuffle
+}
 
 /** Commands from the system (notification buttons, headset, car, lock screen). */
 interface PlaybackControls {
@@ -344,6 +349,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
         @Volatile private var current: NowPlayingInfo? = null
 
         private const val PAUSE_GRACE_MS = 60_000L
+        /** A state that did not change is republished at most that often (see [update]). */
+        private const val POSITION_REPUSH_MS = 10_000L
 
         /** Packages allowed to browse the library (see onGetRoot). */
         private val ALLOWED_BROWSERS = setOf(
@@ -363,6 +370,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
         /** Pushes the now-playing state; starts the service when playback starts. */
         fun update(context: Context, info: NowPlayingInfo) {
+            val before = current
             current = info
             val svc = instance
             if (svc == null) {
@@ -371,6 +379,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 }
                 return
             }
+            // The player reports several times per second (position, buffering): only a real
+            // change reaches the session and the notification, the system extrapolates the
+            // position in between (the known state is republished every POSITION_REPUSH_MS).
+            if (before != null && before.sameAs(info) &&
+                kotlin.math.abs(info.positionMs - before.positionMs) < POSITION_REPUSH_MS
+            ) return
             svc.apply(info)
             svc.show(info)
         }

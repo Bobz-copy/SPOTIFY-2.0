@@ -31,4 +31,7 @@ class StallTest {
         assertEquals("next", SpotifyPlayer.adRecovery(2))
         assertEquals("reload", SpotifyPlayer.adRecovery(3))
     }
+
+    // Chromium pauses a hidden page's media that (re)starts at volume 0.
+    @Test fun `a fade never reaches volume 0`() = SpotifyPlayer.FADE_STEPS.forEach { assertEquals(true, it > 0.0) }
 }

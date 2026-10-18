@@ -79,5 +79,8 @@ class SpotifyApi(
 
     suspend fun onPageLoaded() = bridge.inject()
 
+    /** The host calls this when a Web Player page load starts (reload, renderer back). */
+    fun onPageStarting() = bridge.pageGone()
+
     suspend fun awaitReady() { ready.first { it } }
 }

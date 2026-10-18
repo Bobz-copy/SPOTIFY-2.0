@@ -197,6 +197,23 @@
     return [...found];
   };
 
+  // The page's own audio player (PlayerSDK.harmony's streamer), once it exists.
+  const localPlayer = async () => {
+    const sdk = need().resolve('PlayerSDK');
+    const streamer = sdk && sdk.harmony && sdk.harmony._streamer;
+    if (!streamer || !streamer._playerPromise) return null;
+    return Promise.race([streamer._playerPromise, new Promise(r => setTimeout(() => r(null), 2000))]);
+  };
+
+  // Not heard, yet not "muted audio" to Chromium (see 'media.mute').
+  const SILENT = 0.001;
+
+  // The element volume the page player itself sets for its volume (cubic curve or not).
+  const ownLevel = player => {
+    const v = typeof player._playerVolume === 'number' ? player._playerVolume : 1;
+    return player._cubicVolume ? v * v * v : v;
+  };
+
   // --- commands -------------------------------------------------------------
 
   const need = () => {
@@ -269,11 +286,45 @@
     // Mutes the page's own media elements (ads), whatever Spotify Connect says about the
     // volume. Elements are known from the host's document-start hook (window.__mspMedia),
     // or found in the document. {on} -> how many elements were set.
+    //
+    // Not `muted`, and never volume 0: Chromium pauses a hidden page's media that starts (a
+    // new song, a restart, a seek) muted or at volume 0, and the song after the ad stayed
+    // paused. A volume of SILENT is not heard and keeps playback going.
     'media.mute': async a => {
       window.__mspMuted = !!a.on;
+      const player = await localPlayer().catch(() => null);
       const els = new Set([...(window.__mspMedia || []), ...document.querySelectorAll('audio, video'), ...await playerMedia()]);
-      for (const el of els) el.muted = !!a.on;
+      for (const el of els) {
+        el.muted = false;
+        el.volume = a.on ? SILENT : (player && el === player._player ? ownLevel(player) : 1);
+      }
       return els.size;
+    },
+
+    // The page player's own media element now: what is really heard, whatever the state says.
+    // active: this page is Spotify Connect's active device (else the state is another device's).
+    // level: the element's volume (0..1), which local fades move; own: the level the page
+    // player itself wants there.
+    // -> {paused, muted, volume, level, own, time, readyState, ended, active} | null (no element yet)
+    'media.state': async () => {
+      const player = await localPlayer();
+      const el = player && player._player;
+      if (!(el instanceof HTMLMediaElement)) return null;
+      let active = null;
+      try { const me = (await need().resolve('ConnectDevicesAPI').getDevices()).find(d => d.isLocal); active = !!(me && me.isActive); } catch (e) { /* unknown */ }
+      return { paused: el.paused, muted: el.muted, volume: el.volume, level: el.volume, own: ownLevel(player), time: el.currentTime, readyState: el.readyState, ended: el.ended, active };
+    },
+    // The media element's volume, on this phone only: no Spotify Connect command (refused on
+    // some accounts, slow on a busy network) and nothing reported to Spotify, as the player's
+    // own setVolume would. Fades go through it. {level} | {restore: true} (the player's own
+    // volume back) -> the level set.
+    'media.volume': async a => {
+      const player = await localPlayer();
+      const el = player && player._player;
+      if (!(el instanceof HTMLMediaElement)) return null;
+      // Never 0: see 'media.mute'.
+      el.volume = a.restore ? ownLevel(player) : Math.min(1, Math.max(SILENT, Number(a.level) || 0));
+      return el.volume;
     },
 
     'volume.get': () => need().playback.getVolume(),

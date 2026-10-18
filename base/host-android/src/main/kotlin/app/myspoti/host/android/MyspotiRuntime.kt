@@ -33,6 +33,7 @@ object MyspotiRuntime {
         spotify = SpotifyApi(host, scope, language = Locale.getDefault().language, ops = updater.load())
         spotify.bridge.logger = { line -> android.util.Log.d(WebPlayerHost.LOG, line) }
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
+        host.onPageStarting = { spotify.onPageStarting() }
         spotify.player.reloadHost = { host.reload() }
         // Every 10 s: is the bridge ready, what does the player say (diagnostics in Logcat).
         scope.launch {

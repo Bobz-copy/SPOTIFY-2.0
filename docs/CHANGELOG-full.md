@@ -5,6 +5,14 @@ Every change, release by release. The short version is in [CHANGELOG.md](../CHAN
 ## Unreleased
 
 - **Notification icon**: the media notification (status bar, Samsung Now Bar) showed the engine's generic two-note icon; the app now ships its wave mark under the same resource name, so it replaces it.
+- **Silent media is paused by the WebView**: Chromium pauses a hidden page's media that starts (new song, restart, seek) while muted or at volume 0. Skip fades went down to 0 and ads were muted with `muted`, so "previous" mid-song and the song after an ad stayed paused. Fades now stop at a tiny level and ads are silenced with an unheard element volume (0.001), never `muted`.
+- **Fades are local**: they move the media element's volume, no longer the Spotify Connect volume (a network command, refused on some accounts, which could leave the sound at 0). The volume guard checks the element too.
+- **Playback supervisor**: every 2 s the page's media element is read (`media.state`). A song the page says it plays here while the element stands still for 6 s is nudged (seek where it was), then the page is reloaded. A page that answers neither that read nor a ping is reloaded at once (a few seconds instead of a 20 s call timeout).
+- **Reloads resume**: any reload (ours, the WebView's, a renderer restart) remembers the song that played and its position; once the new page is up it is resumed or played again there, checked and retried up to 3 times (a new page says ready before Spotify Connect knows its device: "No such device").
+- **Commands while the page loads**: calls during a reload fail at once instead of timing out; play / pause / skip wait up to 30 s for the page; playback commands refused with "No such device" are sent again.
+- **Pull back from another device**: the active device is read fresh before each transport command (after a cold start the app did not know another device had playback); the pull is bounded to 6 s, and a pull that hangs (a device that went away) reloads the page, which then claims playback itself. A pause never pulls playback back.
+- **Previous refused** by the page: the song restarts, or the one before plays.
+- **Debug builds**: `tools/playback_test.py` drives the phone through 14 playback scenarios (debug-only `TestControlReceiver`), and track-playback responses carrying an ad are kept in `cache/ad-samples`.
 
 ## 2.0.0-beta.6
 

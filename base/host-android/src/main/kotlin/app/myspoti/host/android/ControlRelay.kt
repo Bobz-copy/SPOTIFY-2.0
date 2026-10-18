@@ -86,6 +86,7 @@ internal class ControlRelay(private val view: WebView) {
                     val text = it.body.string()
                     android.util.Log.d(WebPlayerHost.LOG, "relay $method ${shortPath(url)} -> ${it.code}")
                     if (it.code >= 400) android.util.Log.d(WebPlayerHost.LOG, "relay error body: ${text.take(400)}")
+                    if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
                     reply(id, it.code, out.toString(), text)
                 }
             }
@@ -99,6 +100,16 @@ internal class ControlRelay(private val view: WebView) {
         )
     }
 
+    private val debuggable = view.context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+
+    /** Debug builds: a playback response that carries an ad, kept in cache/ad-samples for study. */
+    private fun keepAdSample(method: String, url: String, sent: String?, received: String) = runCatching {
+        val dir = java.io.File(view.context.cacheDir, "ad-samples").apply { mkdirs() }
+        java.io.File(dir, "${System.currentTimeMillis()}.json").writeText(
+            JSONObject().put("method", method).put("url", url.substringBefore('?')).put("sent", sent ?: "").put("received", received).toString())
+        android.util.Log.d(WebPlayerHost.LOG, "relay: ad in $method ${shortPath(url)} (sample kept)")
+    }
+
     private fun shortPath(url: String) = url.substringBefore('?').substringAfter(".com").replace(Regex("[0-9a-f]{20,}"), "…")
 
     companion object {
@@ -106,19 +117,22 @@ internal class ControlRelay(private val view: WebView) {
 
         fun isRelayed(url: String) = RELAYED.containsMatchIn(url)
 
+        private val AD_MARK = Regex("\"is_advertisement\"\\s*:\\s*\"?true|spotify:ad:|\"ad_id\"")
+
         /** Wraps window.fetch; the same pattern as [RELAYED]. */
         private val SCRIPT = """
             (() => {
               if (window.__mspNetInstalled || !window.MyspotiNet) return;
               window.__mspNetInstalled = true;
               // The player's media elements, often never added to the document: the bridge
-              // mutes them during an ad ("media.mute"); one started while muted starts muted.
+              // silences them during an ad ("media.mute"); one started then starts silent.
+              // Silent is a tiny volume, never muted: Chromium pauses muted media of a hidden page.
               const media = new Set();
               window.__mspMedia = media;
               const play = HTMLMediaElement.prototype.play;
               HTMLMediaElement.prototype.play = function () {
                 media.add(this);
-                if (window.__mspMuted) this.muted = true;
+                if (window.__mspMuted) { this.muted = false; this.volume = 0.001; }
                 return play.apply(this, arguments);
               };
               const relayed = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.spotify\.com\/(connect-state|track-playback)\/v1\//;

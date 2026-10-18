@@ -52,6 +52,9 @@ class WebPlayerHost(context: Context) : BridgeHost {
     /** Fires after each Web Player page load; the API injects the bridge then. */
     var onPageLoaded: (() -> Unit)? = null
 
+    /** Fires when a Web Player page load starts: the old page and its bridge are gone. */
+    var onPageStarting: (() -> Unit)? = null
+
     init {
         // Debug builds only: lets desktop tools (chrome://inspect, CDP) look at the page.
         val debuggable = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -128,7 +131,7 @@ class WebPlayerHost(context: Context) : BridgeHost {
                 pageStarts++
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
-                if (url.startsWith(PLAYER_URL)) relay.injectNow()
+                if (url.startsWith(PLAYER_URL)) { onPageStarting?.invoke(); relay.injectNow() }
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {

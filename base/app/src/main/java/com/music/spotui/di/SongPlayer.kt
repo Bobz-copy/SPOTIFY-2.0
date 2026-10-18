@@ -448,12 +448,20 @@ object SongPlayer {
      * at once raced in the Web Player (a skip and a play crossing, a player stuck on one
      * song until restarted); one still waiting when a newer one comes is dropped.
      */
-    private fun transport(block: suspend (isLatest: () -> Boolean) -> Unit) {
+    /** [pullBack]: playback taken by another device comes back here first (not for a pause). */
+    private fun transport(pullBack: Boolean = true, block: suspend (isLatest: () -> Boolean) -> Unit) {
         val gen = transportGen.incrementAndGet()
         scope.launch {
             transportLock.withLock {
                 if (gen != transportGen.get()) return@withLock
-                takeBackPlayback()
+                // A tap while the page loads (cold start, a reload): sent once it is there,
+                // instead of failing at once with "not ready".
+                if (!api.ready.value && kotlinx.coroutines.withTimeoutOrNull(READY_WAIT_MS) { api.ready.first { it } } == null) {
+                    Log.w(TAG, "transport dropped: the player page is not ready")
+                    return@withLock
+                }
+                if (gen != transportGen.get()) return@withLock
+                if (pullBack) takeBackPlayback()
                 runCatching { kotlinx.coroutines.withTimeout(TRANSPORT_TIMEOUT_MS) { block { gen == transportGen.get() } } }
                     .onFailure { Log.w(TAG, "transport failed: ${it.message}") }
             }
@@ -536,7 +544,7 @@ object SongPlayer {
         if (LocalPlayer.active.value) { LocalPlayer.pause(); return }
         intendPaused()
         positionMs = getCurrentPosition(); positionAt = SystemClock.elapsedRealtime(); playing = false
-        transport { api.player.pause() }
+        transport(pullBack = false) { api.player.pause() }
     }
 
     fun stop() = pause()
@@ -566,6 +574,10 @@ object SongPlayer {
     private const val SHUFFLE_QUEUE_MAX = 50
     /** After pulling playback back, the page needs a moment before it takes commands. */
     private const val PULL_BACK_SETTLE_MS = 600L
+    private const val PULL_BACK_WAIT_MS = 6_000L
+    private const val DEVICES_WAIT_MS = 2_000L
+    /** A transport command waits that long for the page to load before it is dropped. */
+    private const val READY_WAIT_MS = 30_000L
 
     /** Shuffle-play a list: Spotify picks the first track of its own shuffled context. */
     fun shufflePlay(songs: List<SongsModel>) {
@@ -808,10 +820,24 @@ object SongPlayer {
      * where a free account's commands are refused. The music comes back to this phone first.
      */
     private suspend fun takeBackPlayback() {
+        // The device list as Spotify has it now: the one kept here is only refreshed on a song
+        // change, and after a cold start it does not know a device that took playback before.
+        kotlinx.coroutines.withTimeoutOrNull(DEVICES_WAIT_MS) { runCatching { api.devices.refresh() } }
+        val active = api.devices.devices.value.firstOrNull { it.active }
+        _activeDevice.value = active?.takeIf { !it.local }?.let { ConnectDevice(it.id, it.name, it.type, false, true) }
         val remote = _activeDevice.value ?: return
         if (remote.id == chosenRemote) return
         Log.i(TAG, "playback taken by ${remote.name}: pulled back here")
-        runCatching { api.devices.pullHere() }.onFailure { Log.w(TAG, "pull here failed: ${it.message}") }
+        // Bounded: a transfer from a device that went away can leave the page's promise
+        // pending for ever, and every later command waiting behind it.
+        val pulled = kotlinx.coroutines.withTimeoutOrNull(PULL_BACK_WAIT_MS) { runCatching { api.devices.pullHere() } }
+        if (pulled?.isSuccess != true) Log.w(TAG, "pull here failed: ${pulled?.exceptionOrNull()?.message ?: "no answer"}")
+        // No answer: the page's Connect layer waits on that device and would hold every later
+        // command. A new page claims playback for itself at the first command.
+        if (pulled == null) {
+            Log.w(TAG, "pull here hangs: player page reloaded")
+            MyspotiRuntime.spotify.player.reloadPage()
+        }
         _activeDevice.value = null
         PlaybackService.setPlaybackDevice(false, remoteVolume)
         kotlinx.coroutines.delay(PULL_BACK_SETTLE_MS)

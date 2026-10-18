@@ -54,4 +54,18 @@ class BridgeMessagesTest {
         val bridge = bridgeAfterGarbage { id -> """{"type":"result","id":$id,"ok":"yes","error":{"m":1}}""" }
         assertThrows(BridgeException::class.java) { runBlocking { bridge.call("bridge.version", timeoutMs = 2_000) } }
     }
+
+    @Test fun `a page going away fails calls at once, the next page answers again`() = runBlocking {
+        val host = FakeHost { id -> """{"type":"result","id":$id,"ok":true,"value":1}""" }
+        val bridge = Bridge(host, scope)
+        host.messages.subscriptionCount.first { it > 0 }
+        bridge.pageGone()
+        val started = System.currentTimeMillis()
+        val e = assertThrows(BridgeException::class.java) { runBlocking { bridge.call("bridge.version", timeoutMs = 5_000) } }
+        assertEquals("not ready", e.message)
+        assertEquals(true, System.currentTimeMillis() - started < 1_000)
+        host.messages.emit("""{"type":"ready","version":1}""")
+        bridge.ready.first { it }
+        assertEquals(JsonPrimitive(1), bridge.call("bridge.version", timeoutMs = 2_000))
+    }
 }

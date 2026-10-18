@@ -62,7 +62,7 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
             } else if (type != "queue") log("page $type: " + raw.take(300))
         }
         when (type) {
-            "ready" -> _ready.value = true
+            "ready" -> { gone = false; _ready.value = true }
             "result" -> {
                 val id = field("id")?.intOrNull ?: return
                 val waiter = pending.remove(id) ?: return
@@ -83,6 +83,19 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
         host.evaluate(BridgeScript.source)
     }
 
+    /**
+     * The page is going away (a reload or a new load started): not ready until the bridge is
+     * injected again, and the calls still waiting fail now instead of each timing out.
+     */
+    fun pageGone() {
+        gone = true
+        _ready.value = false
+        pending.values.forEach { it.completeExceptionally(BridgeException("page reloaded")) }
+    }
+
+    /** Between [pageGone] and the new page's "ready". */
+    @Volatile private var gone = false
+
     /** When a call last timed out (0: never). A frozen page times out every call. */
     @Volatile var lastTimeoutAt = 0L
         private set
@@ -93,13 +106,16 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
      */
     suspend fun ping(timeoutMs: Long = 3_000): Boolean = runCatching { call("bridge.version", timeoutMs = timeoutMs) }.isSuccess
 
-    suspend fun call(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000): JsonElement {
+    /** [quiet]: a poll made every few seconds; only its failures are logged. */
+    suspend fun call(method: String, args: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000, quiet: Boolean = false): JsonElement {
+        // The page is reloading: nothing would answer, the call would only wait for its timeout.
+        if (gone) throw BridgeException("not ready")
         val id = ids.incrementAndGet()
         val waiter = CompletableDeferred<JsonElement>()
         pending[id] = waiter
         try {
             val started = System.currentTimeMillis()
-            logger?.invoke("call #$id $method ${args.toString().take(200)}")
+            if (!quiet) logger?.invoke("call #$id $method ${args.toString().take(200)}")
             host.evaluate("window.Myspoti && window.Myspoti.call($id, ${json.encodeToString(JsonElement.serializer(), kotlinx.serialization.json.JsonPrimitive(method))}, $args).catch(() => {})")
             return try {
                 // withTimeoutOrNull, not withTimeout: a timeout must surface as a
@@ -109,12 +125,13 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
                 val result = withTimeoutOrNull(timeoutMs) { waiter.await() }
                     ?: throw BridgeException("timeout after $timeoutMs ms: $method")
                 result.also {
+                    if (quiet) return@also
                     val shown = if (method == "token.get") "(token hidden)" else it.toString().take(200)
                     logger?.invoke("call #$id $method ok in ${System.currentTimeMillis() - started} ms: $shown")
                 }
             } catch (e: Exception) {
                 if (e is BridgeException && e.message?.startsWith("timeout") == true) lastTimeoutAt = System.currentTimeMillis()
-                logger?.invoke("call #$id $method FAILED after ${System.currentTimeMillis() - started} ms: ${e.message}")
+                logger?.invoke("call #$id $method${if (quiet) " " + args.toString().take(100) else ""} FAILED after ${System.currentTimeMillis() - started} ms: ${e.message}")
                 throw e
             }
         } finally {

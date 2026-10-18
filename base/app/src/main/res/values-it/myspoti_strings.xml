@@ -69,7 +69,7 @@
     <string name="browse_workout">Allenamento</string>
     <string name="browse_dance_electronic">Dance/Elettronica</string>
     <string name="language_auto">Automatica</string>
-    <string name="language_auto_detail">La lingua del telefono quando Myspoti ce l\'ha (inglese, francese, italiano), altrimenti l\'inglese</string>
+    <string name="language_auto_detail">La lingua del telefono se Myspoti la ha (francese, greco, inglese, italiano, portoghese, spagnolo, tedesco), altrimenti l\'inglese</string>
     <string name="language_partial_note">Altre lingue: le etichette di Spotify sono tradotte, i testi di Myspoti restano in inglese.</string>
     <string name="restart_player_title">Riavvia il lettore</string>
     <string name="restart_player_detail">Se la musica non risponde più: ricarica il lettore di Spotify</string>

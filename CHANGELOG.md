@@ -14,6 +14,7 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **Skips are about three times faster**: the next song is heard ~0.8 s after the tap instead of ~2.5 s (the next song is loaded ahead, the first tap is sent at once, a shorter fade, and the hidden Spotify page no longer redraws its home screen at every song).
 - **Cover back to its full size** in the player.
 - **Myspoti's buttons play on this phone again** when another device (the Spotify app on the same account, for instance) took playback without being picked in Myspoti: the music comes back here first, instead of driving that device (where skips, previous and volume were refused).
+- **New languages**: German, Spanish, Portuguese and Greek, on every screen.
 - **Music no longer stops for a minute**: a Web Player page that stops answering is reloaded at once, and playback goes on.
 - **No more silent songs**: the sound comes back by itself if a skip or a muted ad left it at zero; after a skip it comes back as soon as the next song is there.
 - **Smart shuffle** goes on from where the song is (no restart), adds songs to every playlist, and has its own icon in the player.

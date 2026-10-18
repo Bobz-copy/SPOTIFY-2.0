@@ -32,4 +32,11 @@
     <string name="bridge_player_unlocked">Reprodutor desbloqueado</string>
     <string name="bridge_reloading">Recarregando…</string>
     <string name="service_disabled_message">O serviço não está ativado</string>
+    <string name="energy_saver_title">Poupança de bateria</string>
+    <string name="energy_saver_summary">Canvas desligado, vídeos e animações mais leves</string>
+    <string name="video_fullscreen_enter">Entrar em ecrã inteiro</string>
+    <string name="video_fullscreen_exit">Sair do ecrã inteiro</string>
+    <string name="playback_seek_description">Posição de reprodução</string>
+    <string name="account_page_title">Conta Spotify</string>
+    <string name="account_page_detail">Plano, privacidade e dispositivos, em spotify.com</string>
 </resources>

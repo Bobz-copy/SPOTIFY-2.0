@@ -32,4 +32,11 @@
     <string name="bridge_player_unlocked">Player entsperrt</string>
     <string name="bridge_reloading">Wird neu geladen…</string>
     <string name="service_disabled_message">Der Dienst ist nicht aktiviert</string>
+    <string name="energy_saver_title">Energiesparmodus</string>
+    <string name="energy_saver_summary">Canvas aus, leichtere Videos und Animationen</string>
+    <string name="video_fullscreen_enter">Vollbild öffnen</string>
+    <string name="video_fullscreen_exit">Vollbild beenden</string>
+    <string name="playback_seek_description">Wiedergabeposition</string>
+    <string name="account_page_title">Spotify-Konto</string>
+    <string name="account_page_detail">Abo, Datenschutz und Geräte, auf spotify.com</string>
 </resources>

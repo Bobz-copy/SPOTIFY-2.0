@@ -324,4 +324,6 @@
     <string name="settings_rotation_auto">Automatisch</string>
     <string name="settings_rotation_landscape">Querformat</string>
     <string name="support_github_action">Auf GitHub sponsern</string>
+    <string name="spotiflac_verify_again">Die SpotiFLAC-Bestätigung ist abgelaufen: Bestätige sie in den Einstellungen erneut, um verlustfrei herunterzuladen</string>
+    <string name="download_on_mobile_data">Download über mobile Daten: Er verbraucht dein Datenvolumen</string>
 </resources>

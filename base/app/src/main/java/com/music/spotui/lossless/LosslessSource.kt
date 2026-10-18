@@ -72,6 +72,8 @@ object LosslessSource {
         // Qobuz's own catalogue search finds the ISRC quickly and does not depend on the
         // community backends; the Tidal id does (their search), and they are often down.
         fun verified(ext: ZarzSession.Ext) = com.music.spotui.data.preferences.getSpotiflacSession(context, ext.appVersion) != null
+        // No verified server at all: only the public ones are left, often down. Say so.
+        if (ZarzSession.Ext.entries.none(::verified)) verificationNeeded(context)
 
         // 1. Tidal through the SpotiFLAC download servers (Zarz), with the user's verified
         //    session, as SpotiFLAC Mobile's tidal-web extension does: the most reliable source.
@@ -121,7 +123,7 @@ object LosslessSource {
                 return Success(LosslessFile(url, "", "Qobuz", bits), isrcMatched = true)
             } catch (e: ZarzSession.VerifyRequired) {
                 // The servers want a new verification: forget the session, Settings asks again.
-                com.music.spotui.data.preferences.clearSpotiflacSession(context, ZarzSession.Ext.QOBUZ.appVersion)
+                verificationNeeded(context)
                 Log.w(TAG, "zarz qobuz: verification required")
                 return null
             } catch (e: Exception) {
@@ -150,7 +152,7 @@ object LosslessSource {
                 if (named.url.isNotBlank() && !isFullTrack(named.url, info.durationSec)) continue
                 return Success(named, isrcMatched = true)
             } catch (e: ZarzSession.VerifyRequired) {
-                com.music.spotui.data.preferences.clearSpotiflacSession(context, ZarzSession.Ext.TIDAL.appVersion)
+                verificationNeeded(context)
                 Log.w(TAG, "zarz tidal: verification required")
                 return null
             } catch (e: Exception) {
@@ -175,7 +177,7 @@ object LosslessSource {
                 val url = aacManifestUrl(data.optString("manifest")) ?: continue
                 return Success(LosslessFile(url, "", "Tidal AAC ${if (q == "LOW") 96 else 320}", 16, aac = true), isrcMatched = true)
             } catch (e: ZarzSession.VerifyRequired) {
-                com.music.spotui.data.preferences.clearSpotiflacSession(context, ZarzSession.Ext.TIDAL.appVersion)
+                verificationNeeded(context)
                 return null
             } catch (e: Exception) {
                 Log.w(TAG, "zarz tidal aac: ${e.message}")
@@ -409,6 +411,23 @@ object LosslessSource {
     // ── HTTP ──────────────────────────────────────────────────────────────────
 
     private fun keyHeader() = mapOf("X-API-Key" to LosslessRegistry.API_KEY)
+
+    @Volatile private var verifyToldAt = 0L
+
+    /**
+     * A download server asks for its verification again: the user is told (once in a while)
+     * instead of downloads quietly falling back to the public servers. The session itself is
+     * only dropped when the server says it is invalid (ZarzSession).
+     */
+    private fun verificationNeeded(context: Context) {
+        val now = System.currentTimeMillis()
+        if (now - verifyToldAt < 10 * 60_000L) return
+        verifyToldAt = now
+        Log.w(TAG, "zarz: verification required")
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(context.applicationContext, app.myspoti.engine.R.string.spotiflac_verify_again, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
 
     internal fun get(urlString: String, headers: Map<String, String>): String {
         val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {

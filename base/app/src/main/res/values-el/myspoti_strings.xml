@@ -324,4 +324,6 @@
     <string name="settings_rotation_auto">Αυτόματη</string>
     <string name="settings_rotation_landscape">Οριζόντια</string>
     <string name="support_github_action">Χορηγία στο GitHub</string>
+    <string name="spotiflac_verify_again">Η επαλήθευση του SpotiFLAC έληξε: κάν’ την ξανά στις Ρυθμίσεις για λήψη χωρίς απώλειες</string>
+    <string name="download_on_mobile_data">Λήψη με δεδομένα κινητής: χρησιμοποιεί το πακέτο δεδομένων σου</string>
 </resources>

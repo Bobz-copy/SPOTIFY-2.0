@@ -324,4 +324,6 @@
     <string name="settings_rotation_auto">Automática</string>
     <string name="settings_rotation_landscape">Paisagem</string>
     <string name="support_github_action">Patrocinar no GitHub</string>
+    <string name="spotiflac_verify_again">A verificação do SpotiFLAC expirou: volta a fazê-la nas Definições para transferir sem perdas</string>
+    <string name="download_on_mobile_data">Transferência com dados móveis: usa o teu tarifário</string>
 </resources>

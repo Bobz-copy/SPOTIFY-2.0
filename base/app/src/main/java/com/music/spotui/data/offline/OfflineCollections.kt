@@ -62,6 +62,18 @@ object OfflineCollections {
     fun isKept(trackId: String): Boolean = synchronized(lock) { trackId in singles } ||
         collections.values.any { trackId in it.trackIds }
 
+    @Volatile private var wifiPending = false
+
+    /** Automatic downloads were held back for Wi-Fi: the next Wi-Fi brings every list up to date. */
+    fun waitForWifi() { wifiPending = true }
+
+    /** The phone is on Wi-Fi (or another unmetered network) again. */
+    fun onUnmetered(context: Context) {
+        if (!wifiPending) return
+        wifiPending = false
+        refreshAll(context, force = true)
+    }
+
     /** Download a song on its own. */
     fun downloadSong(song: SongsModel, quality: com.music.spotui.data.preferences.DownloadQuality? = null) {
         if (song.spotifyTrackId.isBlank()) return
@@ -116,17 +128,19 @@ object OfflineCollections {
         collections[page.uri] = c.copy(name = page.name, trackIds = ids, syncedAt = System.currentTimeMillis())
         save()
         val missing = songs.filter { !OfflineStore.isDownloaded(it.spotifyTrackId) && OfflineStore.status[it.spotifyTrackId] == null }
-        if (missing.isNotEmpty()) OfflineDownloader.enqueue(missing, com.music.spotui.data.preferences.DownloadQuality.saved(c.quality))
+        if (missing.isNotEmpty()) OfflineDownloader.enqueue(missing, com.music.spotui.data.preferences.DownloadQuality.saved(c.quality), auto = true)
         gone.filterNot { isKept(it) }.forEach { OfflineDownloader.remove(it) }
         if (missing.isNotEmpty() || gone.isNotEmpty()) Log.i(TAG, "${page.name}: +${missing.size} -${gone.size}")
     }
 
     /** Brings every downloaded list up to date (at start, at most every 6 hours, online only). */
-    fun refreshAll(context: Context) {
+    fun refreshAll(context: Context, force: Boolean = false) {
         scope.launch {
             delay(15_000)
             if (!OfflineStore.isOnline(context)) return@launch
-            val due = collections.values.filter { System.currentTimeMillis() - it.syncedAt > SYNC_EVERY_MS }
+            // On mobile data the lists are not even read: the sync waits for Wi-Fi.
+            if (com.music.spotui.data.DataSaver.metered) { waitForWifi(); return@launch }
+            val due = collections.values.filter { force || System.currentTimeMillis() - it.syncedAt > SYNC_EVERY_MS }
             for (c in due) {
                 val page = withTimeoutOrNull(60_000) { loadComplete(c) } ?: continue
                 withContext(Dispatchers.Main) { sync(page) }

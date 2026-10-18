@@ -2,6 +2,11 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## Unreleased
+
+- **SpotiFLAC**: when it is not verified (or the verification lapsed), Downloads and any download open the verification first, then the songs download; its page is full screen (Retry and Skip were hidden under the mini player); a session is renewed a day ahead instead of lapsing, and you are told when it must be done again.
+- **Automatic downloads wait for Wi-Fi**: downloaded lists keep in step only on Wi-Fi; a download you start on mobile data goes ahead with a warning.
+
 ## 2.0.0-beta.7
 
 - **Music that keeps playing**: a frozen player page is caught and reloaded in seconds, and the song goes on where it was; no more silent songs after a skip, "previous" or an ad; play right after launch works.

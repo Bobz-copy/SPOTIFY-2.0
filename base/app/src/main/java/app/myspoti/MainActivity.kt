@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                         when {
-                            showSpotiflac -> com.music.spotui.ui.screens.SpotiflacScreen(onClose = { showSpotiflac = false })
+                            showSpotiflac -> com.music.spotui.ui.screens.SpotiflacScreen(onClose = { showSpotiflac = false; com.music.spotui.data.offline.SpotiflacGate.resume() })
                             signedIn && setupNeeded -> com.music.spotui.ui.screens.SetupScreen(
                                 onDone = { setupNeeded = false },
                                 onSpotiflac = { showSpotiflac = true },

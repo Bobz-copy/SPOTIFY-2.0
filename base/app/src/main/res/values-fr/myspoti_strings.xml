@@ -324,4 +324,6 @@
     <string name="settings_rotation_auto">Automatique</string>
     <string name="settings_rotation_landscape">Paysage</string>
     <string name="support_github_action">Sponsor sur GitHub</string>
+    <string name="spotiflac_verify_again">La vérification SpotiFLAC a expiré : refais-la dans les Réglages pour télécharger en lossless</string>
+    <string name="download_on_mobile_data">Téléchargement en données mobiles : il utilise ton forfait</string>
 </resources>

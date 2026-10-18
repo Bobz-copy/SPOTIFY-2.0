@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -62,6 +63,12 @@ fun MyNavHost(
     val context = LocalContext.current
     val startDestination = Routes.Home.route
 
+    // A download asked for without a verified SpotiFLAC server opens the verification.
+    LaunchedEffect(navHostController) {
+        com.music.spotui.data.offline.SpotiflacGate.open.collect {
+            if (navHostController.currentDestination?.route != Routes.Spotiflac.route) navHostController.navigate(Routes.Spotiflac.route)
+        }
+    }
     NavHost(
         navController = navHostController,
         startDestination = startDestination,
@@ -123,6 +130,15 @@ fun MyNavHost(
                 bottomBarState.value = true
                 bottomBarPlayerState.value = playerState != ""
             }
+            // Not verified with SpotiFLAC (or it lapsed): the verification first, once per visit.
+            var askedVerify by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+            val context = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(Unit) {
+                if (!askedVerify && !com.music.spotui.data.preferences.hasSpotiflacSession(context)) {
+                    askedVerify = true
+                    navHostController.navigate(Routes.Spotiflac.route)
+                }
+            }
             com.music.spotui.ui.screens.DownloadsScreen(navHostController)
         }
 
@@ -169,7 +185,10 @@ fun MyNavHost(
 
         // SpotiFLAC: the verification that gives the lossless downloads their best source.
         page(Routes.Spotiflac.route){
-            com.music.spotui.ui.screens.SpotiflacScreen(onClose = { navHostController.popBackStack() })
+            com.music.spotui.ui.screens.SpotiflacScreen(onClose = {
+                navHostController.popBackStack()
+                com.music.spotui.data.offline.SpotiflacGate.resume()
+            })
         }
 
 

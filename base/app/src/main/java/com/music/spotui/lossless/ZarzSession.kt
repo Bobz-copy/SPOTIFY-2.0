@@ -37,6 +37,7 @@ internal object ZarzSession {
     private const val SCHEME = "ZARZ-HMAC-V1"
     private const val PREFIX = "X-Zarz-"
     private const val WINDOW_SECONDS = 300L
+    private const val REFRESH_AHEAD_MS = 24 * 3_600_000L
 
     /**
      * The grant redirects the verification page sends back to the app
@@ -105,16 +106,21 @@ internal object ZarzSession {
         return o.optString("ticket_id").ifBlank { o.optString("ticket") }.trim().ifBlank { throw java.io.IOException("no ticket_id") }
     }
 
+    /**
+     * Renews the session well before it ends (a day ahead), and still tries once it has ended:
+     * waiting for its last hour let sessions lapse between two downloads, and a lapsed one
+     * was given up without asking, so downloads fell back to the public servers.
+     */
     private fun refreshIfDue(context: Context, ext: Ext) {
         val s = getSpotiflacSession(context, ext.appVersion) ?: throw VerifyRequired()
         val expires = parseIso(s.expiresAt) ?: return
         val left = expires - System.currentTimeMillis()
-        if (left <= 0) throw VerifyRequired()
-        if (left > 3_600_000) return
-        runCatching {
+        if (left > REFRESH_AHEAD_MS) return
+        val renewed = runCatching {
             val (code, text) = signed(context, ext, "POST", "/session/refresh", JSONObject().put("install_id", s.installId).toString(), emptyMap())
-            if (code in 200..299) store(context, ext, s.installId, JSONObject(text), keepMissing = true)
-        }
+            if (code in 200..299) { store(context, ext, s.installId, JSONObject(text), keepMissing = true); true } else false
+        }.getOrDefault(false)
+        if (!renewed && left <= 0) throw VerifyRequired()
     }
 
     private fun signed(context: Context, ext: Ext, method: String, path: String, body: String?, extra: Map<String, String>): Pair<Int, String> {

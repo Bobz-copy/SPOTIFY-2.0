@@ -15,6 +15,8 @@ import app.myspoti.host.android.MyspotiRuntime
 import app.myspoti.host.android.NowPlayingInfo
 import app.myspoti.host.android.PlaybackService
 import com.music.spotui.data.entity.SongsModel
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -385,8 +387,10 @@ object SongPlayer {
     private fun refreshCurrentLiked() {
         val uri = _nowPlaying.value.uri.takeIf { it.startsWith(SPOTIFY_TRACK_PREFIX) || it.startsWith("spotify:episode:") } ?: return
         scope.launch {
-            val saved = runCatching { api.library.contains(listOf(uri)).single() }.getOrNull() ?: return@launch
-            onLibraryItem(uri, saved)
+            // Through the shared, cached request path: a state Spotify confirmed less than
+            // [SAVED_FRESH_MS] ago is not asked for again (its row asked for it already).
+            libraryContains(listOf(uri))
+            library[uri]?.let { onLibraryItem(uri, it) }
         }
     }
 
@@ -462,8 +466,17 @@ object SongPlayer {
                 }
                 if (gen != transportGen.get()) return@withLock
                 if (pullBack) takeBackPlayback()
-                runCatching { kotlinx.coroutines.withTimeout(TRANSPORT_TIMEOUT_MS) { block { gen == transportGen.get() } } }
-                    .onFailure { Log.w(TAG, "transport failed: ${it.message}") }
+                // A cancellation of the caller is never swallowed (it must unwind); only the
+                // transport's own timeout and a real failure are logged here.
+                try {
+                    kotlinx.coroutines.withTimeout(TRANSPORT_TIMEOUT_MS) { block { gen == transportGen.get() } }
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    Log.w(TAG, "transport timed out after ${TRANSPORT_TIMEOUT_MS} ms")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "transport failed: ${e.message}")
+                }
             }
         }
     }
@@ -670,6 +683,17 @@ object SongPlayer {
     val library: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean> =
         androidx.compose.runtime.mutableStateMapOf()
 
+    /** Confirmed by Spotify less than that long ago: not asked for again (see [libraryContains]). */
+    private const val SAVED_FRESH_MS = 60_000L
+
+    /** When Spotify (or the user's own tap) last settled each uri. */
+    private val savedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** One request in flight per uri list, so two callers asking share it. */
+    private val savedFlights =
+        java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<List<Boolean>?>>()
+    private val savedFlightLock = kotlinx.coroutines.sync.Mutex()
+
     // The user's last like/unlike wins briefly over states that were already in flight.
     @Volatile private var intentUri = ""
     @Volatile private var intentValue = false
@@ -681,6 +705,7 @@ object SongPlayer {
     private fun onLibraryItem(uri: String, saved: Boolean) {
         if (uri == intentUri && SystemClock.elapsedRealtime() < intentUntil && saved != intentValue) return
         library[uri] = saved
+        savedAt[uri] = SystemClock.elapsedRealtime()
         if (uri == (pendingItemUri ?: _nowPlaying.value.uri)) {
             boundState?.likeState?.value = saved
             pushNotification(null, saved)
@@ -727,15 +752,49 @@ object SongPlayer {
     /** Which of [uris] are saved in the user's library (Liked Songs / saved albums…). */
     suspend fun libraryContains(uris: List<String>): Set<String> {
         if (uris.isEmpty()) return emptySet()
-        val flags = runCatching { api.library.contains(uris) }.getOrNull() ?: return emptySet()
-        val saved = uris.filterIndexed { i, _ -> flags.getOrNull(i) == true }.toSet()
+        val now = SystemClock.elapsedRealtime()
+        // A page prefetch and the page opening ask for the same list within a second, and the
+        // rows of a list ask again for what the list just confirmed: only what is unknown (or
+        // old enough to have changed elsewhere) goes to Spotify.
+        val (known, unknown) = uris.partition { library.containsKey(it) && now - (savedAt[it] ?: 0L) < SAVED_FRESH_MS }
+        val out = known.filterTo(mutableSetOf()) { library[it] == true }
+        if (unknown.isEmpty()) return out
+        val flags = savedFlags(unknown) ?: return out
+        val saved = unknown.filterIndexed { i, _ -> flags.getOrNull(i) == true }.toSet()
         main.post {
-            for (u in uris) {
+            for (u in unknown) {
                 if (u == intentUri && SystemClock.elapsedRealtime() < intentUntil) continue
                 library[u] = u in saved
+                savedAt[u] = now
             }
         }
-        return saved
+        return out + saved
+    }
+
+    /** [uris] in one request; two callers asking the same list share that one request. */
+    private suspend fun savedFlags(uris: List<String>): List<Boolean>? {
+        val key = uris.sorted().joinToString("\n")
+        val flight = savedFlightLock.withLock {
+            savedFlights[key] ?: scope.async {
+                try {
+                    api.library.contains(uris)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            }.also { d ->
+                savedFlights[key] = d
+                d.invokeOnCompletion { savedFlights.remove(key, d) }
+            }
+        }
+        return try {
+            flight.await()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /** Bumped at every like / unlike of a track: the Liked Songs page refreshes its top. */

@@ -55,8 +55,6 @@ fun MyNavHost(
     val playerViewModel : PlayerViewModel = viewModel()
     val playerState by playerViewModel.currentSongTitle
 
-    Log.d("player", playerState.toString())
-
 //    val context = LocalContext.current
 //    var player : ExoPlayer? = null
 //    player = ExoPlayer.Builder(context).build()

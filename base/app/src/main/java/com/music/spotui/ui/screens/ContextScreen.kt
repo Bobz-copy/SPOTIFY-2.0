@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -347,6 +348,33 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         )
     }
 
+    // Liked Songs: a track unliked anywhere leaves the list right away. Derived state:
+    // recomputed when the page, the search, the sort or a like changes, while a recomposition
+    // of the screen with nothing new in them re-sorts nothing (a 900-track list is real work).
+    val findable = p.type == "liked" || p.type == "playlist"
+    val all by remember(p) {
+        derivedStateOf {
+            if (p.type == "liked") p.tracks.filter { SongPlayer.library["spotify:track:${it.spotifyTrackId}"] != false } else p.tracks
+        }
+    }
+    val rows by remember(p, find, sort) {
+        derivedStateOf {
+            val found = if (findable) all.filter { com.music.spotui.ui.components.matchesFind(find, it.title, it.singer, it.album) } else all
+            if (findable) sort.apply(found) else found
+        }
+    }
+    // Unique and stable for a given list: a playlist can hold the same song twice (the id alone
+    // is not unique) and the index changes at every sort (which would lose every item).
+    val keys = remember(rows) {
+        val seen = HashMap<String, Int>()
+        rows.map { s ->
+            val id = s.id.toString()
+            val n = (seen[id] ?: 0) + 1
+            seen[id] = n
+            if (n == 1) id else "$id#$n"
+        }
+    }
+
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Box(Modifier.fillMaxSize()) {
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
@@ -530,10 +558,6 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
             }
         }
         // Liked Songs: a track unliked anywhere leaves the list right away.
-        val all = if (p.type == "liked") p.tracks.filter { SongPlayer.library["spotify:track:${it.spotifyTrackId}"] != false } else p.tracks
-        val findable = p.type == "liked" || p.type == "playlist"
-        val found = if (findable) all.filter { com.music.spotui.ui.components.matchesFind(find, it.title, it.singer, it.album) } else all
-        val rows = if (findable) sort.apply(found) else found
         if (findable && all.isNotEmpty()) item(key = "find") {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
                 com.music.spotui.ui.components.FindInListField(
@@ -547,7 +571,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         if (rows.isEmpty() && find.isNotBlank()) item(key = "find-empty") {
             com.music.spotui.ui.components.FindInListEmpty(stringResource(R.string.assisted_curation_search_empty_view_no_result_title, find.trim()))
         }
-        itemsIndexed(rows, key = { i, s -> "$i:${s.id}" }) { _, song ->
+        itemsIndexed(rows, key = { i, _ -> keys[i] }) { _, song ->
             com.music.spotui.ui.components.SwipeToQueue(song) { TrackRow(
                 song = song,
                 showCover = p.type != "album",
@@ -722,6 +746,11 @@ object SmartShuffle {
     }
 }
 
+/** Text order for sorting (accents ignored): one collator per thread, none is thread-safe. */
+private val textOrder = ThreadLocal.withInitial {
+    java.text.Collator.getInstance().apply { strength = java.text.Collator.PRIMARY }
+}
+
 enum class TrackSort(val label: Int) {
     CUSTOM(R.string.your_library_sort_order_custom),
     TITLE(R.string.track_sort_title),
@@ -731,7 +760,8 @@ enum class TrackSort(val label: Int) {
     ADDED(R.string.track_sort_added);
 
     internal fun natural(songs: List<SongsModel>): List<SongsModel> {
-        val text = java.text.Collator.getInstance().apply { strength = java.text.Collator.PRIMARY }
+        // One collator per thread: sorting runs at every sort change, not at every recomposition.
+        val text = textOrder.get()
         return when (this) {
             CUSTOM -> songs
             TITLE -> songs.sortedWith { a, b -> text.compare(a.title, b.title) }

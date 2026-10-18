@@ -18,6 +18,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import kotlinx.coroutines.launch
@@ -40,19 +41,13 @@ fun App() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
 
-    // Control TopBar and BottomBar
-    when (navBackStackEntry?.destination?.route) {
-        Routes.Home.route -> {
-            bottomBarState.value = true
-        }
-        Routes.Search.route -> {
-            bottomBarState.value = true
-        }
-        Routes.Library.route -> {
-            bottomBarState.value = true
-        }
-        Routes.Album.route -> {
-            bottomBarState.value = false
+    // Control TopBar and BottomBar: on a route change (writing state during composition
+    // forces an extra recomposition pass).
+    val route = navBackStackEntry?.destination?.route
+    LaunchedEffect(route) {
+        when (route) {
+            Routes.Home.route, Routes.Search.route, Routes.Library.route -> bottomBarState.value = true
+            Routes.Album.route -> bottomBarState.value = false
         }
     }
 

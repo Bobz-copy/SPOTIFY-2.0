@@ -2,9 +2,9 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
-## Unreleased
+## 2.0.0-beta.8
 
-- **SpotiFLAC**: when it is not verified (or the verification lapsed), Downloads and any download open the verification first, then the songs download; its page is full screen (Retry and Skip were hidden under the mini player); a session is renewed a day ahead instead of lapsing, and you are told when it must be done again.
+- **SpotiFLAC**: when it is not verified (or the verification lapsed), Downloads and any download open the verification first, then the songs download; its page is full screen (Retry and Skip were hidden under the mini player); sessions follow SpotiFLAC Mobile's rules (renewed once, in their last hour, and a download refused because another one just renewed it is sent again), so many downloads at once no longer end the verification; you are told when it must be done again.
 - **Automatic downloads wait for Wi-Fi**: downloaded lists keep in step only on Wi-Fi; a download you start on mobile data goes ahead with a warning.
 
 ## 2.0.0-beta.7

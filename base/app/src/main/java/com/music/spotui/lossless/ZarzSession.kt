@@ -37,7 +37,7 @@ internal object ZarzSession {
     private const val SCHEME = "ZARZ-HMAC-V1"
     private const val PREFIX = "X-Zarz-"
     private const val WINDOW_SECONDS = 300L
-    private const val REFRESH_AHEAD_MS = 24 * 3_600_000L
+    private const val REFRESH_AHEAD_MS = 3_600_000L
 
     /**
      * The grant redirects the verification page sends back to the app
@@ -85,17 +85,42 @@ internal object ZarzSession {
      * A signed JSON call ([path] under [BASE], e.g. "/tickets"); returns the body.
      * Refreshes a session that expires within the hour first.
      */
+    /**
+     * As SpotiFLAC Mobile's signed-session client does: a request refused because another
+     * download renewed the session meanwhile (the renewal changes the secret) is sent again
+     * once with the new one; the session is dropped only when the gateway says to start
+     * over (401 SESSION_INVALID, bootstrap_session); "verify" (428) keeps it; a provider
+     * that is briefly unavailable (503, same_operation) is waited for, at most twice.
+     */
     fun signedJson(context: Context, ext: Ext, method: String, path: String, body: JSONObject?, extra: Map<String, String> = emptyMap()): JSONObject {
         refreshIfDue(context, ext)
-        val (code, text) = signed(context, ext, method, path, body?.toString(), extra)
-        val o = runCatching { JSONObject(text) }.getOrDefault(JSONObject())
-        if (code == 428 || o.optString("code").equals("VERIFY_REQUIRED", true) || o.optBoolean("needsVerification")) throw VerifyRequired()
-        if (code == 401 && o.optString("code").equals("SESSION_INVALID", true)) {
-            com.music.spotui.data.preferences.clearSpotiflacSession(context, ext.appVersion)
-            throw VerifyRequired()
+        var sessionRetried = false
+        var providerRetries = 0
+        while (true) {
+            val used = com.music.spotui.data.preferences.getSpotiflacSession(context, ext.appVersion) ?: throw VerifyRequired()
+            val (code, text) = signed(context, ext, method, path, body?.toString(), extra)
+            val o = runCatching { JSONObject(text) }.getOrDefault(JSONObject())
+            val err = o.optString("code").uppercase()
+            val origin = o.optString("origin").lowercase()
+            val action = o.optString("action").lowercase()
+            if (code == 503 && origin == "provider" && err == "PROVIDER_UNAVAILABLE" && o.optBoolean("retryable") &&
+                o.optString("retry_mode").equals("same_operation", true) && providerRetries < 2) {
+                providerRetries++
+                Thread.sleep((o.optLong("retry_after_seconds", 2).coerceIn(1, 120)) * 1000)
+                continue
+            }
+            val sessionRefused = (code == 401 && err == "SESSION_INVALID") || (code == 403 && err == "REQUEST_AUTH_INVALID")
+            if (sessionRefused) {
+                val latest = com.music.spotui.data.preferences.getSpotiflacSession(context, ext.appVersion)
+                if (!sessionRetried && latest != null && latest.sessionSecret != used.sessionSecret) { sessionRetried = true; continue }
+                if (code == 401 && origin == "gateway" && action == "bootstrap_session")
+                    com.music.spotui.data.preferences.clearSpotiflacSession(context, ext.appVersion)
+                throw VerifyRequired()
+            }
+            if (code == 428 || err == "VERIFY_REQUIRED" || o.optBoolean("needsVerification")) throw VerifyRequired()
+            if (code !in 200..299) throw java.io.IOException("HTTP $code: ${(o.optString("error").ifBlank { text }).take(160)}")
+            return o
         }
-        if (code !in 200..299) throw java.io.IOException("HTTP $code: ${(o.optString("error").ifBlank { text }).take(160)}")
-        return o
     }
 
     /** A download ticket for one resource ("qbz", "track", the track's URL). */
@@ -106,12 +131,15 @@ internal object ZarzSession {
         return o.optString("ticket_id").ifBlank { o.optString("ticket") }.trim().ifBlank { throw java.io.IOException("no ticket_id") }
     }
 
+    private val refreshLocks = Ext.entries.associateWith { Any() }
+
     /**
-     * Renews the session well before it ends (a day ahead), and still tries once it has ended:
-     * waiting for its last hour let sessions lapse between two downloads, and a lapsed one
-     * was given up without asking, so downloads fell back to the public servers.
+     * Renews the session in its last hour, one renewal at a time (as SpotiFLAC Mobile): the
+     * renewal changes the secret, so renewing on every call of parallel downloads made the
+     * server refuse the others and the session was lost. An ended session still gets a try.
      */
-    private fun refreshIfDue(context: Context, ext: Ext) {
+    private fun refreshIfDue(context: Context, ext: Ext) = synchronized(refreshLocks.getValue(ext)) {
+        // Read again under the lock: another download may have just renewed it.
         val s = getSpotiflacSession(context, ext.appVersion) ?: throw VerifyRequired()
         val expires = parseIso(s.expiresAt) ?: return
         val left = expires - System.currentTimeMillis()

@@ -2,6 +2,11 @@
 
 Every change, release by release. The short version is in [CHANGELOG.md](../CHANGELOG.md), which the app and the GitHub releases show.
 
+## 2.0.0-beta.8
+
+- **SpotiFLAC**: when it is not verified (or the verification lapsed), Downloads and any download open the verification first, then the songs download; its page is full screen (Retry and Skip were hidden under the mini player); sessions follow SpotiFLAC Mobile's rules (renewed once, in their last hour, and a download refused because another one just renewed it is sent again), so many downloads at once no longer end the verification; you are told when it must be done again.
+- **Automatic downloads wait for Wi-Fi**: downloaded lists keep in step only on Wi-Fi; a download you start on mobile data goes ahead with a warning.
+
 ## 2.0.0-beta.7
 
 - **Notification icon**: the media notification (status bar, Samsung Now Bar) showed the engine's generic two-note icon; the app now ships its wave mark under the same resource name, so it replaces it.

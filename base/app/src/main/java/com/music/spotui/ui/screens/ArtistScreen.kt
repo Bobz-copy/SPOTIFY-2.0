@@ -156,12 +156,9 @@ private fun ArtistOverviewContent(
     var likedByArtist by remember(overview.id) { mutableStateOf<List<com.music.spotui.data.entity.SongsModel>>(emptyList()) }
     var showLiked by remember(overview.id) { mutableStateOf(false) }
     LaunchedEffect(overview.id) {
+        // Loaded once per session, shared by every artist page, after this page is shown.
         val all = com.music.spotui.data.api.Api.LikedCache.tracks
-            ?: runCatching {
-                com.music.spotui.di.Graph.api.getLikedPage()
-                    .first { it is Response.Success && it.data.complete }
-                    .let { (it as? Response.Success)?.data?.tracks }
-            }.getOrNull()
+            ?: run { kotlinx.coroutines.delay(800); com.music.spotui.data.api.Api.LikedCache.loadOnce().await() }
             ?: return@LaunchedEffect
         likedByArtist = all.filter { s ->
             if (s.artistIds.isNotEmpty()) overview.id in s.artistIds
@@ -356,45 +353,6 @@ private fun ArtistOverviewContent(
             }
         }
 
-        // ── Popular tracks ──
-        if (tracks.isNotEmpty()) {
-            item {
-                Text(
-                    text = stringResource(R.string.artist_popular_tracks),
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp, 8.dp, 16.dp, 4.dp),
-                )
-            }
-            itemsIndexed(tracks.take(if (showAllPopular) 10 else 5)) { index, item ->
-                com.music.spotui.ui.components.SwipeToQueue(item.song) {
-                PopularTrackRow(
-                    item, index, artistViewModel,
-                    saved = SongPlayer.library["spotify:track:${item.song.spotifyTrackId}"] ?: ("spotify:track:${item.song.spotifyTrackId}" in saved),
-                    onToggleSaved = { on ->
-                        SongPlayer.setTrackSaved(item.song.spotifyTrackId, on)
-                    },
-                    onMore = { menuSong = item.song },
-                    onPlay = { playTrackAt(index) },
-                )
-                }
-            }
-            if (tracks.size > 5) item {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
-                            .clickable { showAllPopular = !showAllPopular }
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                    ) {
-                        Text(if (showAllPopular) stringResource(R.string.profile_bio_show_less) else stringResource(R.string.audiobook_series_see_more_button), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
         // ── Liked songs by this artist ──
         if (likedByArtist.isNotEmpty()) {
             item(key = "liked-by-artist") {
@@ -436,6 +394,45 @@ private fun ArtistOverviewContent(
                     Column(Modifier.weight(1f)) {
                         Text(song.title, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(song.album, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+
+        // ── Popular tracks ──
+        if (tracks.isNotEmpty()) {
+            item {
+                Text(
+                    text = stringResource(R.string.artist_popular_tracks),
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp, 8.dp, 16.dp, 4.dp),
+                )
+            }
+            itemsIndexed(tracks.take(if (showAllPopular) 10 else 5)) { index, item ->
+                com.music.spotui.ui.components.SwipeToQueue(item.song) {
+                PopularTrackRow(
+                    item, index, artistViewModel,
+                    saved = SongPlayer.library["spotify:track:${item.song.spotifyTrackId}"] ?: ("spotify:track:${item.song.spotifyTrackId}" in saved),
+                    onToggleSaved = { on ->
+                        SongPlayer.setTrackSaved(item.song.spotifyTrackId, on)
+                    },
+                    onMore = { menuSong = item.song },
+                    onPlay = { playTrackAt(index) },
+                )
+                }
+            }
+            if (tracks.size > 5) item {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                            .clickable { showAllPopular = !showAllPopular }
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                    ) {
+                        Text(if (showAllPopular) stringResource(R.string.profile_bio_show_less) else stringResource(R.string.audiobook_series_see_more_button), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

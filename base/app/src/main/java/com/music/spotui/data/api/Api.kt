@@ -76,12 +76,31 @@ class Api constructor(
             libraryRoot = null; folders.clear()
             facets.clear()
             LikedCache.tracks = null
+            ArtistCache.map.clear()
             ScreenCache.clear()
         }
     }
 
     object LikedCache {
         @Volatile var tracks: List<SongsModel>? = null
+        private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+        @Volatile private var loading: kotlinx.coroutines.Deferred<List<SongsModel>?>? = null
+
+        /**
+         * All liked songs, loaded once for the whole app (not again by every screen that needs
+         * them, nor started over when that screen closes before the end).
+         */
+        @Synchronized
+        fun loadOnce(): kotlinx.coroutines.Deferred<List<SongsModel>?> {
+            tracks?.let { return kotlinx.coroutines.CompletableDeferred(it) }
+            loading?.takeIf { it.isActive }?.let { return it }
+            return scope.async {
+                runCatching {
+                    Graph.api.getLikedPage().first { it is Response.Success && it.data.complete || it is Response.Error }
+                        .let { (it as? Response.Success)?.data?.tracks }
+                }.getOrNull()?.also { if (tracks == null) tracks = it }
+            }.also { loading = it }
+        }
 
         /**
          * [head] (the newest liked songs, from Spotify) then the rest of [known] after them.
@@ -425,9 +444,26 @@ class Api constructor(
         val uri = if (knownArtistId.isNotBlank()) "spotify:artist:$knownArtistId"
         else runCatching { findArtist(artistName) }.getOrNull()?.uri
         if (uri == null) { emit(Response.Error(context.getString(R.string.artist_not_found))); return@flow }
-        val page = runCatching { api.catalog.artistPage(uri) }.getOrElse {
-            Log.e("Api", "getArtistOverview failed", it); emit(Response.Error(it.message ?: "error")); return@flow
+        // Shown again within a few minutes (back, the releases page, another tap): from memory,
+        // without asking Spotify for the page and the whole discography once more.
+        ArtistCache.map[uri]?.let { (at, cached) ->
+            emit(Response.Success(cached))
+            if (System.currentTimeMillis() - at < ArtistCache.FRESH_MS) return@flow
         }
+        val firstReleases = kotlinx.coroutines.coroutineScope {
+            // The discography's first page goes out with the page itself, not after it.
+            val releases = async { runCatching { api.catalog.discography(uri, 0, 50) }.getOrNull() }
+            val page = runCatching { api.catalog.artistPage(uri) }.getOrElse {
+                releases.cancel()
+                Log.e("Api", "getArtistOverview failed", it)
+                return@coroutineScope null
+            }
+            page to releases
+        } ?: run {
+            if (ArtistCache.map[uri] == null) emit(Response.Error(context.getString(R.string.page_load_failed)))
+            return@flow
+        }
+        val page = firstReleases.first
         val avatar = big(page.artist.images)
         val top = page.topTracks.map { t -> songOf(t.track).let { if (it.coverUri.isBlank()) it.copy(coverUri = avatar) else it } to t.playcount }
         SongPlayer.registerContext(top.map { it.first.url }, uri)
@@ -445,24 +481,34 @@ class Api constructor(
             relatedArtists = page.related.map(::artistOf),
         )
         emit(Response.Success(model))
+        ArtistCache.map[uri] = System.currentTimeMillis() to model
         // The overview carries only part of the discography: the whole list follows.
         // Every page of it (big artists have hundreds of singles), up to a sane cap.
         val all = runCatching {
             val out = ArrayList<app.myspoti.api.Album>()
-            var offset: Int? = 0
+            val first = firstReleases.second.await()
+            var offset: Int? = if (first != null) { out += first.items; first.nextOffset.takeIf { first.items.isNotEmpty() } } else 0
             while (offset != null && out.size < DISCOGRAPHY_MAX) {
-                val page = api.catalog.discography(uri, offset, 50)
-                if (page.items.isEmpty()) break
-                out += page.items
-                offset = page.nextOffset
+                val next = api.catalog.discography(uri, offset, 50)
+                if (next.items.isEmpty()) break
+                out += next.items
+                offset = next.nextOffset
             }
             out
         }.getOrNull().orEmpty()
         val known = page.popularReleases.map { it.uri }.toSet()
         if (all.any { it.uri !in known }) {
             val merged = (page.popularReleases + all).distinctBy { it.uri }.sortedByDescending { it.releaseDate.orEmpty() }
-            emit(Response.Success(model.copy(popularReleases = merged.map(::albumOf))))
+            val full = model.copy(popularReleases = merged.map(::albumOf))
+            ArtistCache.map[uri] = System.currentTimeMillis() to full
+            emit(Response.Success(full))
         }
+    }
+
+    /** Artist pages shown lately, by artist uri, with when they were loaded. */
+    private object ArtistCache {
+        const val FRESH_MS = 5 * 60_000L
+        val map = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, ArtistOverviewModel>>()
     }
 
     // ── Albums and playlists ──
@@ -591,7 +637,12 @@ class Api constructor(
         emit(Response.Loading())
         if (!ready()) { emit(Response.Error(notSignedIn())); return@flow }
         val uri = "spotify:playlist:$playlistId"
+        // The first songs are asked for together with the playlist's details, not after them.
+        val firstPage = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.currentCoroutineContext()).async(Dispatchers.IO) {
+            runCatching { api.playlists.tracks(uri, 0, 100) }
+        }
         val pl = runCatching { api.playlists.playlist(uri) }.getOrElse {
+            firstPage.cancel()
             emit(Response.Error(context.getString(R.string.playlist_not_found))); return@flow
         }
         val saves = pl.followers?.takeIf { it > 0 }?.let {
@@ -612,7 +663,8 @@ class Api constructor(
         var offset = 0
         var failed = false
         while (true) {
-            val page = runCatching { api.playlists.tracks(uri, offset, 100) }.getOrElse { failed = true; null } ?: break
+            val result = if (offset == 0) firstPage.await() else runCatching { api.playlists.tracks(uri, offset, 100) }
+            val page = result.getOrElse { failed = true; null } ?: break
             songs += page.items.map(::songOf)
             SongPlayer.registerContext(songs.map { it.url }, uri)
             val total = songs.sumOf { it.durationMs.toLong() }

@@ -18,6 +18,7 @@ The official Spotify Web Player runs in a hidden WebView and does the actual pla
 
 <p align="center">
   <a href="https://ko-fi.com/kotazo"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Support Myspoti on Ko-fi" height="56"></a>
+  <a href="https://github.com/sponsors/kota-zo"><img src="https://img.shields.io/badge/Sponsor_on_GitHub-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor kota-zo on GitHub" height="56"></a>
 </p>
 
 ## Features
@@ -71,10 +72,11 @@ Blocking ads goes against Spotify's Terms of Use, and Spotify may suspend accoun
 
 ## Support
 
-Myspoti is free, has no ads and is made in my spare time. If you enjoy it, you can support it on [Ko-fi](https://ko-fi.com/kotazo), also from **About** in the app's profile menu. Nothing in the app is locked behind a donation.
+Myspoti is free, has no ads and is made in my spare time. If you enjoy it, you can support it on [Ko-fi](https://ko-fi.com/kotazo) or [GitHub Sponsors](https://github.com/sponsors/kota-zo), also from **About** in the app's profile menu. Nothing in the app is locked behind a donation.
 
 <p align="center">
   <a href="https://ko-fi.com/kotazo"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Support Myspoti on Ko-fi" height="56"></a>
+  <a href="https://github.com/sponsors/kota-zo"><img src="https://img.shields.io/badge/Sponsor_on_GitHub-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor kota-zo on GitHub" height="56"></a>
 </p>
 
 News, help and ideas: join the [Discord server](https://discord.gg/jXKnGVFnGS). Bugs and requests are also welcome in [GitHub issues](https://github.com/kota-zo/myspoti/issues).

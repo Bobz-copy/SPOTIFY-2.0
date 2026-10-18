@@ -2,7 +2,7 @@
 
 Every change, release by release. The short version is in [CHANGELOG.md](../CHANGELOG.md), which the app and the GitHub releases show.
 
-## Unreleased
+## 2.0.0-beta.7
 
 - **Notification icon**: the media notification (status bar, Samsung Now Bar) showed the engine's generic two-note icon; the app now ships its wave mark under the same resource name, so it replaces it.
 - **Silent media is paused by the WebView**: Chromium pauses a hidden page's media that starts (new song, restart, seek) while muted or at volume 0. Skip fades went down to 0 and ads were muted with `muted`, so "previous" mid-song and the song after an ad stayed paused. Fades now stop at a tiny level and ads are silenced with an unheard element volume (0.001), never `muted`.
@@ -19,6 +19,36 @@ Every change, release by release. The short version is in [CHANGELOG.md](../CHAN
   - The skip fade is 3 short steps without a read before them (~0.2 s → ~0.07 s).
   - The hidden page is parked on the settings page (`/preferences`, ~260 nodes): on the home page each song change redrew ~7000 nodes and ~190 images and held the main thread ~1 s. A real Web Player page, so that any reload still boots the player; the host's own reloads load the player's URL.
 - **Debug builds**: `tools/playback_test.py` drives the phone through 14 playback scenarios (debug-only `TestControlReceiver`), and track-playback responses carrying an ad are kept in `cache/ad-samples`.
+- **GitHub Sponsors**: support Myspoti on GitHub Sponsors too, next to Ko-fi (About, Support Myspoti); the About sheet opens in full.
+- **Long playlists open and scroll faster**: the list is filtered and sorted again only when the search, the sort or a like changes (not at every recomposition), and rows keep their identity across sorts and filters.
+- **Notification and lock screen no longer churn**: only a real change (song, play/pause, buffering, heart, shuffle) reaches the media session and the notification; the position is extrapolated by the system in between.
+- **Skips a little faster and less work while music plays**: a fade is one call to the page instead of three (the ramp runs in the page while the command is on its way), the volume check comes with the media read instead of polling every 6 s, and the watcher looks every 4 s instead of 2 s when nothing plays.
+- **Hearts (liked states) are asked once**: a page and its prefetch share the same request, and what Spotify confirmed less than a minute ago is not asked again (opening a playlist asked the whole list twice, then again for each page of tracks).
+- **Far fewer calls to the player page**: "ready" is announced once per page load (twice meant every listener of it ran twice: state, token, quality, volume), the web token is fetched once and shared, and the Connect device list is read at most every 6 s in the page instead of every 2 s.
+- **Myspoti's icon in the notification** and in Samsung's Now Bar, instead of a generic music note.
+- **Ads that get through are silent**: they are muted on the page itself, no longer through a Spotify Connect volume command that some accounts refuse (the ad was heard). The song after the ad no longer stays paused.
+- **Previous no longer pauses**: "previous" in the middle of a song restarts it and keeps playing (the skip fade left the sound at zero, and Android's WebView pauses silent media in the background).
+- **Music comes back after a page reload**: when the player page reloads (frozen page, low memory, WebView restart) the song goes on where it was instead of staying paused; a frozen page is caught in a few seconds.
+- **A song that stops being heard is restarted**: the app checks that the music really plays, not only what the page says.
+- **Play right after launch works**: taps made while the player loads are sent once it is ready.
+- **Shorter silence on ad breaks** (free accounts): about 4 s less.
+- **Skips are about three times faster**: the next song is heard ~0.8 s after the tap instead of ~2.5 s (the next song is loaded ahead, the first tap is sent at once, a shorter fade, and the hidden Spotify page no longer redraws its home screen at every song).
+- **Cover back to its full size** in the player.
+- **Myspoti's buttons play on this phone again** when another device (the Spotify app on the same account, for instance) took playback without being picked in Myspoti: the music comes back here first, instead of driving that device (where skips, previous and volume were refused).
+- **Faster artist pages and playlists**: an artist seen in the last minutes opens at once (and its releases page too), the discography and a playlist's first songs are asked for together with the page, and your liked songs load once per session instead of on every artist page.
+- **Your liked songs by an artist** come first on its page, above the popular tracks, and open their own page (as in Spotify), where play and shuffle play only them.
+- **Hearts right on long lists**: liked songs of a long playlist (or of an artist's liked songs) no longer show without their heart; the check goes by batches of 50, and an incomplete answer is never kept as "not liked".
+- **New languages**: German, Spanish, Portuguese and Greek, on every screen.
+- **Music no longer stops for a minute**: a Web Player page that stops answering is reloaded at once, and playback goes on.
+- **No more silent songs**: the sound comes back by itself if a skip or a muted ad left it at zero; after a skip it comes back as soon as the next song is there.
+- **Smart shuffle** goes on from where the song is (no restart), adds songs to every playlist, and has its own icon in the player.
+- **Free accounts refused by Spotify** (some countries): the list plays from its start instead, and a message explains why.
+- **GrapheneOS**: the player loads with "secure app spawning" on.
+- **Followers and following** lists on profiles; **your liked songs** on artist pages; **episodes** in playlists; unavailable songs greyed out.
+- **Fast scrollbar** on long playlists and the library.
+- **Share as image** (Instagram story and more); swipe up on the cover for the lyrics; player fits foldables and wide screens.
+- **Settings**: autoplay on or off, accent colour, screen rotation (portrait, automatic, landscape).
+- **Canvas**: loaded while the mini player shows, so the player opens straight on it; when it is still loading, it fades in smoothly over the cover. Tap it to watch it alone (the player hides), tap again to bring the player back; it is a little darker under the player so the text reads. Its previous / next buttons no longer appear.
 
 ## 2.0.0-beta.6
 

@@ -94,7 +94,12 @@ fun SupporterSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var choosing by remember { mutableStateOf(false) }
     val level = SupportReminder.level
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF282828)) {
+    // Opened in full: half open, it hid the support buttons at the bottom.
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color(0xFF282828),
+    ) {
         Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.supporter_perks_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -110,6 +115,7 @@ fun SupporterSheet(onDismiss: () -> Unit) {
                         modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50)).background(AppAccent)
                             .pressable(0.96f) { SupportReminder.open(context) },
                     ) { Text(stringResource(R.string.support_action), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                    GitHubSponsorButton(Modifier.padding(top = 10.dp))
                     Text(stringResource(R.string.supporter_i_supported), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
                             .pressable(0.96f) { choosing = true }.padding(horizontal = 24.dp, vertical = 12.dp))

@@ -88,7 +88,7 @@
     <string name="support_body">Myspoti est gratuit, sans publicité, et développé sur mon temps libre. Si vous l\'appréciez, un petit don aide à le faire avancer.</string>
     <string name="support_action">Soutenir sur Ko-fi</string>
     <string name="support_decline">Non merci</string>
-    <string name="support_row_detail">Un petit don sur Ko-fi aide l\'app à avancer</string>
+    <string name="support_row_detail">Un petit don sur Ko-fi ou GitHub Sponsors aide l\'app à avancer</string>
     <string name="supporter_perks_title">Avantages Soutien</string>
     <string name="supporter_perks_detail">Couleur d\'accent, icône de l\'app et badge, pour dire merci</string>
     <string name="supporter_perks_locked">Débloqués en soutenant Myspoti. C\'est sur l\'honneur : rien n\'est vérifié.</string>
@@ -323,4 +323,5 @@
     <string name="settings_rotation_portrait">Portrait</string>
     <string name="settings_rotation_auto">Automatique</string>
     <string name="settings_rotation_landscape">Paysage</string>
+    <string name="support_github_action">Sponsor sur GitHub</string>
 </resources>

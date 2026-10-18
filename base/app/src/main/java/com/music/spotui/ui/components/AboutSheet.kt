@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.border
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -50,7 +51,12 @@ private fun openUrl(context: Context, url: String) {
 @Composable
 fun AboutSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF282828)) {
+    // Opened in full: half open, it hid the support buttons at the bottom.
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color(0xFF282828),
+    ) {
         Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 20.dp)) {
                 Image(
@@ -74,8 +80,21 @@ fun AboutSheet(onDismiss: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
                     .background(AppAccent).pressable(0.96f) { SupportReminder.open(context) },
             ) { Text(stringResource(R.string.support_action), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+            GitHubSponsorButton(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp))
         }
     }
+}
+
+/** GitHub Sponsors, under the Ko-fi button: outlined, so Ko-fi stays the main one. */
+@Composable
+fun GitHubSponsorButton(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
+            .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(50))
+            .pressable(0.96f) { SupportReminder.openSponsors(context) },
+    ) { Text(stringResource(R.string.support_github_action), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable

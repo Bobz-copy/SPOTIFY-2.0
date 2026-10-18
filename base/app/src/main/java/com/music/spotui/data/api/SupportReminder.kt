@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
  */
 object SupportReminder {
     const val URL = "https://ko-fi.com/kotazo"
+    /** GitHub Sponsors, the other way to give (monthly or once). */
+    const val SPONSORS_URL = "https://github.com/sponsors/kota-zo"
     const val FIRST_AFTER_MS = 24L * 3_600_000
     /**
      * Supporter perks ("I've supported", accent, icon, badge) are off until supports can
@@ -108,5 +110,9 @@ object SupportReminder {
 
     fun open(context: Context) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    fun openSponsors(context: Context) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SPONSORS_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }

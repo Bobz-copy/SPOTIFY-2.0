@@ -228,7 +228,16 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     /** The page's media element as `media.state` reads it. [active]: null when unknown. */
-    private data class Media(val paused: Boolean, val muted: Boolean, val level: Double, val own: Double, val time: Double, val active: Boolean?)
+    private data class Media(
+        val paused: Boolean,
+        val muted: Boolean,
+        val level: Double,
+        val own: Double,
+        val time: Double,
+        /** What the page player itself is set to; null when the page did not say. */
+        val playerVolume: Double?,
+        val active: Boolean?,
+    )
 
     private suspend fun readMedia(): Media? {
         val o = bridge.call("media.state", timeoutMs = MEDIA_TIMEOUT_MS, quiet = true) as? JsonObject ?: return null
@@ -239,7 +248,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             level = p("level")?.doubleOrNull ?: 1.0,
             own = p("own")?.doubleOrNull ?: 1.0,
             time = p("time")?.doubleOrNull ?: 0.0,
-            active = p("active")?.booleanOrNull,
+            playerVolume = p("playerVolume")?.doubleOrNull,
+            // The device list is read at most every few seconds in the page: what it did not
+            // answer this time is what it answered last time.
+            active = p("active")?.booleanOrNull ?: lastMedia?.active,
         )
     }
 
@@ -259,7 +271,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         var lastMediaTime = -1.0
         var silentSince = 0L
         while (true) {
-            delay(WATCH_TICK_MS)
+            // A song plays (or an ad is on): the watcher looks every [WATCH_TICK_MS] to hear a
+            // stall in seconds. Nothing plays: there is less to see, so it looks less often.
+            val quiet = !_adPlaying.value && _state.value.let { it == null || it.isPaused }
+            delay(if (quiet) WATCH_IDLE_TICK_MS else WATCH_TICK_MS)
             tick++
             if (!bridge.ready.value || ownReload) { key = null; attempts = 0; silentSince = 0L; continue }
             val now = System.currentTimeMillis()
@@ -353,7 +368,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
         val wanted = wantedVolume ?: 1.0
         if (wanted <= 0.0) return
-        val v = runCatching { volume() }.getOrNull() ?: return
+        // The page's own volume is read with the media element (one call, no second round trip).
+        val v = media?.playerVolume ?: runCatching { volume() }.getOrNull() ?: return
         if (v <= 0.0) {
             bridge.logger?.invoke("page silent during a song: volume back to $wanted")
             runCatching { setVolume(wanted) }
@@ -414,17 +430,22 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var fadeBackTo: Double? = null
     private var fadeBack: kotlinx.coroutines.Job? = null
 
-    /**
-     * The page player's own level, on this phone: no Spotify Connect volume command, which
-     * some accounts refuse (the fade then never came back) and which waits on the network.
-     */
-    private suspend fun setLevel(level: Double) {
-        bridge.call("media.volume", buildJsonObject { put("level", level.coerceIn(0.0, 1.0)) }, timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
-    }
-
     /** The element back to the page player's own volume. */
     private suspend fun restoreLevel() {
         bridge.call("media.volume", buildJsonObject { put("restore", true) }, timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
+    }
+
+    /**
+     * One call for a whole fade: the page applies [levels] one after the other while the host
+     * does not wait for them (a call per step delayed the first sound by one round trip each).
+     * [restore] ends on the page player's own volume, as [restoreLevel] does.
+     */
+    private suspend fun fade(levels: List<Double>, restore: Boolean = false) {
+        bridge.call("media.fade", buildJsonObject {
+            putJsonArray("steps") { levels.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.coerceIn(0.0, 1.0))) } }
+            put("ms", FADE_STEP_MS)
+            put("restore", restore)
+        }, timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
     }
 
     private suspend fun withFade(block: suspend () -> Unit) {
@@ -438,7 +459,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val from = s.item?.uri
         fadeBackTo = target
         fadeBack?.cancel()
-        runCatching { for (f in FADE_STEPS) { setLevel(target * f); delay(FADE_STEP_MS) } }
+        // The ramp runs in the page, so it goes down while the command is already on its way.
+        runCatching { fade(FADE_STEPS.map { it * target }) }
         try {
             block()
         } finally {
@@ -452,7 +474,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 }
                 val back = fadeBackTo ?: target
                 // Ends on the page player's own volume: a volume change during the fade is kept.
-                runCatching { for (f in FADE_STEPS.reversed().drop(1)) { setLevel(back * f); delay(FADE_STEP_MS) }; restoreLevel() }
+                runCatching { fade(FADE_STEPS.reversed().drop(1).map { it * back }, restore = true) }
                     .onFailure { runCatching { restoreLevel() } }
                 fadeBackTo = null
             }
@@ -649,6 +671,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         /** A song over with nothing after it: where an ad was left out. Next song quickly. */
         const val END_STUCK_MS = 1_000L
         private const val WATCH_TICK_MS = 2_000L
+        /** Nothing plays: the watcher looks less often (see [watchStalls]). */
+        private const val WATCH_IDLE_TICK_MS = 4_000L
         /** Buffering longer than this on one song is a stall, not a slow network. */
         const val BUFFERING_STALL_MS = 25_000L
         /** Stuck ads skipped by playing on before the page is reloaded. */

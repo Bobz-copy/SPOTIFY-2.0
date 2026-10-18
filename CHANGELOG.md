@@ -21,6 +21,7 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **Myspoti's buttons play on this phone again** when another device (the Spotify app on the same account, for instance) took playback without being picked in Myspoti: the music comes back here first, instead of driving that device (where skips, previous and volume were refused).
 - **Faster artist pages and playlists**: an artist seen in the last minutes opens at once (and its releases page too), the discography and a playlist's first songs are asked for together with the page, and your liked songs load once per session instead of on every artist page.
 - **Your liked songs by an artist** come first on its page, above the popular tracks, and open their own page (as in Spotify), where play and shuffle play only them.
+- **Hearts right on long lists**: liked songs of a long playlist (or of an artist's liked songs) no longer show without their heart; the check goes by batches of 50, and an incomplete answer is never kept as "not liked".
 - **New languages**: German, Spanish, Portuguese and Greek, on every screen.
 - **Music no longer stops for a minute**: a Web Player page that stops answering is reloaded at once, and playback goes on.
 - **No more silent songs**: the sound comes back by itself if a skip or a muted ad left it at zero; after a skip it comes back as soon as the next song is there.

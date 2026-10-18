@@ -40,13 +40,21 @@ class SpotifyLibrary(private val bridge: Bridge, private val gql: Gql) : Library
      * playlist: playlists are asked to the rootlist (the followed / own playlists), the rest to
      * the library, and the answers come back in the order of [uris].
      */
+    private companion object {
+        /** Items per library.contains call. */
+        const val CONTAINS_BATCH = 50
+    }
+
     override suspend fun contains(uris: List<Uri>): List<Boolean> {
         if (uris.isEmpty()) return emptyList()
         val (lists, others) = uris.withIndex().partition { it.value.contains(":playlist:") }
         val out = BooleanArray(uris.size)
-        if (others.isNotEmpty()) {
-            val flags = bridge.call("library.contains", uris(others.map { it.value }) as kotlinx.serialization.json.JsonObject) as JsonArray
-            others.forEachIndexed { i, v -> out[v.index] = flags.getOrNull(i)?.jsonPrimitive?.boolean == true }
+        // In batches: the page answers a long list only in part, and a missing answer read as
+        // "not liked" showed liked songs without their heart (and was kept as such).
+        for (batch in others.chunked(CONTAINS_BATCH)) {
+            val flags = bridge.call("library.contains", uris(batch.map { it.value }) as kotlinx.serialization.json.JsonObject) as JsonArray
+            if (flags.size != batch.size) throw IllegalStateException("library.contains: ${flags.size} answers for ${batch.size} items")
+            batch.forEachIndexed { i, v -> out[v.index] = flags[i].jsonPrimitive.boolean }
         }
         if (lists.isNotEmpty()) {
             val arg = JsonArray(lists.map { JsonPrimitive(it.value) })

@@ -139,7 +139,7 @@ class ContextViewModel(
                         recent[key] = first
                         // The hearts are known before the page opens.
                         val p = first.data
-                        if (p.type != "liked") SongPlayer.libraryContains(
+                        if (p.type != "liked" && p.type != "liked-artist") SongPlayer.libraryContains(
                             p.tracks.mapNotNull { s -> s.spotifyTrackId.takeIf { it.isNotBlank() }?.let { "spotify:track:$it" } } + p.uri)
                     }
                 } catch (t: kotlinx.coroutines.CancellationException) {
@@ -221,7 +221,7 @@ class ContextViewModel(
     }
 
     private fun refreshSaved(p: ContextPageModel) = viewModelScope.launch {
-        if (p.type == "liked") {
+        if (p.type == "liked" || p.type == "liked-artist") {
             // Everything here is liked by definition.
             savedUris.value = p.tracks.map { "spotify:track:${it.spotifyTrackId}" }.toSet()
             return@launch
@@ -357,7 +357,7 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
     val findable = p.type == "liked" || p.type == "playlist"
     val all by remember(p) {
         derivedStateOf {
-            if (p.type == "liked") p.tracks.filter { SongPlayer.library["spotify:track:${it.spotifyTrackId}"] != false } else p.tracks
+            if (p.type == "liked" || p.type == "liked-artist") p.tracks.filter { SongPlayer.library["spotify:track:${it.spotifyTrackId}"] != false } else p.tracks
         }
     }
     val rows by remember(p, find, sort) {

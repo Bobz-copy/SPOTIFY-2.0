@@ -466,9 +466,11 @@ private fun ProfileSheet(onOpen: (route: String) -> Unit = {}, onDismiss: () -> 
                 Text(stringResource(R.string.account_page_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
             val ctx = androidx.compose.ui.platform.LocalContext.current
-            // Donations (Ko-fi): always here, never in the way.
+            // Donations (Ko-fi or GitHub Sponsors): always here, never in the way.
+            var support by remember { androidx.compose.runtime.mutableStateOf(false) }
+            if (support) com.music.spotui.ui.components.SupportSheet(onDismiss = { support = false })
             androidx.compose.foundation.layout.Column(
-                Modifier.fillMaxWidth().clickable { com.music.spotui.data.api.SupportReminder.open(ctx) }
+                Modifier.fillMaxWidth().clickable { support = true }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
                 Text(stringResource(R.string.support_title), color = com.music.spotui.ui.theme.AppAccent, fontSize = 16.sp)

@@ -87,14 +87,38 @@ fun AboutSheet(onDismiss: () -> Unit) {
 
 /** GitHub Sponsors, under the Ko-fi button: outlined, so Ko-fi stays the main one. */
 @Composable
-fun GitHubSponsorButton(modifier: Modifier = Modifier) {
+fun GitHubSponsorButton(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     val context = LocalContext.current
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
             .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(50))
-            .pressable(0.96f) { SupportReminder.openSponsors(context) },
+            .pressable(0.96f) { onClick?.invoke() ?: SupportReminder.openSponsors(context) },
     ) { Text(stringResource(R.string.support_github_action), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+}
+
+/** "Support Myspoti" from the profile menu: Ko-fi or GitHub Sponsors, the user picks. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SupportSheet(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color(0xFF282828),
+    ) {
+        androidx.compose.foundation.layout.Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
+            Text(stringResource(R.string.support_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.support_body), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+                modifier = Modifier.padding(top = 10.dp, bottom = 18.dp))
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
+                    .background(AppAccent).pressable(0.96f) { onDismiss(); SupportReminder.open(context) },
+            ) { Text(stringResource(R.string.support_action), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+            GitHubSponsorButton(Modifier.padding(top = 10.dp)) { onDismiss(); SupportReminder.openSponsors(context) }
+        }
+    }
 }
 
 @Composable

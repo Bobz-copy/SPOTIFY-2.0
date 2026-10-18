@@ -91,6 +91,7 @@ private fun SupportPrompt() {
     SupportDialog(
         supporter = com.music.spotui.data.api.SupportReminder.level != com.music.spotui.data.api.SupportReminder.Level.NONE,
         onSupport = { close(); com.music.spotui.data.api.SupportReminder.open(context) },
+        onSponsor = { close(); com.music.spotui.data.api.SupportReminder.openSponsors(context) },
         onDecline = close,
         onSupported = { level -> com.music.spotui.data.api.SupportReminder.setLevel(context, level); close() },
     )
@@ -101,7 +102,7 @@ private fun SupportPrompt() {
  * supported" (on trust) asks once or monthly, and unlocks the supporter thank-yous.
  */
 @Composable
-private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onDecline: () -> Unit, onSupported: (com.music.spotui.data.api.SupportReminder.Level) -> Unit) {
+private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onSponsor: () -> Unit, onDecline: () -> Unit, onSupported: (com.music.spotui.data.api.SupportReminder.Level) -> Unit) {
     var choosing by androidx.compose.runtime.remember { mutableStateOf(false) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDecline) {
         androidx.compose.foundation.layout.Column(
@@ -148,6 +149,7 @@ private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onDecline: 
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.sp,
                 )
             }
+            com.music.spotui.ui.components.GitHubSponsorButton(Modifier.padding(top = 10.dp), onClick = onSponsor)
             androidx.compose.material3.Text(
                 androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.support_decline),
                 color = androidx.compose.ui.graphics.Color.White, fontFamily = com.music.spotui.ui.theme.AppSans,

@@ -12,6 +12,12 @@ Every change, release by release. The short version is in [CHANGELOG.md](../CHAN
 - **Commands while the page loads**: calls during a reload fail at once instead of timing out; play / pause / skip wait up to 30 s for the page; playback commands refused with "No such device" are sent again.
 - **Pull back from another device**: the active device is read fresh before each transport command (after a cold start the app did not know another device had playback); the pull is bounded to 6 s, and a pull that hangs (a device that went away) reloads the page, which then claims playback itself. A pause never pulls playback back.
 - **Previous refused** by the page: the song restarts, or the one before plays.
+- **Ad breaks are shorter**: an ad the page "plays" without a file refuses every skip, so the page is reloaded after 1 s instead of after two refused skips (~4 s less silence per ad break).
+- **Skip latency** (tap to sound, measured on the phone with `tools/skip_latency.py`): median 2.5 s → 0.8 s.
+  - The next song is preloaded 2 s into each song (`player.preloadNext`, the page's own `_preloadUpcomingTrack`, which it otherwise runs only 10 s before the end): its file, first segment and manifest are cached.
+  - The first "next" tap is sent at once; only taps that follow within 350 ms are gathered into one jump (the first one used to wait 350 ms).
+  - The skip fade is 3 short steps without a read before them (~0.2 s → ~0.07 s).
+  - The hidden page is parked on the settings page (`/preferences`, ~260 nodes): on the home page each song change redrew ~7000 nodes and ~190 images and held the main thread ~1 s. A real Web Player page, so that any reload still boots the player; the host's own reloads load the player's URL.
 - **Debug builds**: `tools/playback_test.py` drives the phone through 14 playback scenarios (debug-only `TestControlReceiver`), and track-playback responses carrying an ad are kept in `cache/ad-samples`.
 
 ## 2.0.0-beta.6

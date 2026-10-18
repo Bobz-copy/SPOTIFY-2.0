@@ -31,9 +31,10 @@ import kotlinx.serialization.json.putJsonArray
  *
  * Ads: hosts refuse the ad audio they know. Such an ad then stays current, buffering at
  * 0:00, and the page never moves on by itself: after [AD_STUCK_MS] the song after the last
- * one is played. An ad that gets through (other markets serve ads from other places) is
- * muted at once and skipped the same way after [AD_PLAYING_SKIP_MS]; if the page still
- * holds on to it after one reload, it stays muted until it ends. [adPlaying] says an ad is
+ * one is played. An ad that "plays" (it came without a file, or from another market's ad
+ * server) is muted at once and, as it refuses skips, the page is reloaded after
+ * [AD_PLAYING_SKIP_MS]; if the page still holds on to it after that reload, it stays muted
+ * until it ends. [adPlaying] says an ad is
  * on; ads are never exposed in [state] (the last song stays there, buffering).
  *
  * Stalls: on some phones the page stops between two songs (stuck past the end, paused at
@@ -203,6 +204,29 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         bridge.logger?.invoke("page back after a reload: ${item.name} did not start again")
     }
 
+    /** The media element as the watcher last read it. */
+    @Volatile private var lastMedia: Media? = null
+
+    /** Loads the song after the current one in advance (see "player.preloadNext"); on by default. */
+    @Volatile var preloadNext = true
+    /** "current|next" already preloaded. */
+    private var preloadedFor: String? = null
+
+    /**
+     * Once a song has played a couple of seconds here, the next one is loaded: a skip then
+     * starts ~0.3 s sooner. The page does it itself only 10 s before the end, so the bytes are
+     * the same when the song plays out; again when the next song changes (queue edits).
+     */
+    private suspend fun preloadNextSong(s: PlayerState?, media: Media?) {
+        if (!preloadNext || s == null || s.isPaused || s.isBuffering || _adPlaying.value || media == null || media.active == false) return
+        val next = s.next?.takeIf { it.kind == ItemKind.TRACK || it.kind == ItemKind.EPISODE } ?: return
+        if (s.positionAt(System.currentTimeMillis()) < PRELOAD_AFTER_MS) return
+        val key = "${s.item?.uri}|${next.uri}"
+        if (key == preloadedFor) return
+        preloadedFor = key
+        runCatching { bridge.call("player.preloadNext", timeoutMs = 5_000, quiet = true) }
+    }
+
     /** The page's media element as `media.state` reads it. [active]: null when unknown. */
     private data class Media(val paused: Boolean, val muted: Boolean, val level: Double, val own: Double, val time: Double, val active: Boolean?)
 
@@ -253,7 +277,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 continue
             }
             val media = read.getOrNull()
+            lastMedia = media
             val s = _state.value
+            preloadNextSong(s, media)
             if (tick % VOLUME_CHECK_TICKS == 0) guardVolume(s, media)
             if (_adPlaying.value) {
                 val ad = adState
@@ -264,7 +290,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                     adAttempts++
                     val last = lastTrackState
                     // Playing on can land on the same refused ad again: after a few tries the
-                    // page itself is reloaded, which drops the ad break.
+                    // page itself is reloaded, which drops the ad break. An ad that "plays" (it
+                    // has no file: silence on the page's clock) refuses every skip ("Skipping is
+                    // not allowed with current content"): straight to the reload.
+                    if (playing) adAttempts = AD_SKIPS_BEFORE_RELOAD + 1
                     if (adRecovery(adAttempts) == "next") {
                         bridge.logger?.invoke("ad stuck on ${ad?.item?.name}: playing the next song (attempt $adAttempts)")
                         last?.let { runCatching { playOn(it) } }
@@ -402,7 +431,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val s = _state.value
         // Nothing heard (paused, an ad muted): nothing to fade.
         if (s == null || s.isPaused || _adPlaying.value || adMuted) { block(); return }
-        val target = fadeBackTo ?: runCatching { readMedia() }.getOrNull()?.takeIf { it.active != false }?.level?.takeIf { it > 0.0 } ?: run { block(); return }
+        // The level as the watcher last read it: no extra round trip before the skip.
+        val seen = lastMedia
+        if (seen?.active == false) { block(); return }
+        val target = fadeBackTo ?: seen?.level?.takeIf { it > 0.01 } ?: 1.0
         val from = s.item?.uri
         fadeBackTo = target
         fadeBack?.cancel()
@@ -592,13 +624,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         /** A song the page says it plays here while its media element stands still that long. */
         const val SILENT_MS = 6_000L
         const val SILENT = "silent"
+        /** The next song is preloaded once the current one has played that long. */
+        const val PRELOAD_AFTER_MS = 2_000L
         /** Longer than any ad break: the page is stuck in it. */
         const val AD_BREAK_MAX_MS = 4 * 60_000L
         /** Volume steps of a fade (down; reversed to come back). */
         // Never 0: Chromium pauses a hidden page's media that (re)starts at volume 0 (a
         // "previous" that restarts the song stayed paused); the bridge keeps a floor.
-        val FADE_STEPS = listOf(0.55, 0.25, 0.08, 0.002)
-        const val FADE_STEP_MS = 25L
+        val FADE_STEPS = listOf(0.35, 0.08, 0.002)
+        const val FADE_STEP_MS = 12L
         /** The sound always comes back after that long, whatever the page does. */
         const val FADE_BACK_MAX_MS = 2_500L
         /** Play commands: the page answers within a few seconds or not at all. */
@@ -609,8 +643,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val FROZEN_RELOAD_GAP_MS = 60_000L
         /** The volume is checked every that many ticks. */
         const val VOLUME_CHECK_TICKS = 3
-        /** An ad that really plays (muted) is skipped after that long. */
-        const val AD_PLAYING_SKIP_MS = 1_500L
+        /** An ad that plays (silent, muted) is got past after that long. */
+        const val AD_PLAYING_SKIP_MS = 1_000L
         const val STUCK_MS = 8_000L
         /** A song over with nothing after it: where an ad was left out. Next song quickly. */
         const val END_STUCK_MS = 1_000L

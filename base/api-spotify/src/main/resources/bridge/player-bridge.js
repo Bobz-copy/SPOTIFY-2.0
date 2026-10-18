@@ -273,6 +273,14 @@
       if (!target) throw new Error('no audio quality setting');
       return !!(await target.setMediaPlaybackQuality({ audio: a.level }));
     },
+    // Loads the song after this one now (its file, first segment and license), as the page
+    // itself does only 10 s before the end: a skip then starts that much sooner. -> the result.
+    'player.preloadNext': async () => {
+      const sdk = need().resolve('PlayerSDK');
+      const lp = sdk && sdk.harmony && sdk.harmony._streamer && sdk.harmony._streamer._listPlayer;
+      if (!lp || typeof lp._preloadUpcomingTrack !== 'function') return null;
+      return String(await lp._preloadUpcomingTrack());
+    },
     'queue.add': a => need().player.addToQueue(a.uris.map(uri => ({ uri }))),
     'queue.remove': a => need().player.removeFromQueue(a.items),
     'queue.clear': () => need().player.clearQueue(),
@@ -451,6 +459,19 @@
 
   window.Myspoti = { version: VERSION, call, announce, methods: Object.keys(commands) };
 
+  // The page's own UI is never seen. On the home page a song change redraws ~7000 nodes and
+  // ~190 images, which held the main thread for ~1 s and delayed the next song's sound; the
+  // settings page has ~260 nodes and one image. It must be a real page of the Web Player: a
+  // reload (by the page, the WebView or a test) loads the current URL, and an unknown one is
+  // served without the player.
+  const IDLE_ROUTE = '/preferences';
+  const park = () => {
+    try {
+      const history = services.platform.getHistory && services.platform.getHistory();
+      if (history && typeof history.replace === 'function' && location.pathname !== IDLE_ROUTE) history.replace(IDLE_ROUTE);
+    } catch (e) { /* the page keeps its route */ }
+  };
+
   const started = Date.now();
   const boot = () => {
     try {
@@ -460,6 +481,7 @@
     }
     if (services) {
       attach();
+      park();
       post({ type: 'ready', version: VERSION });
       pushState();
       return;

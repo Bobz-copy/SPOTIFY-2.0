@@ -192,7 +192,8 @@ class WebPlayerHost(context: Context) : BridgeHost {
         }, LOAD_WATCH_MS * attempt)
     }
 
-    fun reload() = main.post { view.reload() }
+    /** The player's own URL, not the page's current one: the bridge parks the page on an empty route. */
+    fun reload() = main.post { view.loadUrl(PLAYER_URL) }
 
     fun openLogin() = main.post { view.loadUrl(LOGIN_URL) }
 

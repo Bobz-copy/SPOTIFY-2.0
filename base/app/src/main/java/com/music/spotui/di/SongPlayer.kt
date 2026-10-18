@@ -549,24 +549,40 @@ object SongPlayer {
 
     fun stop() = pause()
     fun next() {
+        Log.d(TAG, "next tapped")
         Haptics.click()
         if (LocalPlayer.active.value) { LocalPlayer.next(); return }
         intendPlaying()
-        // Taps in a row become one jump: a burst of "next" commands left the Web Player
-        // out of step (state conflicts, then a player stuck until reloaded).
+        // The first tap skips at once. Taps that follow it within SKIP_BURST_MS become one
+        // jump to the song they add up to: a burst of "next" commands left the Web Player out
+        // of step (state conflicts, then a player stuck until reloaded).
+        val now = SystemClock.elapsedRealtime()
+        if (now - burstAt > SKIP_BURST_MS) {
+            burstAt = now
+            burstUpcoming = apiQueue?.let { it.queued + it.nextUp }.orEmpty()
+            burstTaps = 1
+            pendingSkips = 0
+            transport { api.player.next() }
+            return
+        }
+        burstAt = now
+        burstTaps++
         pendingSkips++
         main.removeCallbacks(sendSkips)
         main.postDelayed(sendSkips, SKIP_BURST_MS)
     }
 
+    /** When the last "next" tap came, the queue as it was at the first one, and the taps since. */
+    private var burstAt = 0L
+    private var burstUpcoming: List<app.myspoti.api.NowPlaying> = emptyList()
+    private var burstTaps = 0
     private var pendingSkips = 0
     private val sendSkips = Runnable {
-        val n = pendingSkips
+        if (pendingSkips <= 0) return@Runnable
         pendingSkips = 0
-        if (n <= 0) return@Runnable
-        val upcoming = apiQueue?.let { it.queued + it.nextUp }.orEmpty()
-        val target = upcoming.getOrNull(n - 1)
-        transport { if (n == 1 || target == null) api.player.next() else api.player.skipTo(target) }
+        // The song [burstTaps] after the one playing at the first tap.
+        val target = burstUpcoming.getOrNull(burstTaps - 1)
+        transport { if (target == null) api.player.next() else api.player.skipTo(target) }
     }
     fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); transport { api.player.previous() } }
 

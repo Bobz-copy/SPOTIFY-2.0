@@ -73,6 +73,7 @@ internal class ControlRelay(private val view: WebView) {
         // Bytes, not a String body: OkHttp would append "; charset=utf-8" to the content type.
         val payload = if (method == "GET" || method == "HEAD") null else (sent ?: "").toByteArray().toRequestBody(null)
         val request = Request.Builder().url(url).headers(built).method(method, payload).build()
+        val asked = android.os.SystemClock.uptimeMillis()
         http.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 android.util.Log.d(WebPlayerHost.LOG, "relay $method ${shortPath(url)} failed: ${e.message}")
@@ -84,7 +85,8 @@ internal class ControlRelay(private val view: WebView) {
                     val out = JSONObject()
                     it.headers.names().forEach { name -> out.put(name, it.header(name)) }
                     val text = it.body.string()
-                    android.util.Log.d(WebPlayerHost.LOG, "relay $method ${shortPath(url)} -> ${it.code}")
+                    val net = android.os.SystemClock.uptimeMillis() - asked
+                    android.util.Log.d(WebPlayerHost.LOG, "relay $method ${shortPath(url)} -> ${it.code} in $net ms")
                     if (it.code >= 400) android.util.Log.d(WebPlayerHost.LOG, "relay error body: ${text.take(400)}")
                     if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
                     reply(id, it.code, out.toString(), text)
@@ -93,7 +95,14 @@ internal class ControlRelay(private val view: WebView) {
         })
     }
 
-    private fun reply(id: Int, status: Int, headersJson: String, body: String) = main.post {
+    private fun reply(id: Int, status: Int, headersJson: String, body: String) {
+        val posted = android.os.SystemClock.uptimeMillis()
+        main.post { replyNow(id, status, headersJson, body, posted) }
+    }
+
+    private fun replyNow(id: Int, status: Int, headersJson: String, body: String, posted: Long) {
+        val waited = android.os.SystemClock.uptimeMillis() - posted
+        if (waited > 30) android.util.Log.d(WebPlayerHost.LOG, "relay reply #$id waited $waited ms for the main thread")
         view.evaluateJavascript(
             "window.__mspNetDone && window.__mspNetDone($id, $status, ${JSONObject.quote(headersJson)}, ${JSONObject.quote(body)})",
             null,

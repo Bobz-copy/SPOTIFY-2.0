@@ -2,6 +2,15 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## Unreleased
+
+- **Smoother player, lighter on the battery**: the hidden player page was redrawn with every frame the app drew (and kept animating its own UI underneath), and the progress bar redrew the whole player 15 times a second. The page now stays out of the app's drawing and the bar redraws only itself, as often as it actually moves. Measured on the player screen: 0 late frames instead of 86 %, about a third less CPU — and a tap on a song or "next" is heard ~150 ms sooner.
+- **The player recovers from a page that fails to load**: when Spotify answered an error to a reload (seen: 504), the app stayed on it, refusing every command until restarted. The page is now loaded again, sooner first, then every minute.
+- **"Next" that does nothing**: when the player page answered "ok" to a skip but stayed on the song (the sound dipped, then nothing), the song after it is now asked for by name.
+- **Spotify refusing playback (402)**: after a refusal, the app now also tries taking playback to this phone first, then the list on shuffle, before telling you; the diagnostic report now says which kind of account plays and whether a refused command targeted this phone or another device.
+- **Smart shuffle from the player keeps the song playing**: on a long playlist the song was often not found and a random one started; the playing song now always stays first.
+- **Shuffle no longer flips back**: a state sent by the page before it took the tap could turn the button off again, and the list and the player then disagreed.
+
 ## 2.0.0-beta.9
 
 - **Fast skips during an ad or a reload**: the song your taps point to plays once the ad or the reload is over, and the screen shows that same song (the sound and the screen no longer drift apart); "previous" during an ad no longer restarts the ad.

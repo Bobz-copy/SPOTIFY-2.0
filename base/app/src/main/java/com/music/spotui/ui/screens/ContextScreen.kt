@@ -816,7 +816,7 @@ object SmartShuffle {
                 // Spotify's extender gives nothing for some playlists: the radios of a few of its songs.
                 .ifEmpty { p.tracks.shuffled().take(3).flatMap { runCatching { api.getRecommendations(listOf(it.spotifyTrackId)).take(8) }.getOrDefault(emptyList()) } }
         }.filter { it.spotifyTrackId !in inList }.distinctBy { it.spotifyTrackId }.shuffled()
-        val shuffled = p.tracks.shuffled().let { list -> first?.let { f -> listOf(f) + (list - f) } ?: list }
+        val shuffled = p.tracks.shuffled().let { list -> first?.let { f -> listOf(f) + list.filter { it.spotifyTrackId != f.spotifyTrackId } } ?: list }
         if (shuffled.isEmpty()) return
         val mixed = ArrayList<SongsModel>()
         val more = recs.iterator()
@@ -844,7 +844,12 @@ object SmartShuffle {
             else -> return false
         }
         val page = (withContext(Dispatchers.IO) { flow.first { it !is Response.Loading } } as? Response.Success)?.data ?: return false
-        start(page, page.tracks.firstOrNull { it.spotifyTrackId == currentTrackId }, SongPlayer.getCurrentPosition())
+        // Reported: turning it on from the player skipped the song. A long list's page holds only
+        // its first tracks, so the song playing was often not found and a random one started
+        // instead; the song playing now always stays first.
+        val current = page.tracks.firstOrNull { it.spotifyTrackId == currentTrackId }
+            ?: SongPlayer.engineQueue.value.current?.takeIf { it.spotifyTrackId == currentTrackId }
+        start(page, current, SongPlayer.getCurrentPosition())
         return true
     }
 }

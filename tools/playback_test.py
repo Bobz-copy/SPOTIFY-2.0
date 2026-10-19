@@ -414,8 +414,14 @@ def s_frozen(r, ctx):
 
 def s_mute(r, ctx):
     cur = probe()["track"]["uri"]
-    n = bridge("media.mute", {"on": True})
-    p = probe()
+    # Muted and read in one page call: a mute the app did not ask for is undone by its own
+    # silence watchdog ("no silence until a restart") within a tick, so a separate probe could
+    # read the restored level and fail a mute that worked (seen once in 6 runs).
+    p = evaluate("""(async () => {
+      const n = await window.Myspoti.call(-1, 'media.mute', {on: true});
+      return {n, media: await window.Myspoti.call(-1, 'media.state', {})};
+    })()""")
+    n = p.get("n")
     if not isinstance(p.get("media"), dict) or p["media"]["volume"] > 0.01:
         raise Fail(f"media.mute on: element not silenced ({n} set, {p.get('media')})")
     # Silenced, a song that restarts must still play (Chromium pauses muted hidden media).

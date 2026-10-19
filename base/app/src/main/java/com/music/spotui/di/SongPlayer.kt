@@ -373,7 +373,9 @@ object SongPlayer {
             next = s.next?.let(::songOf),
         )
         val state = boundState ?: return
-        state.shuffle.value = s.shuffle
+        val holding = SystemClock.elapsedRealtime() < shuffleWantedUntil
+        if (holding && s.shuffle == shuffleWanted) shuffleWantedUntil = 0L
+        if (!holding || s.shuffle == shuffleWanted) state.shuffle.value = s.shuffle
         // The page reports a speed other than 1 only for episodes: music stays at 1.
         _speed.value = s.speed.takeIf { it > 0.0 } ?: 1.0
         _repeatMode.value = s.repeat.ordinal
@@ -701,7 +703,20 @@ object SongPlayer {
         }
     }
 
-    fun setShuffle(on: Boolean) { Haptics.toggle(on); if (LocalPlayer.active.value) { LocalPlayer.setShuffle(on); return }; command { api.player.setShuffle(on) } }
+    fun setShuffle(on: Boolean) {
+        Haptics.toggle(on)
+        if (LocalPlayer.active.value) { LocalPlayer.setShuffle(on); return }
+        shuffleWanted = on
+        shuffleWantedUntil = SystemClock.elapsedRealtime() + SHUFFLE_HOLD_MS
+        command { api.player.setShuffle(on) }
+    }
+
+    // Reported: shuffle out of step between the list and the player. A state the page sent
+    // before it took the tap flipped the button back, and the two screens then disagreed; the
+    // value asked for holds until the page reports it (or for SHUFFLE_HOLD_MS).
+    @Volatile private var shuffleWanted = false
+    @Volatile private var shuffleWantedUntil = 0L
+    private const val SHUFFLE_HOLD_MS = 2_500L
 
     /** 0 = off, 1 = context, 2 = track. */
     private val _repeatMode = mutableStateOf(0)

@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -176,7 +177,8 @@ fun MiniPlayer(navController: NavHostController) {
     }
 
     // The thin bar moves ~2 px/s: 4 ticks a second look identical to 20.
-    val frame = rememberFrameClock(songPlayingState, fps = 4)
+    // Covered by the full player: no ticks (they redrew the whole window under it).
+    val frame = rememberFrameClock(songPlayingState && !com.music.spotui.ui.navigation.PlayerSheet.open.value, fps = 4)
 
     var showDevices by remember { mutableStateOf(false) }
     if (showDevices) DevicesSheet { showDevices = false }
@@ -311,6 +313,8 @@ fun MiniPlayer(navController: NavHostController) {
                 .padding(horizontal = 8.dp)
                 .height(2.dp)
                 .clip(RoundedCornerShape(1.dp))
+                // Its own layer: a tick re-records these two rectangles, not the whole card.
+                .graphicsLayer()
         ) {
             frame.value
             val dur = SongPlayer.getDuration().toFloat()

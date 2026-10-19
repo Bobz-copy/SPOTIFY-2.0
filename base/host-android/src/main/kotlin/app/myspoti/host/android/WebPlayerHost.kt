@@ -179,6 +179,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 Logbook.log("page start ${url.take(120)}")
+                mainFrameFailed = false
                 pageStarts++
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
@@ -188,15 +189,19 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
                 if (request.url.host?.contains("spotify") == true)
                     Logbook.log("load error ${error.errorCode} ${error.description} ${request.url.toString().take(120)}")
+                if (request.isForMainFrame && request.url.host == PLAYER_HOST) playerPageFailed("load error ${error.errorCode}")
             }
 
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
                 if (request.url.host?.contains("spotify") == true)
                     Logbook.log("http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
+                if (request.isForMainFrame && request.url.host == PLAYER_HOST && (response.statusCode >= 500 || response.statusCode == 429))
+                    playerPageFailed("http ${response.statusCode}")
             }
 
             override fun onPageFinished(view: WebView, url: String) {
                 Logbook.log("page finished ${url.take(120)}")
+                if (url.startsWith(PLAYER_URL) && !mainFrameFailed) { pageFailures = 0; main.removeCallbacks(retryPlayerPage) }
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
                 if (url.startsWith(PLAYER_URL)) onPageLoaded?.invoke()
@@ -288,6 +293,29 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     /** The player's own URL, not the page's current one: the bridge parks the page on an empty route. */
     fun reload() = main.post { view.loadUrl(PLAYER_URL) }
 
+    /*
+     * A player page that did not load (Spotify answering 504 to a reload, the network down at that
+     * moment) used to stay what it was: an error page, "not ready", every command refused, until
+     * the app was restarted (seen on the test phone after an ad recovery's reload). It is loaded
+     * again, sooner first, then once a minute, until a page loads.
+     */
+    private var mainFrameFailed = false
+    private var pageFailures = 0
+    private val retryPlayerPage = Runnable {
+        if (!loadAsked || _loginRequired.value) return@Runnable
+        Logbook.log("player page: load again (attempt ${pageFailures + 1})")
+        view.loadUrl(PLAYER_URL)
+    }
+
+    private fun playerPageFailed(what: String) {
+        mainFrameFailed = true
+        val wait = RETRY_PAGE_MS[pageFailures.coerceAtMost(RETRY_PAGE_MS.lastIndex)]
+        pageFailures++
+        Logbook.log("player page failed to load ($what): again in ${wait / 1000} s")
+        main.removeCallbacks(retryPlayerPage)
+        main.postDelayed(retryPlayerPage, wait)
+    }
+
     fun openLogin() = main.post { view.loadUrl(LOGIN_URL) }
 
     /** Signs out of Spotify in this WebView, then shows the login page. */
@@ -313,8 +341,15 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     }
 
     /**
-     * Keeps the page attached to a window so Chromium runs it at full speed: a tiny,
-     * non-interactive view in [container] while the player is hidden.
+     * Keeps the page attached to a window, a tiny non-interactive view in [container] while the
+     * player is hidden.
+     *
+     * Hidden means INVISIBLE, not a 1 px view at 1 % alpha: a drawn WebView is replayed by the
+     * app's RenderThread on every frame the app draws (measured with Perfetto on the player
+     * screen: `WebViewFunctor::drawVk` 3.7 ms plus a 1.5 ms `postAndWait` on the UI thread, per
+     * frame, for a pixel nobody sees), and the page kept animating its own UI underneath. The
+     * page then runs as it already does whenever the app is in the background or the screen is
+     * off, which is how most listening happens.
      */
     fun attach(container: ViewGroup, visible: Boolean) = main.post {
         this.container = container
@@ -324,7 +359,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         (view.parent as? ViewGroup)?.removeView(view)
         val size = if (visible) ViewGroup.LayoutParams.MATCH_PARENT else 1
         container.addView(view, ViewGroup.LayoutParams(size, size))
-        view.alpha = if (visible) 1f else 0.01f
+        view.alpha = 1f
+        view.visibility = if (visible) View.VISIBLE else View.INVISIBLE
         view.importantForAccessibility = if (visible) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         // Typing in the login form needs touch focus, or the keyboard never opens.
         view.isFocusable = visible
@@ -345,6 +381,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         /** Logcat tag of the engine: `adb logcat -s Myspoti`. */
         const val LOG = "Myspoti"
         const val PLAYER_URL = "https://open.spotify.com/"
+        private const val PLAYER_HOST = "open.spotify.com"
+        private val RETRY_PAGE_MS = longArrayOf(2_000, 5_000, 15_000, 30_000, 60_000)
         private const val LOAD_WATCH_MS = 4_000L
         private const val LOAD_RETRIES = 4
         const val LOGIN_URL = "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F"

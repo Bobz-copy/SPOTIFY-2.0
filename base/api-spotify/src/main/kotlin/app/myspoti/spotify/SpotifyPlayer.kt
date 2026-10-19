@@ -7,6 +7,7 @@ import app.myspoti.api.PlayerState
 import app.myspoti.api.Queue
 import app.myspoti.api.Repeat
 import app.myspoti.api.Uri
+import app.myspoti.spotify.bridge.service
 import app.myspoti.spotify.bridge.Bridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -78,7 +79,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var wantedVolume: Double? = null
     /** The last [play] sent: (context, track, when), for a refused command's retry. */
     @Volatile private var lastPlay: Triple<Uri, Uri?, Long>? = null
-    @Volatile private var refusedRetried = false
+    /** How far down [onRefused]'s steps the current play went (0: not refused). */
+    @Volatile private var refusalStep = 0
+    @Volatile private var refusalTransferring = false
     private val _refused = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /**
      * Spotify refused a play even after the retry (free accounts in some countries can't
@@ -477,13 +480,60 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
 
     /** Spotify refused the last play: once, the list is played from its start instead. */
+    /**
+     * Spotify refused the last play (`402 COMMAND_FAILED`). Each refusal within the window moves
+     * one step down, so a play that works never pays for any of it:
+     * 1. the list without picking the song (an account that may not choose a track);
+     * 2. playback taken to this player first, then the song again (the command may have gone to
+     *    another device of the account — the official app — which a free account cannot drive);
+     * 3. the list on shuffle (an account that may only shuffle);
+     * then the user is told.
+     */
     private fun onRefused() {
         val last = lastPlay ?: return
-        if (System.currentTimeMillis() - last.third > REFUSED_WINDOW_MS) return
-        if (refusedRetried || last.second == null) { _refused.tryEmit(Unit); return }
-        refusedRetried = true
-        bridge.logger?.invoke("play refused by Spotify: playing the list without picking the song")
-        scope.launch { runCatching { bridge.call("player.play", buildJsonObject { put("contextUri", last.first) }, timeoutMs = PLAY_TIMEOUT_MS) } }
+        val now = System.currentTimeMillis()
+        if (now - last.third > REFUSED_WINDOW_MS) return
+        // The step's own transfer refused: the step is judged by the play that follows it.
+        if (refusalTransferring) return
+        val ctx = last.first
+        var step = ++refusalStep
+        if (step == 1 && last.second == null) step = ++refusalStep
+        // Each step's own play may be refused in its turn: it opens a new window.
+        lastPlay = last.copy(third = now)
+        suspend fun playCtx(track: Uri?) = bridge.call("player.play", buildJsonObject {
+            put("contextUri", ctx)
+            track?.let { put("trackUri", it) }
+        }, timeoutMs = PLAY_TIMEOUT_MS)
+        when (step) {
+            1 -> {
+                bridge.logger?.invoke("play refused by Spotify: playing the list without picking the song")
+                scope.launch { runCatching { playCtx(null) } }
+            }
+            2 -> {
+                bridge.logger?.invoke("play refused by Spotify: taking playback to this player first")
+                scope.launch {
+                    refusalTransferring = true
+                    try {
+                        runCatching { bridge.service("ConnectTransferAPI", "pullToLocalDevice", JsonObject(emptyMap())) }
+                            .onFailure { bridge.logger?.invoke("transfer to this player failed: ${it.message}") }
+                        delay(REFUSAL_SETTLE_MS)
+                    } finally {
+                        refusalTransferring = false
+                    }
+                    lastPlay = last.copy(third = System.currentTimeMillis())
+                    runCatching { playCtx(last.second) }
+                }
+            }
+            3 -> {
+                bridge.logger?.invoke("play refused by Spotify: playing the list on shuffle")
+                scope.launch {
+                    runCatching { setShuffle(true) }
+                    lastPlay = last.copy(third = System.currentTimeMillis())
+                    runCatching { playCtx(null) }
+                }
+            }
+            else -> _refused.tryEmit(Unit)
+        }
     }
 
     /** Plays the song after [s] (or [s] again when it is the last one) in its context. */
@@ -628,7 +678,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         adMuteTries = 0
         // A real song is playing: the fallback after a refusal (play the list without picking the
         // song) is armed again for the next command, not held once per five seconds for all of them.
-        refusedRetried = false
+        refusalStep = 0
         if (s?.item != null) lastSong = s
         else if (lastTrackState?.item != null) lastSongUntil = System.currentTimeMillis()
         lastTrackState = s
@@ -862,7 +912,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (trackUri == null || trackUri != liveIntent()?.item?.uri) intent = null
         lastOrder = order?.let { contextUri to it }
         lastPlay = Triple(contextUri, trackUri, System.currentTimeMillis())
-        refusedRetried = false
+        refusalStep = 0
         pausedByUser = false
         withFade {
             command("player.play", timeoutMs = PLAY_TIMEOUT_MS, args = buildJsonObject {
@@ -905,9 +955,24 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val base = lastWithSong()
         val after = base?.next?.takeIf { it.kind == ItemKind.TRACK || it.kind == ItemKind.EPISODE }
         if (after != null && base.item?.kind != ItemKind.AD) intent = Intent(base.contextUri, after, base.item?.uri, System.currentTimeMillis())
+        val sent = intent
         runCatching { withFade { command("player.next") } }.onFailure { e ->
             if (!heldError(e, base?.restrictions?.canSkipNext != false)) throw e
             stepIntent(1)
+            return
+        }
+        // Reported (Pixel 8, beta.8): the page answers "ok" to the skip and stays on the song, so
+        // the tap only dimmed the sound for a second. Still on it a moment later: the song the
+        // skip pointed at is asked for by name.
+        if (sent != null) scope.launch {
+            delay(NEXT_LOST_MS)
+            val i = liveIntent()
+            if (i == null || i !== sent || skipsHeld || pausedByUser) return@launch
+            val now = lastTrackState?.item?.uri
+            if (now != null && now == i.from) {
+                bridge.logger?.invoke("skip lost by the page: playing ${i.item.name}")
+                runCatching { playIntent() }
+            }
         }
     }
 
@@ -1103,6 +1168,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val PLAY_TIMEOUT_MS = 10_000L
         /** A refusal that long after a play belongs to it. */
         const val REFUSED_WINDOW_MS = 5_000L
+        /** A plain skip still on its song after this: the page lost it. */
+        const val NEXT_LOST_MS = 2_500L
+        /** After the refusal fallback's transfer, before the song is asked again. */
+        const val REFUSAL_SETTLE_MS = 600L
         /** Never two "frozen page" reloads closer than that. */
         const val FROZEN_RELOAD_GAP_MS = 60_000L
         /**

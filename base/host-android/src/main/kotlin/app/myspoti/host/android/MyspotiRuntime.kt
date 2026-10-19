@@ -39,8 +39,22 @@ object MyspotiRuntime {
         // changes is logged when it changes, not once every 10 s whether or not anything happened.
         scope.launch {
             var last = ""
+            var planLogged = false
             while (true) {
                 kotlinx.coroutines.delay(10_000)
+                // Once per signed-in session: the account's plan, the first thing a refused play
+                // (402) needs. No name, no id — only what decides what the account may play.
+                if (!planLogged && spotify.ready.value && runCatching { isSignedIn() }.getOrDefault(false)) {
+                    planLogged = true
+                    runCatching {
+                        val a = spotify.raw.gql("accountAttributes", kotlinx.serialization.json.buildJsonObject { })
+                            .let { (it as kotlinx.serialization.json.JsonObject)["data"] as kotlinx.serialization.json.JsonObject }
+                            .let { (it["me"] as kotlinx.serialization.json.JsonObject)["account"] as kotlinx.serialization.json.JsonObject }
+                        val attrs = a["attributes"] as? kotlinx.serialization.json.JsonObject
+                        fun v(o: kotlinx.serialization.json.JsonObject?, k: String) = (o?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content
+                        Logbook.log("account: product=${v(a, "product")} country=${v(a, "country")} catalogue=${v(attrs, "catalogue")} onDemand=${v(attrs, "onDemand")} ads=${v(attrs, "ads")}")
+                    }.onFailure { planLogged = false }
+                }
                 val s = spotify.player.state.value
                 // "login" alone said nothing (it only meant "the page is on a login URL"): a bug
                 // report needs the session itself — a token that is anonymous means no account.

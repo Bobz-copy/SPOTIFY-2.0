@@ -212,7 +212,21 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         Logbook.log("relay: ad in $method ${shortPath(url)} (sample kept)")
     }
 
-    private fun shortPath(url: String) = url.substringBefore('?').substringAfter(".com").replace(Regex("[0-9a-f]{20,}"), "…")
+    /**
+     * The path with device ids hidden. A command's `from/<id>/to/<id>` keeps one fact: whether it
+     * targets this player itself (`to/self`) or another device (`to/other`) — a refusal of a
+     * command sent to the official app on the same account reads very differently from one sent
+     * to this player.
+     */
+    private fun shortPath(url: String): String {
+        val path = url.substringBefore('?').substringAfter(".com")
+        val ids = Regex("/from/([0-9a-f]{20,})/to/([0-9a-f]{20,})").find(path)
+        if (ids != null) {
+            val target = if (ids.groupValues[1] == ids.groupValues[2]) "self" else "other"
+            return path.replaceRange(ids.range, "/from/…/to/$target").replace(Regex("[0-9a-f]{20,}"), "…")
+        }
+        return path.replace(Regex("[0-9a-f]{20,}"), "…")
+    }
 
     companion object {
         /**

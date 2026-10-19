@@ -225,7 +225,15 @@ fun PlayerScreen(navController: NavController) {
     val displayedTrackId = confirmedTrackIdForDisplay(np.uri, songId)
 
     // Smooth progress: redrawn every frame from the engine clock (see SpotifySeekBar).
-    val frame = com.music.spotui.ui.components.rememberFrameClock(songPlayingState && !audioBuffering, fps = 15)
+    // As many ticks as the knob has pixels to move: ~5 a second on a 3-minute song, up to 15 on
+    // a short one. Each tick redraws the whole window, so 15 on every song was ~3x the work for
+    // steps nobody can see.
+    val barFps = run {
+        val d = com.music.spotui.video.MusicVideoController.duration()
+        val widthPx = context.resources.displayMetrics.widthPixels
+        if (d > 0) (widthPx * 1000L / d).toInt().coerceIn(4, 15) else 15
+    }
+    val frame = com.music.spotui.ui.components.rememberFrameClock(songPlayingState && !audioBuffering, fps = barFps)
 
     // ── Swipe the artwork to change track: [previous, current, next] from Spotify ──
     val artworkPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
@@ -674,6 +682,7 @@ private fun ImmersiveStrip(
                 .fillMaxWidth()
                 .height(2.dp)
                 .clip(RoundedCornerShape(1.dp))
+                .graphicsLayer()
                 .drawBehind {
                     drawRect(Color.White.copy(alpha = 0.3f))
                     val played = fraction().coerceIn(0f, 1f)
@@ -987,6 +996,10 @@ fun SpotifySeekBar(
     androidx.compose.foundation.Canvas(
         modifier = modifier
             .height(24.dp)
+            // Its own layer: each tick of the clock re-records only the bar. Without it the
+            // tick invalidated the player's whole layer (cover included): ~5 ms of UI thread
+            // per tick at 15 ticks a second, measured with Perfetto.
+            .graphicsLayer()
             .semantics {
                 contentDescription = seekDescription
                 progressBarRangeInfo = ProgressBarRangeInfo(semanticProgress.value, 0f..1f)

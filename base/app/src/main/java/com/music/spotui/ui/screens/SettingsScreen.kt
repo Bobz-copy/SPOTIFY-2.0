@@ -161,7 +161,11 @@ fun SettingsScreen(navController: NavController) {
             CheckUpdateRow()
             // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
             Column(
-                Modifier.fillMaxWidth().clickable { app.myspoti.host.android.MyspotiRuntime.host.reload() }
+                Modifier.fillMaxWidth().clickable {
+                    app.myspoti.host.android.MyspotiRuntime.host.reload()
+                    // Reported: nothing said the restart happened.
+                    android.widget.Toast.makeText(ctx, ctx.getString(R.string.restart_player_done), android.widget.Toast.LENGTH_SHORT).show()
+                }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
                 Text(stringResource(R.string.restart_player_title), color = Color.White, fontSize = 16.sp)

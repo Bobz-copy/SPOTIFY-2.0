@@ -320,6 +320,18 @@ def s_rapid_next(r, ctx):
     r.healthy(exp, "rapid next x5", settle=15)
 
 
+def s_rapid_swipe(r, ctx):
+    # Reported (beta.9): fast taps on the player's "next" left the screen on the second song
+    # for seconds while the page went on. The app's own button path, then what the app shows.
+    p = probe()
+    exp = p["upcoming"][4] if len(p["upcoming"]) > 4 else None
+    for _ in range(5):
+        test("swipenext")
+        time.sleep(0.12)
+    r.healthy(exp, "rapid swipe next x5", settle=15)
+    same_on_screen(r, "after the taps")
+
+
 def s_previous_start(r, ctx):
     p = probe()
     if not p.get("previous"):
@@ -553,6 +565,21 @@ def s_ad_previous(r, ctx):
     same_on_screen(r, "after the ad")
 
 
+def s_ad_pick(r, ctx):
+    # Reported (beta.9): a song picked, an ad in its place, then the old queue went on.
+    r.healthy(None, "before the pick", allow_track_change=True)
+    p = probe()
+    tracks = ctx.get("tracks") or []
+    exp = next((t for t in reversed(tracks) if t != p["track"]["uri"] and t not in p["upcoming"][:2]), None)
+    if not exp:
+        raise Fail("no other song to pick")
+    test("play", track=exp + "|", context=ctx["playlist"])
+    time.sleep(0.15)
+    fake_ad()
+    r.healthy(exp, "song picked, then an ad", settle=45)
+    same_on_screen(r, "after the ad")
+
+
 def s_reload_taps(r, ctx):
     p = probe()
     exp = p["upcoming"][1] if len(p["upcoming"]) > 1 else None
@@ -567,6 +594,7 @@ SCENARIOS = [
     ("play_playlist", s_play_playlist, ()),
     ("next", s_next, ()),
     ("rapid_next", s_rapid_next, ()),
+    ("rapid_swipe", s_rapid_swipe, ()),
     ("previous_start", s_previous_start, ()),
     ("previous_middle", s_previous_middle, ()),
     ("seek", s_seek, ()),
@@ -577,6 +605,8 @@ SCENARIOS = [
     ("reload_taps", s_reload_taps, ("transport failed",)),
     ("ad_taps", s_ad_taps, ()),
     ("ad_previous", s_ad_previous, ()),
+    # The fake ad hides the picked song from the app, which asks for it again: provoked.
+    ("ad_pick", s_ad_pick, ("play not taken",)),
     ("frozen", s_frozen, ("call timeout", "page not answering", "command failed", "transport failed")),
     ("background", s_background, ()),
     ("cold_start", s_cold_start, ()),

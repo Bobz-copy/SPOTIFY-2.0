@@ -413,4 +413,5 @@
     <string name="player_show_elapsed">Show the time elapsed</string>
     <string name="player_sleep_timer">Sleep timer</string>
     <string name="player_speed_a11y">Playback speed, %1$s×</string>
+    <string name="restart_player_done">Player restarted</string>
 </resources>

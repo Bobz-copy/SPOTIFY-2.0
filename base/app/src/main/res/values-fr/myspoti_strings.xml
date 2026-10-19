@@ -413,4 +413,5 @@
     <string name="player_show_elapsed">Afficher le temps écoulé</string>
     <string name="player_sleep_timer">Minuteur de veille</string>
     <string name="player_speed_a11y">Vitesse de lecture, %1$s×</string>
+    <string name="restart_player_done">Lecteur redémarré</string>
 </resources>

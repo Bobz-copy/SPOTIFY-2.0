@@ -79,6 +79,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var wantedVolume: Double? = null
     /** The last [play] sent: (context, track, when), for a refused command's retry. */
     @Volatile private var lastPlay: Triple<Uri, Uri?, Long>? = null
+    /** The play an ad came in place of (see [onState]), asked again when the ad is over. */
+    @Volatile private var pickBeforeAd: Triple<Uri, Uri?, Long>? = null
     /** How far down [onRefused]'s steps the current play went (0: not refused). */
     @Volatile private var refusalStep = 0
     @Volatile private var refusalTransferring = false
@@ -662,6 +664,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             if (!_adPlaying.value) {
                 adSince = System.currentTimeMillis()
                 adMuteTries = 0
+                // A song picked a moment ago and not playing yet: the ad came in its place.
+                val p = lastPlay
+                pickBeforeAd = p?.takeIf {
+                    adSince - it.third < PICK_AD_MS && it.second != null && lastTrackState?.item?.uri != it.second
+                }
             }
             adState = s
             adStateAt = System.currentTimeMillis()
@@ -672,7 +679,18 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             showIntent()
             return
         }
+        val adJustEnded = _adPlaying.value
         _adPlaying.value = false
+        val pick = pickBeforeAd
+        if (adJustEnded && pick != null) {
+            pickBeforeAd = null
+            // Reported (beta.9): a song picked in another playlist, an ad, then the old queue went
+            // on and the song had to be picked again. Not on it after the ad: asked for again.
+            if (s?.item?.uri != pick.second && System.currentTimeMillis() - pick.third < PICK_REPLAY_MS && liveIntent() == null) {
+                bridge.logger?.invoke("song picked before the ad not played: asked again")
+                scope.launch { runCatching { play(pick.first, trackUri = pick.second) } }
+            }
+        }
         adsOffSent = false
         adSkipped = false
         adMuteTries = 0
@@ -950,6 +968,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     override suspend fun seek(positionMs: Long) { endCrossfade(restore = true); command("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
     override suspend fun next() {
         pausedByUser = false
+        pickBeforeAd = null
         if (skipsHeld) { stepIntent(1); return }
         // Remembered: should the page go into an ad break instead, this song comes after it.
         val base = lastWithSong()
@@ -988,6 +1007,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     override suspend fun previous() {
         pausedByUser = false
+        pickBeforeAd = null
         if (skipsHeld) { stepIntent(-1); return }
         intent = null
         withFade {
@@ -1168,6 +1188,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val PLAY_TIMEOUT_MS = 10_000L
         /** A refusal that long after a play belongs to it. */
         const val REFUSED_WINDOW_MS = 5_000L
+        /** An ad starting this soon after a song is picked came in its place. */
+        const val PICK_AD_MS = 8_000L
+        /** After this the user has moved on: a pick is no longer replayed after its ad. */
+        const val PICK_REPLAY_MS = 120_000L
         /** A plain skip still on its song after this: the page lost it. */
         const val NEXT_LOST_MS = 2_500L
         /** After the refusal fallback's transfer, before the song is asked again. */

@@ -328,6 +328,7 @@ object SongPlayer {
         }
         val item = s.item
         val uri = item?.uri.orEmpty()
+        if (uri.isNotEmpty()) lastPageUri = uri
         val id = trackIdOf(uri)
         val pending = pendingTrackId
         if (pending != null) {
@@ -661,6 +662,35 @@ object SongPlayer {
         // The song [burstTaps] after the one playing at the first tap.
         val target = burstUpcoming.getOrNull(burstTaps - 1)
         transport(waitReady = !stateSeen) { if (target == null) api.player.next() else api.player.skipTo(target) }
+        if (target != null) {
+            burstTarget = target
+            burstContext = _nowPlaying.value.contextUri
+            burstSeq++
+            main.removeCallbacks(verifyBurst)
+            main.postDelayed(verifyBurst, BURST_VERIFY_MS)
+        }
+    }
+
+    /*
+     * Measured on the test phone: the burst's first "next" is acknowledged by the page, applied
+     * a second late, after the jump to the target — the page then lands one song past it (the
+     * screen showed the target, the speaker the song after). Where the burst landed is checked,
+     * and the target played by name when it is not there.
+     */
+    private var burstTarget: app.myspoti.api.NowPlaying? = null
+    private var burstContext = ""
+    private var burstSeq = 0
+    private var lastPageUri = ""
+    private const val BURST_VERIFY_MS = 2_500L
+    private val verifyBurst = Runnable {
+        val t = burstTarget ?: return@Runnable
+        burstTarget = null
+        val seq = burstSeq
+        // A newer tap, pick or pause: the user moved on.
+        if (SystemClock.elapsedRealtime() - burstAt < BURST_VERIFY_MS || !playing) return@Runnable
+        if (lastPageUri == t.uri || burstContext.isBlank()) return@Runnable
+        Log.d(TAG, "skips landed on $lastPageUri, not ${t.name}: playing it")
+        transport { if (seq == burstSeq) api.player.play(burstContext, t.uri) }
     }
     fun previous() { Haptics.click(); if (LocalPlayer.active.value) { LocalPlayer.previous(); return }; intendPlaying(); transport(waitReady = !stateSeen) { api.player.previous() } }
 
@@ -844,13 +874,22 @@ object SongPlayer {
     /** Swipe to the next track: show it right away, then skip. */
     fun swipeNext() {
         if (LocalPlayer.active.value) { next(); return }
-        _nowPlaying.value.next?.let { n ->
-            markPending(n.spotifyTrackId)
-            boundState?.updateSongState(n.coverUri, n.title, n.singer, true, n.id, 0, n.album)
-            durationMs = n.durationMs.toLong()
-            pushNotification(n, false)
-        }
         next()
+        // The song this tap lands on, the one [next]'s burst will skip to. Reported (beta.9): each
+        // fast tap showed `nowPlaying.next` — the same second song every time, held as pending,
+        // so the screen stayed on it for seconds while the page went on to the fifth.
+        val n = if (burstTaps <= 1) _nowPlaying.value.next
+            else burstUpcoming.getOrNull(burstTaps - 1)?.let(::songOf)
+        if (n == null) {
+            // Unknown target: the page's own states show where it lands.
+            pendingTrackId = null
+            pendingItemUri = null
+            return
+        }
+        markPending(n.spotifyTrackId)
+        boundState?.updateSongState(n.coverUri, n.title, n.singer, true, n.id, 0, n.album)
+        durationMs = n.durationMs.toLong()
+        pushNotification(n, false)
     }
 
     fun seekTo(ms: Long) {

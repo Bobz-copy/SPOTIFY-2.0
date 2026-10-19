@@ -40,6 +40,8 @@ class TestControlReceiver : BroadcastReceiver() {
             "resume" -> SongPlayer.play()
             "pause" -> SongPlayer.pause()
             "next" -> SongPlayer.next()
+            // The player's own "next" button and the mini player's swipe.
+            "swipenext" -> SongPlayer.swipeNext()
             "previous" -> SongPlayer.previous()
             "seek" -> SongPlayer.seekTo(intent.getLongExtra("ms", 0L))
             "screenon" -> context.getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE)

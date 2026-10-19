@@ -9,6 +9,10 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **"Next" that does nothing**: when the player page answered "ok" to a skip but stayed on the song (the sound dipped, then nothing), the song after it is now asked for by name.
 - **Spotify refusing playback (402)**: after a refusal, the app now also tries taking playback to this phone first, then the list on shuffle, before telling you; the diagnostic report now says which kind of account plays and whether a refused command targeted this phone or another device.
 - **Smart shuffle from the player keeps the song playing**: on a long playlist the song was often not found and a random one started; the playing song now always stays first.
+- **Fast taps on "next" in the player land where they should, and the screen follows**: each tap showed the same second song (held for seconds while the page went on to the fifth), and a first skip Spotify applied late could push the player one song past the target. The screen now shows the song the taps add up to, and where the skips landed is checked and corrected.
+- **A song picked just before an ad plays after the ad** instead of the old queue going on (reported with a song picked in another playlist).
+- **Profile playlists without a cover of their own show their mosaic** instead of a grey square.
+- **"Restart the player" in Settings says it did.**
 - **Shuffle no longer flips back**: a state sent by the page before it took the tap could turn the button off again, and the list and the player then disagreed.
 
 ## 2.0.0-beta.9

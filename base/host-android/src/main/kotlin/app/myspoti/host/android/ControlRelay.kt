@@ -180,6 +180,17 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     val net = android.os.SystemClock.uptimeMillis() - asked
                     Logbook.log("relay $method ${shortPath(url)} -> ${it.code} in $net ms")
                     if (it.code >= 400) Logbook.log("relay error body: ${text.take(400)}")
+                    // B3 (402 on some free accounts): what a tester's report must carry to tell the
+                    // causes apart — the refusal's own headers, and what the refused command asked
+                    // (the license the page put in it, a picked song or not). No ids, no cookies.
+                    if (it.code == 402) {
+                        val heads = it.headers.names().filterNot { n -> n.equals("set-cookie", true) || n.startsWith("authorization", true) }
+                            .joinToString(", ") { n -> "$n=${it.header(n)?.take(80)}" }
+                        Logbook.log("refusal headers: $heads")
+                        if (body != null) Logbook.log("refused command: ${commandSummary(body)}")
+                    }
+                    if (registration) Regex("\"effective_license\"\\s*:\\s*\"([^\"]*)\"").find(text)
+                        ?.let { m -> Logbook.log("registration: effective_license=${m.groupValues[1]}") }
                     if (debuggable && registration) Logbook.log("registration answered: ${text.take(500)}")
                     if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
                     reply(id, it.code, out.toString(), text)
@@ -211,6 +222,19 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             JSONObject().put("method", method).put("url", url.substringBefore('?')).put("sent", sent ?: "").put("received", received).toString())
         Logbook.log("relay: ad in $method ${shortPath(url)} (sample kept)")
     }
+
+    /** A Connect command's shape, without ids: endpoint, license, picked song, origin. */
+    private fun commandSummary(body: String): String = runCatching {
+        val c = JSONObject(body).optJSONObject("command") ?: JSONObject(body)
+        val opts = c.optJSONObject("options")
+        listOf(
+            "endpoint=${c.optString("endpoint", "?")}",
+            "license=${opts?.optString("license", "<none>") ?: "<no options>"}",
+            "skip_to=${opts?.has("skip_to") == true}",
+            "origin=${c.optJSONObject("play_origin")?.optString("feature_identifier", "?") ?: "?"}",
+            "transfer=${c.has("transfer_options") || JSONObject(body).has("transfer_options")}",
+        ).joinToString(" ")
+    }.getOrDefault("unreadable")
 
     /**
      * The path with device ids hidden. A command's `from/<id>/to/<id>` keeps one fact: whether it

@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -221,6 +223,12 @@ fun MiniPlayer(navController: NavHostController) {
                         transition = CrossFade,
                         modifier = Modifier
                             .size(40.dp)
+                            // The current song's cover is where the player's cover flies from
+                            // and back to (CoverFlight), and is hidden while it flies.
+                            .then(if (s == null) Modifier
+                                .onGloballyPositioned { CoverFlight.mini = it.boundsInWindow() }
+                                .graphicsLayer { alpha = if (CoverFlight.flying) 0f else 1f }
+                                else Modifier)
                             .clip(RoundedCornerShape(4.dp)),
                         model = s?.coverUri ?: songCoverUri,
                         contentScale = ContentScale.Crop,

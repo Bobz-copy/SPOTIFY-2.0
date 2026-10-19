@@ -81,6 +81,8 @@ import androidx.compose.runtime.remember
 import com.music.spotui.ui.components.pressable
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -457,8 +459,15 @@ fun PlayerScreen(navController: NavController) {
                         modifier = (if (immersive) Modifier.fillMaxSize()
                             // Normal layout keeps the inset, rounded cover.
                             else Modifier.padding(horizontal = 24.dp).aspectRatio(1f).clip(RoundedCornerShape(8.dp)))
+                            // Where the mini player's cover flies to (CoverFlight), the sheet's
+                            // slide taken out, only for the plain cover of the current song.
+                            .then(if (page == 1) Modifier.onGloballyPositioned {
+                                val flight = com.music.spotui.ui.components.CoverFlight
+                                flight.player = if (immersive || coverAlpha < 1f) null
+                                    else it.boundsInWindow().translate(0f, -flight.sheetOffsetPx())
+                            } else Modifier)
                             .graphicsLayer {
-                                alpha = coverAlpha
+                                alpha = coverAlpha * (if (page == 1 && com.music.spotui.ui.components.CoverFlight.flying) 0f else 1f)
                                 val grow = 1f + (1f - coverAlpha) * 0.06f
                                 scaleX = grow; scaleY = grow
                             },

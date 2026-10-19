@@ -168,6 +168,15 @@ object SongPlayer {
                 android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.play_refused, android.widget.Toast.LENGTH_LONG).show()
             }
         }
+        scope.launch {
+            MyspotiRuntime.host.licenseLimitedUntil.collect { until ->
+                if (until > SystemClock.elapsedRealtime()) main.post {
+                    playing = false
+                    boundState?.updatePlayingState(false)
+                    android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.spotify_limited, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
         PlaybackService.controls = Controls
     }
 

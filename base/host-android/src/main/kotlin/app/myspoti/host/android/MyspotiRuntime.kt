@@ -35,13 +35,35 @@ object MyspotiRuntime {
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
         host.onPageStarting = { spotify.onPageStarting() }
         spotify.player.reloadHost = { host.reload() }
+        spotify.player.recoveryHeld = { host.licenseLimited() }
+        // Spotify limiting this client: stop asking (a paused player requests no licence).
+        scope.launch {
+            host.licenseLimitedUntil.collect { until ->
+                if (until > android.os.SystemClock.elapsedRealtime()) runCatching { spotify.player.pause() }
+            }
+        }
         // The bridge, the page and the player in Logcat (diagnostics of a bug report): what
         // changes is logged when it changes, not once every 10 s whether or not anything happened.
         scope.launch {
             var last = ""
             var planLogged = false
+            // A page that loaded but whose player never became ready (no bridge, a script that
+            // failed): loaded again, after 60 s, then twice as long each time, up to 10 min.
+            var notReadySince = 0L
+            var notReadyWait = 60_000L
             while (true) {
                 kotlinx.coroutines.delay(10_000)
+                val clock = android.os.SystemClock.elapsedRealtime()
+                val waiting = !spotify.ready.value && !host.loginRequired.value && !host.licenseLimited() &&
+                    host.url.value.startsWith(WebPlayerHost.PLAYER_URL)
+                if (!waiting) { notReadySince = 0L; if (spotify.ready.value) notReadyWait = 60_000L }
+                else if (notReadySince == 0L) notReadySince = clock
+                else if (clock - notReadySince >= notReadyWait) {
+                    Logbook.log("player not ready for ${(clock - notReadySince) / 1000} s: loading it again")
+                    notReadySince = 0L
+                    notReadyWait = (notReadyWait * 2).coerceAtMost(600_000L)
+                    host.reload()
+                }
                 // Once per signed-in session: the account's plan, the first thing a refused play
                 // (402) needs. No name, no id — only what decides what the account may play.
                 if (!planLogged && spotify.ready.value && runCatching { isSignedIn() }.getOrDefault(false)) {

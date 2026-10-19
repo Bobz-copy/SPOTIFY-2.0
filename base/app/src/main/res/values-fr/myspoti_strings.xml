@@ -414,4 +414,5 @@
     <string name="player_sleep_timer">Minuteur de veille</string>
     <string name="player_speed_a11y">Vitesse de lecture, %1$s×</string>
     <string name="restart_player_done">Lecteur redémarré</string>
+    <string name="spotify_limited">Spotify limite la lecture pour le moment. Réessayez dans une minute.</string>
 </resources>

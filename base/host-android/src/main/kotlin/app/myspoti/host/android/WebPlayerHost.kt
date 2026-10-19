@@ -47,6 +47,34 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     /** The page's current URL. */
     val url: StateFlow<String> = _url
 
+    /*
+     * Spotify limiting this client: measured on the test phone after an evening of test runs,
+     * the page asked for an audio licence ~4 times a second, each answered 429, and every repair
+     * (reload, replay) asked again. A storm of them ends playback here for a while (growing on
+     * repeats) instead of feeding it; [licenseLimitedUntil] tells the app and the player.
+     */
+    private val license429 = ArrayDeque<Long>()
+    private var limitStreak = 0
+    private var lastLimitAt = 0L
+    private val _licenseLimitedUntil = MutableStateFlow(0L)
+    /** Elapsed-realtime end of the current hold, 0 or past when none. */
+    val licenseLimitedUntil: StateFlow<Long> = _licenseLimitedUntil
+    fun licenseLimited(): Boolean = android.os.SystemClock.elapsedRealtime() < _licenseLimitedUntil.value
+
+    private fun onLicenseLimited() = synchronized(license429) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        license429.addLast(now)
+        while (license429.isNotEmpty() && now - license429.first() > LIMIT_WINDOW_MS) license429.removeFirst()
+        if (license429.size < LIMIT_COUNT || licenseLimited()) return@synchronized
+        if (now - lastLimitAt > LIMIT_FORGET_MS) limitStreak = 0
+        lastLimitAt = now
+        val hold = (LIMIT_HOLD_MS shl limitStreak.coerceAtMost(4)).coerceAtMost(LIMIT_HOLD_MAX_MS)
+        limitStreak++
+        license429.clear()
+        Logbook.log("Spotify is limiting audio licences (429 x$LIMIT_COUNT in ${LIMIT_WINDOW_MS / 1000} s): playback held ${hold / 1000} s")
+        _licenseLimitedUntil.value = now + hold
+    }
+
     private val _loginRequired = MutableStateFlow(false)
     val loginRequired: StateFlow<Boolean> = _loginRequired
 
@@ -180,6 +208,10 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 Logbook.log("page start ${url.take(120)}")
                 mainFrameFailed = false
+                // A load that never ends (measured: a reload's document request answered nothing
+                // for 9 minutes, the page stayed "loading", empty, without the bridge).
+                main.removeCallbacks(loadTimeout)
+                if (android.net.Uri.parse(url).host == PLAYER_HOST) main.postDelayed(loadTimeout, PAGE_LOAD_TIMEOUT_MS)
                 pageStarts++
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
@@ -189,7 +221,9 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
                 if (request.url.host?.contains("spotify") == true)
                     Logbook.log("load error ${error.errorCode} ${error.description} ${request.url.toString().take(120)}")
-                if (request.isForMainFrame && request.url.host == PLAYER_HOST) playerPageFailed("load error ${error.errorCode}")
+                // ERR_ABORTED: a load this app stopped itself (a timeout, a newer load) — not a failure.
+                if (request.isForMainFrame && request.url.host == PLAYER_HOST && "ERR_ABORTED" !in error.description.toString())
+                    playerPageFailed("load error ${error.errorCode}")
             }
 
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
@@ -197,10 +231,12 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                     Logbook.log("http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
                 if (request.isForMainFrame && request.url.host == PLAYER_HOST && (response.statusCode >= 500 || response.statusCode == 429))
                     playerPageFailed("http ${response.statusCode}")
+                if (response.statusCode == 429 && request.url.path?.contains("widevine-license") == true) onLicenseLimited()
             }
 
             override fun onPageFinished(view: WebView, url: String) {
                 Logbook.log("page finished ${url.take(120)}")
+                main.removeCallbacks(loadTimeout)
                 if (url.startsWith(PLAYER_URL) && !mainFrameFailed) { pageFailures = 0; main.removeCallbacks(retryPlayerPage) }
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
@@ -304,7 +340,13 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     private val retryPlayerPage = Runnable {
         if (!loadAsked || _loginRequired.value) return@Runnable
         Logbook.log("player page: load again (attempt ${pageFailures + 1})")
+        view.stopLoading()
         view.loadUrl(PLAYER_URL)
+    }
+    private val loadTimeout = Runnable {
+        if (!loadAsked || _loginRequired.value) return@Runnable
+        view.stopLoading()
+        playerPageFailed("still loading after ${PAGE_LOAD_TIMEOUT_MS / 1000} s")
     }
 
     private fun playerPageFailed(what: String) {
@@ -382,6 +424,12 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         const val LOG = "Myspoti"
         const val PLAYER_URL = "https://open.spotify.com/"
         private const val PLAYER_HOST = "open.spotify.com"
+        private const val PAGE_LOAD_TIMEOUT_MS = 25_000L
+        private const val LIMIT_COUNT = 6
+        private const val LIMIT_WINDOW_MS = 10_000L
+        private const val LIMIT_HOLD_MS = 60_000L
+        private const val LIMIT_HOLD_MAX_MS = 600_000L
+        private const val LIMIT_FORGET_MS = 1_800_000L
         private val RETRY_PAGE_MS = longArrayOf(2_000, 5_000, 15_000, 30_000, 60_000)
         private const val LOAD_WATCH_MS = 4_000L
         private const val LOAD_RETRIES = 4

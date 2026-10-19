@@ -327,4 +327,5 @@
     <string name="spotiflac_verify_again">La verificación de SpotiFLAC ha caducado: vuelve a hacerla en Ajustes para descargar sin pérdida</string>
     <string name="download_on_mobile_data">Descarga con datos móviles: usa tu tarifa de datos</string>
     <string name="restart_player_done">Reproductor reiniciado</string>
+    <string name="spotify_limited">Spotify está limitando la reproducción por ahora. Inténtalo de nuevo en un minuto.</string>
 </resources>

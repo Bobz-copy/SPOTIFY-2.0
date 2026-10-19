@@ -93,6 +93,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
 
     /** Reloads the Web Player page (set by the host); used when a stalled player does not recover. */
     @Volatile var reloadHost: (suspend () -> Unit)? = null
+    /**
+     * True while Spotify is limiting this client (a storm of `429` on the audio licences): every
+     * repair — a reload, a replay, a seek — asks for licences again and makes the limit last.
+     * The watchers stand still until it is over.
+     */
+    @Volatile var recoveryHeld: () -> Boolean = { false }
 
     /** Streaming quality ("auto", "low", "normal", "high", "very_high"), kept for every page load. */
     @Volatile var audioQuality: String = "auto"
@@ -160,6 +166,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     private suspend fun reloadAndPlayOn(s: PlayerState?, next: Boolean = true) {
         val reload = reloadHost ?: return
+        if (recoveryHeld()) { bridge.logger?.invoke("reload held: Spotify is limiting playback"); return }
         ownReload = true
         try {
             runCatching {
@@ -180,6 +187,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     suspend fun reloadPage(): Boolean {
         val reload = reloadHost ?: return false
+        if (recoveryHeld()) { bridge.logger?.invoke("reload held: Spotify is limiting playback"); return false }
         ownReload = true
         try {
             reload()
@@ -424,6 +432,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             silentSince = if (playingHere && !moved) (if (silentSince == 0L) now else silentSince) else 0L
             val silent = silentSince != 0L && now - silentSince >= SILENT_MS
             val reason = s?.let { stallOf(it, now, pausedByUser) } ?: (if (silent) SILENT else null)
+            if (recoveryHeld()) { key = null; attempts = 0; continue }
             if (s == null || reason == null) { key = null; attempts = 0; continue }
             val k = "${s.item?.uri}|$reason"
             if (k != key) { key = k; since = now; attempts = 0; if (reason != SILENT) continue }
@@ -963,7 +972,20 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
     }
 
-    override suspend fun pause() { pausedByUser = true; endCrossfade(restore = true); command("player.pause") }
+    override suspend fun pause() {
+        pausedByUser = true
+        endCrossfade(restore = true)
+        // Nothing playing (no state yet, or already paused): nothing to send. A pause on the
+        // orphan session a fresh page finds makes the page claim it with a transfer first —
+        // refused with a 402 on some free accounts, and the page then hung ~13 s on it (tester
+        // report, beta.9). An ad keeps the old song's state paused-looking: sent then.
+        val s = _state.value
+        if (!_adPlaying.value && (s == null || s.isPaused)) {
+            bridge.logger?.invoke("pause: nothing plays, not sent")
+            return
+        }
+        command("player.pause")
+    }
     override suspend fun resume() { pausedByUser = false; command("player.resume") }
     override suspend fun seek(positionMs: Long) { endCrossfade(restore = true); command("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
     override suspend fun next() {

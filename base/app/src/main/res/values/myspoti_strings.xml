@@ -414,4 +414,5 @@
     <string name="player_sleep_timer">Sleep timer</string>
     <string name="player_speed_a11y">Playback speed, %1$s×</string>
     <string name="restart_player_done">Player restarted</string>
+    <string name="spotify_limited">Spotify is limiting playback for a moment. Try again in a minute.</string>
 </resources>

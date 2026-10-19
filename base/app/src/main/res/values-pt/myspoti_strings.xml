@@ -327,4 +327,5 @@
     <string name="spotiflac_verify_again">A verificação do SpotiFLAC expirou: volta a fazê-la nas Definições para transferir sem perdas</string>
     <string name="download_on_mobile_data">Transferência com dados móveis: usa o teu tarifário</string>
     <string name="restart_player_done">Player reiniciado</string>
+    <string name="spotify_limited">O Spotify está limitando a reprodução no momento. Tente de novo em um minuto.</string>
 </resources>

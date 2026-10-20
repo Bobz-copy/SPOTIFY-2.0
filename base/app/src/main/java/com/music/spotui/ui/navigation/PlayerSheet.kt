@@ -9,9 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.music.spotui.ui.components.CoverFlight
 import com.music.spotui.ui.components.FlyingCover
 import androidx.compose.animation.core.tween
@@ -62,14 +63,25 @@ fun PlayerOverlay(navController: NavController) {
             },
             label = "sheet",
         ) { if (it == EnterExitState.Visible) 1f else 0f }
-        LaunchedEffect(transition) {
-            snapshotFlow { if (transition.currentState != transition.targetState) sheet.value else null }
-                .collect { CoverFlight.progress = it?.takeIf { CoverFlight.mini != null && CoverFlight.player != null } }
+        // Closing after a pull: the player goes down with its cover, no flight.
+        val closedByPull = remember(transition.targetState) {
+            transition.targetState != EnterExitState.Visible && CoverFlight.pulledPx() > 1f
         }
-        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { CoverFlight.progress = null } }
+        androidx.compose.runtime.SideEffect {
+            CoverFlight.progressSource = {
+                if (transition.currentState != transition.targetState && !closedByPull) sheet.value else null
+            }
+        }
+        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { CoverFlight.progressSource = { null } } }
         var heightPx by remember { mutableIntStateOf(0) }
         androidx.compose.runtime.SideEffect { CoverFlight.sheetOffsetPx = { (1f - sheet.value) * heightPx } }
-        Box(Modifier.fillMaxSize().onSizeChanged { heightPx = it.height }) {
+        Box(Modifier.fillMaxSize().onSizeChanged { heightPx = it.height }
+            .onGloballyPositioned { CoverFlight.sheetCoords = it }) {
+            // The player fades with its slide (see CoverFlight.sheetAlpha); a full layer alpha only
+            // while it moves, so the open player draws without an offscreen buffer.
+            Box(Modifier.fillMaxSize().graphicsLayer {
+                alpha = if (transition.currentState != transition.targetState) CoverFlight.sheetAlpha(sheet.value) else 1f
+            }) {
             CompositionLocalProvider(LocalPageSettled provides settled) {
                 // A podcast episode gets the podcast player (±15 s, speed, sleep timer, no shuffle);
                 // everything else keeps the music player.
@@ -78,6 +90,7 @@ fun PlayerOverlay(navController: NavController) {
                 } else {
                     PlayerScreen(navController)
                 }
+            }
             }
             if (!com.music.spotui.di.SongPlayer.isEpisode) FlyingCover(
                 coverUri = com.music.spotui.di.Graph.currentSongState.coverUri.value,

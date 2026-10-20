@@ -114,7 +114,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
      * [onRenderProcessGone] returns false (see [rebuild]).
      */
     @SuppressLint("SetJavaScriptEnabled")
-    private fun createView(): WebView = WebView(context.applicationContext).apply {
+    private fun createView(): WebView = AwakeWebView(context.applicationContext).apply {
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -435,4 +435,23 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         private const val LOAD_RETRIES = 4
         const val LOGIN_URL = "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F"
     }
+}
+
+/**
+ * The engine's WebView, never hidden as far as Chromium knows. A page Chromium sees hidden has
+ * its timers held to one wake-up a second, then to one a minute once it has been hidden five
+ * minutes without sound (measured on the test phone, app in the background: eight 38 ms steps
+ * took 7.8 s). Everything the page does on a timer waited on that: the fades (a song resumed
+ * after a pause stayed nearly silent for seconds), Spotify's own hand-over at the end of a song,
+ * and the work behind a command sent after a long pause.
+ *
+ * Only Chromium is told: the framework still sees the view's real visibility, so a hidden page
+ * is never drawn (see [WebPlayerHost.attach]). Chromium reads the view's visibility through
+ * [getVisibility], and the window's through [getWindowVisibility] when the view is set up and
+ * [onWindowVisibilityChanged] afterwards (the callback alone left the page hidden).
+ */
+private class AwakeWebView(context: Context) : WebView(context) {
+    override fun getVisibility(): Int = View.VISIBLE
+    override fun getWindowVisibility(): Int = View.VISIBLE
+    override fun onWindowVisibilityChanged(visibility: Int) = super.onWindowVisibilityChanged(View.VISIBLE)
 }

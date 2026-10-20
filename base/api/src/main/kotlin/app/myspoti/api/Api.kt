@@ -139,6 +139,9 @@ interface Playlists {
     /** Who may see or change the playlist (owner only). */
     suspend fun access(uri: Uri): PlaylistAccess
     suspend fun setAccess(uri: Uri, access: PlaylistAccess)
+    /** Shown on the user's profile (the official "Add to profile"); a private playlist never is. */
+    suspend fun published(uri: Uri): Boolean
+    suspend fun setPublished(uri: Uri, published: Boolean)
     /** Public playlists show on the profile and in search; private ones only to the owner. */
     suspend fun setPublic(uri: Uri, public: Boolean) = setAccess(uri, if (public) PlaylistAccess.PUBLIC else PlaylistAccess.PRIVATE)
     /** Collaborative playlists let other users add and remove tracks (owner only). */

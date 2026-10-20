@@ -163,6 +163,15 @@ fun MiniPlayer(navController: NavHostController) {
         }
     }
 
+    // The big cover the player will open on, loaded now: the cover that flies into the player
+    // (CoverFlight) and the player's own then come from memory, with nothing to wait for.
+    LaunchedEffect(songCoverUri) {
+        val target = CoverFlight.player ?: return@LaunchedEffect
+        if (songCoverUri.isBlank()) return@LaunchedEffect
+        com.bumptech.glide.Glide.with(context).load(songCoverUri)
+            .override(target.width.toInt(), target.height.toInt()).optionalCenterCrop().preload()
+    }
+
     // A new song cross-fades the card's colour instead of snapping to it.
     val animatedTint by androidx.compose.animation.animateColorAsState(tint, androidx.compose.animation.core.tween(400), label = "miniTint")
 
@@ -218,6 +227,16 @@ fun MiniPlayer(navController: NavHostController) {
                 // T4: during an ad break the page publishes no track, so the song before it
                 // would sit in the mini player; an explicit ad state is shown instead.
                 val adPlaying = com.music.spotui.di.SongPlayer.adPlaying
+                // A song change that is no swipe (the end of a song, a skip from the player or
+                // the notification) crossfades instead of swapping in one frame. After a swipe the
+                // new song is already on screen (the page swiped to): no fade then, or the page
+                // jumped back to would show the old song fading out.
+                val shown = MiniSong(s?.title ?: songTitle, s?.singer ?: songSinger, s?.coverUri ?: songCoverUri)
+                androidx.compose.animation.Crossfade(
+                    targetState = shown,
+                    animationSpec = androidx.compose.animation.core.tween(if (page == 1 && pager.currentPage == 1) 220 else 0),
+                    label = "miniSong",
+                ) { m ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     GlideImage(
                         transition = CrossFade,
@@ -225,12 +244,12 @@ fun MiniPlayer(navController: NavHostController) {
                             .size(40.dp)
                             // The current song's cover is where the player's cover flies from
                             // and back to (CoverFlight), and is hidden while it flies.
-                            .then(if (s == null) Modifier
+                            .then(if (page == 1) Modifier
                                 .onGloballyPositioned { CoverFlight.mini = it.boundsInWindow() }
-                                .graphicsLayer { alpha = if (CoverFlight.flying) 0f else 1f }
+                                .graphicsLayer { alpha = CoverFlight.miniCoverAlpha() }
                                 else Modifier)
                             .clip(RoundedCornerShape(4.dp)),
-                        model = s?.coverUri ?: songCoverUri,
+                        model = m.cover,
                         contentScale = ContentScale.Crop,
                         failure = placeholder(R.drawable.placeholder),
                         loading = placeholder(R.drawable.placeholder),
@@ -239,11 +258,11 @@ fun MiniPlayer(navController: NavHostController) {
                     val remote = SongPlayer.activeDevice.value
                     Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp)) {
                         if (remote == null) {
-                            Text(text = if (adPlaying) stringResource(R.string.ad_playing) else (s?.title ?: songTitle), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(text = if (adPlaying) stringResource(R.string.ad_playing) else (m.title), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             if (!adPlaying) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 // The artist yields the width: the output's name stays whole.
                                 Text(
-                                    text = s?.singer ?: songSinger, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
+                                    text = m.singer, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
                                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
@@ -266,10 +285,10 @@ fun MiniPlayer(navController: NavHostController) {
                             Text(
                                 text = androidx.compose.ui.text.buildAnnotatedString {
                                     pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, color = Color.White))
-                                    append(s?.title ?: songTitle)
+                                    append(m.title)
                                     pop()
                                     pushStyle(androidx.compose.ui.text.SpanStyle(color = Color.White.copy(alpha = 0.7f)))
-                                    append(" • " + (s?.singer ?: songSinger))
+                                    append(" • " + (m.singer))
                                     pop()
                                 },
                                 fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, softWrap = false,
@@ -283,6 +302,7 @@ fun MiniPlayer(navController: NavHostController) {
                             }
                         }
                     }
+                }
                 }
             }
             Icon(
@@ -382,3 +402,6 @@ fun Snackbar(showMessage : String) {
     }
 }
 
+
+/** What the mini player shows of a song: the crossfade's key, so the old one fades with its own text. */
+private data class MiniSong(val title: String, val singer: String, val cover: String)

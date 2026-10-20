@@ -34,6 +34,10 @@ BAD = [
 ]
 
 SERIAL = None
+# PT_SAFE=1 (unattended runs on the user's own phone): no HOME/sleep/wake key (they light the screen),
+# no force-stop of other apps, no pull_back scenario (launches the Spotify app, transfers playback to
+# another device). The screen stays as the user left it.
+SAFE = bool(os.environ.get("PT_SAFE"))
 
 
 def adb(*args, check=True, timeout=60):
@@ -268,6 +272,10 @@ class Run:
 
 
 def key(code):
+    if SAFE:
+        code = [c for c in (code if isinstance(code, list) else [code]) if c not in (3, 26, 223, 224)]  # HOME wakes the screen too
+        if not code:
+            return
     adb("shell", "input", "keyevent", *[str(c) for c in (code if isinstance(code, list) else [code])])
 
 
@@ -623,15 +631,18 @@ def main():
     ap.add_argument("--playlist", default=PLAYLIST)
     a = ap.parse_args()
     SERIAL = a.serial
-    for p in OTHERS:
-        adb("shell", "am", "force-stop", p, check=False)
-    adb("shell", "input", "keyevent", str(WAKE))
+    if not SAFE:
+        for p in OTHERS:
+            adb("shell", "am", "force-stop", p, check=False)
+        adb("shell", "input", "keyevent", str(WAKE))
     log = Log()
     if not adb("shell", "pidof", PKG, check=False):
         launch()
     wait_ready()
     only = set(filter(None, a.only.split(",")))
     skip = set(filter(None, a.skip.split(",")))
+    if SAFE:
+        skip.add("pull_back")  # starts the Spotify app on the phone and transfers playback to another device
     ctx = {"playlist": a.playlist}
     results = []
     r = Run(log)

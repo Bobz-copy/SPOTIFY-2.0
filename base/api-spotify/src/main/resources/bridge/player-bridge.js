@@ -425,8 +425,53 @@
       // A ramp replaces the one before it (a crossfade's up-ramp must not be pulled back down
       // by steps still pending from its down-ramp).
       cancelFade();
-      fadeTimers = steps.map((v, i) => setTimeout(() => set(v), i * per));
-      if (a.restore) fadeTimers.push(setTimeout(() => { el.volume = ownLevel(player); }, steps.length * per));
+      // Each tick sets the step the clock is at, not the next one in line: a late timer (a busy
+      // or throttled page) lands on the right level instead of stretching the ramp.
+      const t0 = performance.now();
+      const tick = () => {
+        const i = Math.floor((performance.now() - t0) / per);
+        if (i >= steps.length) { if (a.restore) el.volume = ownLevel(player); else if (steps.length) set(steps[steps.length - 1]); return; }
+        set(steps[i]);
+        fadeTimers.push(setTimeout(tick, per - ((performance.now() - t0) % per)));
+      };
+      tick();
+      return true;
+    },
+
+    // The sound rising back when a paused song plays again, as the official app does. The
+    // element goes down to {from} (a share of the player's own level) now; the rise starts when
+    // the element's clock really moves, the moment sound comes out. Not on the state saying
+    // "playing", nor on the element's own 'playing' event: after a long pause both came 0.5 to
+    // 0.9 s before the first sound (measured), and the whole ramp was spent on silence. It ends
+    // on the player's own level, read on every step (a volume change during it is kept). Not
+    // playing within {wait} ms: the level comes back as it was. {from, ms, wait} -> true
+    'media.rise': async a => {
+      const player = await localPlayer();
+      const el = player && player._player;
+      if (!(el instanceof HTMLMediaElement)) return null;
+      cancelFade();
+      const from = Math.min(1, Math.max(0.01, Number(a.from) || 0.05));
+      const ms = Math.max(1, Number(a.ms) || 300);
+      el.volume = Math.max(SILENT, from * ownLevel(player));
+      const rise = () => {
+        cancelFade();
+        const t0 = performance.now();
+        // Even steps in loudness (dB), not in amplitude: a linear amplitude ramp is heard as a jump.
+        const tick = () => {
+          const k = Math.min(1, (performance.now() - t0) / ms);
+          const own = ownLevel(player);
+          el.volume = Math.min(1, Math.max(SILENT, own * Math.pow(from, 1 - k)));
+          if (k < 1) fadeTimers.push(setTimeout(tick, 16));
+        };
+        tick();
+      };
+      const at = el.currentTime;
+      const waitSound = () => {
+        if (!el.paused && el.currentTime > at + 0.01) rise();
+        else fadeTimers.push(setTimeout(waitSound, 16));
+      };
+      fadeTimers.push(setTimeout(() => { cancelFade(); el.volume = ownLevel(player); }, Math.max(500, Number(a.wait) || 3000)));
+      waitSound();
       return true;
     },
 

@@ -271,6 +271,8 @@
     <string name="playlist_access_private_detail">Solo tu puoi vederla</string>
     <string name="playlist_access_collaborative">Collaborativa</string>
     <string name="playlist_access_collaborative_detail">Chiunque abbia il link può aggiungere e rimuovere brani</string>
+    <string name="playlist_on_profile">Sul tuo profilo</string>
+    <string name="playlist_on_profile_detail">Mostrata sul tuo profilo, visibile agli altri</string>
     <string name="playlist_delete_confirm">Eliminare «%1$s»? Si può ripristinare dal tuo account Spotify per 90 giorni.</string>
     <string name="playlist_saved">Playlist aggiornata</string>
     <string name="go_to_profile">Vai al profilo</string>

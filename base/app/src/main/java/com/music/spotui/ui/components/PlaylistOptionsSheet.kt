@@ -85,13 +85,24 @@ fun PlaylistOptionsSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { com.music.spotui.data.api.ProfileCache.ensure(context) }
-    val mine = com.music.spotui.data.api.ProfileCache.id?.let { page.ownerUri == "spotify:user:$it" } == true
+    fun isMine() = com.music.spotui.data.api.ProfileCache.id?.let { page.ownerUri == "spotify:user:$it" } == true
+    // The profile id is fetched once per session and is no Compose state: read again until it
+    // is there (opened before it was, the sheet never showed the owner's options at all).
+    var mine by remember { mutableStateOf(isMine()) }
+    LaunchedEffect(Unit) {
+        com.music.spotui.data.api.ProfileCache.ensure(context)
+        kotlinx.coroutines.withTimeoutOrNull(5_000) { while (com.music.spotui.data.api.ProfileCache.id == null) kotlinx.coroutines.delay(100) }
+        mine = isMine()
+    }
     var access by remember { mutableStateOf<PlaylistAccess?>(null) }
+    var published by remember { mutableStateOf<Boolean?>(null) }
     var editing by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     LaunchedEffect(page.uri, mine) {
-        if (mine) access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
+        if (mine) {
+            access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
+            published = runCatching { MyspotiRuntime.api.playlists.published(page.uri) }.getOrNull()
+        }
     }
 
     // Taps are sent one at a time, in order; a refused one puts back what Spotify really has.
@@ -99,12 +110,30 @@ fun PlaylistOptionsSheet(
     fun setAccess(target: PlaylistAccess) {
         if (access == target) return
         access = target
+        // Made private, it leaves the profile too (as in the official apps).
+        if (target == PlaylistAccess.PRIVATE) published = false
         scope.launch {
             accessWrites.withLock {
                 runCatching { MyspotiRuntime.api.playlists.setAccess(page.uri, target) }
                     .onSuccess { onChanged() }
                     .onFailure {
                         access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
+                        published = runCatching { MyspotiRuntime.api.playlists.published(page.uri) }.getOrNull()
+                        android.widget.Toast.makeText(context, R.string.playlist_change_refused, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+            }
+        }
+    }
+
+    fun setPublished(on: Boolean) {
+        if (published == on) return
+        published = on
+        scope.launch {
+            accessWrites.withLock {
+                runCatching { MyspotiRuntime.api.playlists.setPublished(page.uri, on) }
+                    .onSuccess { onChanged() }
+                    .onFailure {
+                        published = runCatching { MyspotiRuntime.api.playlists.published(page.uri) }.getOrNull()
                         android.widget.Toast.makeText(context, R.string.playlist_change_refused, android.widget.Toast.LENGTH_SHORT).show()
                     }
             }
@@ -133,6 +162,10 @@ fun PlaylistOptionsSheet(
                 }
                 AccessRow(Icons.Outlined.Group, R.string.playlist_access_collaborative, R.string.playlist_access_collaborative_detail, access == PlaylistAccess.COLLABORATIVE) {
                     setAccess(PlaylistAccess.COLLABORATIVE)
+                }
+                // Only a playlist others may see can be listed on the profile.
+                if (access != null && access != PlaylistAccess.PRIVATE && published != null) {
+                    ProfileRow(published == true) { setPublished(it) }
                 }
                 Spacer(Modifier.height(8.dp))
                 OptionRow(Icons.Outlined.Delete, stringResource(R.string.local_delete_playlist)) { deleting = true }
@@ -268,6 +301,25 @@ private fun OptionRow(icon: ImageVector, label: String, onClick: () -> Unit) {
         Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
         Text(label, color = Color.White, fontSize = 16.sp)
+    }
+}
+
+@Composable
+private fun ProfileRow(on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable { onChange(!on) }.padding(horizontal = 20.dp, vertical = 10.dp),
+    ) {
+        Icon(Icons.Outlined.Person, null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.playlist_on_profile), color = Color.White, fontSize = 16.sp)
+            Text(stringResource(R.string.playlist_on_profile_detail), color = Color(0xFFB3B3B3), fontSize = 13.sp)
+        }
+        androidx.compose.material3.Switch(
+            checked = on, onCheckedChange = onChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = AppAccent, checkedThumbColor = Color.Black),
+        )
     }
 }
 

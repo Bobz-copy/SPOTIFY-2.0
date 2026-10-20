@@ -316,6 +316,7 @@ fun PlayerScreen(navController: NavController) {
     LaunchedEffect(mv.state.value, remote, audioBuffering, displayedTrackId) { if (videoReady && !audioBuffering) mv.warm() }
     // Pulled down from the top, the player closes, like the back button (issue #4).
     val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss { com.music.spotui.ui.navigation.PlayerSheet.close() }
+    androidx.compose.runtime.SideEffect { com.music.spotui.ui.components.CoverFlight.pulledPx = { pullToClose.offset } }
     pullToClose.enabled = !showLyrics && !mv.fullscreen.value
     Box(
         modifier = Modifier
@@ -463,11 +464,14 @@ fun PlayerScreen(navController: NavController) {
                             // slide taken out, only for the plain cover of the current song.
                             .then(if (page == 1) Modifier.onGloballyPositioned {
                                 val flight = com.music.spotui.ui.components.CoverFlight
+                                val sheet = flight.sheetCoords?.takeIf { s -> s.isAttached }
+                                // Against the sheet, which sits at the window's top once open: the
+                                // same rect on every frame of the slide (an equal Rect notifies no one).
                                 flight.player = if (immersive || coverAlpha < 1f) null
-                                    else it.boundsInWindow().translate(0f, -flight.sheetOffsetPx())
+                                    else sheet?.localBoundingBoxOf(it, clipBounds = false) ?: it.boundsInWindow()
                             } else Modifier)
                             .graphicsLayer {
-                                alpha = coverAlpha * (if (page == 1 && com.music.spotui.ui.components.CoverFlight.flying) 0f else 1f)
+                                alpha = coverAlpha * (if (page == 1) com.music.spotui.ui.components.CoverFlight.playerCoverAlpha() else 1f)
                                 val grow = 1f + (1f - coverAlpha) * 0.06f
                                 scaleX = grow; scaleY = grow
                             },
@@ -918,7 +922,17 @@ fun PlayerInfo(
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
     ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+        // A new song's title and artist fade in (over 0.2 s) instead of replacing the old ones
+        // in one frame, while its cover slides in above them.
+        val textAlpha = remember { androidx.compose.animation.core.Animatable(1f) }
+        var shownTitle by remember { mutableStateOf(songTitle) }
+        LaunchedEffect(songTitle) {
+            if (songTitle == shownTitle) return@LaunchedEffect
+            shownTitle = songTitle
+            textAlpha.snapTo(0f)
+            textAlpha.animateTo(1f, androidx.compose.animation.core.tween(200))
+        }
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp).graphicsLayer { alpha = textAlpha.value }) {
             Text(
                 modifier = Modifier
                     // A few passes, after the sheet has settled (not an endless 120 Hz animation).

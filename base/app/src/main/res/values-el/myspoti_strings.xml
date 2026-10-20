@@ -271,6 +271,8 @@
     <string name="playlist_access_private_detail">Μόνο εσύ μπορείς να τη δεις</string>
     <string name="playlist_access_collaborative">Συνεργατική</string>
     <string name="playlist_access_collaborative_detail">Όποιος έχει τον σύνδεσμο μπορεί να προσθέτει και να αφαιρεί τραγούδια</string>
+    <string name="playlist_on_profile">Στο προφίλ σου</string>
+    <string name="playlist_on_profile_detail">Εμφανίζεται στο προφίλ σου για τους άλλους</string>
     <string name="playlist_delete_confirm">Να διαγραφεί η «%1$s»; Μπορεί να επαναφερθεί από τον λογαριασμό σου στο Spotify για 90 ημέρες.</string>
     <string name="playlist_saved">Η playlist ενημερώθηκε</string>
     <string name="go_to_profile">Μετάβαση στο προφίλ</string>

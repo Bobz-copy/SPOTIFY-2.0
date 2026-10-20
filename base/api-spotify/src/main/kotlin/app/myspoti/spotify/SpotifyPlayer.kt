@@ -984,9 +984,49 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             bridge.logger?.invoke("pause: nothing plays, not sent")
             return
         }
-        command("player.pause")
+        val level = lastMedia?.level?.takeIf { it > 0.01 }
+        val fadeOut = level != null && !_adPlaying.value && !adMuted && lastMedia?.active != false
+        if (fadeOut) {
+            fadeBack?.cancel()
+            runCatching { fade(PAUSE_STEPS.map { it * level!! }, ms = PAUSE_STEP_MS) }
+            delay(PAUSE_STEPS.size * PAUSE_STEP_MS)
+        }
+        try {
+            command("player.pause")
+        } finally {
+            // The element back at its level while paused (not heard): a new song started next
+            // must not begin at the bottom of the fade.
+            if (fadeOut) runCatching { fade(listOf(level!!), restore = true, ms = 1) }
+        }
     }
-    override suspend fun resume() { pausedByUser = false; command("player.resume") }
+    /*
+     * The owner's call: a song coming back after a pause (or after another app had the sound)
+     * rises in under half a second instead of starting at full level, and a pause fades out in
+     * an eighth of one, as the official app does. The rise runs in the page and starts on the
+     * media element's own 'playing' event (see 'media.rise'); [fadeBackTo]/[fadeBack] mark it as
+     * a fade meanwhile, so the silence watchdog and the volume guard leave it be.
+     */
+    override suspend fun resume() {
+        pausedByUser = false
+        val quiet = _adPlaying.value || adMuted || crossfadeArmed || _state.value?.isPaused == false || lastMedia?.active == false
+        if (quiet) { command("player.resume"); return }
+        fadeBackTo = lastMedia?.own?.takeIf { it > 0.01 } ?: 1.0
+        fadeBack?.cancel()
+        runCatching {
+            bridge.call("media.rise", buildJsonObject { put("from", RISE_FROM); put("ms", RISE_MS); put("wait", RISE_WAIT_MS) },
+                timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
+        }
+        try {
+            command("player.resume")
+        } catch (e: Throwable) {
+            runCatching { restoreLevel() }
+            fadeBackTo = null
+            throw e
+        }
+        fadeBack = scope.launch {
+            try { delay(RISE_WAIT_MS + RISE_MS + 200) } finally { fadeBackTo = null }
+        }
+    }
     override suspend fun seek(positionMs: Long) { endCrossfade(restore = true); command("player.seek", buildJsonObject { put("positionMs", positionMs) }) }
     override suspend fun next() {
         pausedByUser = false
@@ -1214,6 +1254,15 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val PICK_AD_MS = 8_000L
         /** After this the user has moved on: a pick is no longer replayed after its ad. */
         const val PICK_REPLAY_MS = 120_000L
+        /** A resumed song starts at this share of its level (-26 dB) ... */
+        const val RISE_FROM = 0.05
+        /** ... and rises to it in this long. */
+        const val RISE_MS = 450L
+        /** How long the rise waits for sound before the level simply comes back. */
+        const val RISE_WAIT_MS = 4_000L
+        /** Pause ramp: ~0.12 s down before the pause itself. */
+        val PAUSE_STEPS = listOf(0.6, 0.32, 0.12, 0.03)
+        const val PAUSE_STEP_MS = 30L
         /** A plain skip still on its song after this: the page lost it. */
         const val NEXT_LOST_MS = 2_500L
         /** After the refusal fallback's transfer, before the song is asked again. */

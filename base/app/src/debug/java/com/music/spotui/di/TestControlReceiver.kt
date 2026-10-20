@@ -14,6 +14,9 @@ import kotlinx.serialization.json.jsonObject
  * cmd: play (--es track <uri> --es context <uri>), resume, pause, next, previous, seek (--el ms <n>).
  * cmd: screenon (--ez on false to release) holds the screen on for a long run: One UI does not
  * honour the huge `screen_off_timeout` set over adb, the window flag does.
+ * cmd: uitrace (--ei secs <n>, default 30) logs, 5 times a second under the tag MspTrace, what the
+ * app shows (position, duration, playing, title, cover) next to what the page plays, so a run
+ * can tell a jumping bar or a stale title/cover from the engine's own state (tools/qa.py --ui).
  * cmd: gql (--es op <operation> --es vars <json>) runs a persisted operation through the app's own
  * Gql layer and logs the raw response: learning a server shape from the phone's real account beats
  * guessing one from a bundle.
@@ -43,6 +46,24 @@ class TestControlReceiver : BroadcastReceiver() {
             // The player's own "next" button and the mini player's swipe.
             "swipenext" -> SongPlayer.swipeNext()
             "previous" -> SongPlayer.previous()
+            "uitrace" -> {
+                val secs = intent.getIntExtra("secs", 30).coerceIn(1, 600)
+                app.myspoti.host.android.MyspotiRuntime.scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    val song = Graph.currentSongState
+                    val end = android.os.SystemClock.elapsedRealtime() + secs * 1000L
+                    while (android.os.SystemClock.elapsedRealtime() < end) {
+                        val now = System.currentTimeMillis()
+                        val e = app.myspoti.host.android.MyspotiRuntime.spotify.player.state.value
+                        Log.i("MspTrace", "t=${android.os.SystemClock.elapsedRealtime()} ui_pos=${SongPlayer.getCurrentPosition()} " +
+                            "ui_dur=${SongPlayer.getDuration()} ui_play=${SongPlayer.isPlaying()} ui_uri=${SongPlayer.nowPlaying.value.uri} " +
+                            "ui_cover=${song.coverUri.value.substringAfterLast('/')} eng_uri=${e?.item?.uri} " +
+                            "eng_pos=${e?.positionAt(now)} eng_paused=${e?.isPaused} eng_buf=${e?.isBuffering} " +
+                            "ui_title=${song.title.value} | eng_title=${e?.item?.name}")
+                        kotlinx.coroutines.delay(200)
+                    }
+                    Log.i("MspTrace", "end")
+                }
+            }
             "seek" -> SongPlayer.seekTo(intent.getLongExtra("ms", 0L))
             "screenon" -> context.getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE)
                 .edit().putBoolean("keep_screen_on", intent.getBooleanExtra("on", true)).apply()

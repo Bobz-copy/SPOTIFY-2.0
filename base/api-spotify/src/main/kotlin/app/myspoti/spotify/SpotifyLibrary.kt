@@ -226,8 +226,22 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
     override suspend fun access(uri: Uri): PlaylistAccess =
         PlaylistAccess.of((bridge.service("PlaylistPermissionsAPI", "getBasePermission", JsonPrimitive(uri)) as? JsonPrimitive)?.content)
 
+    /**
+     * As the Web Player's "Make private": the playlist also leaves the profile (made private with
+     * the base permission alone, it stayed listed on the profile, unlike in the official apps).
+     * Made public again it is not put back on the profile, as there either ([setPublished]).
+     */
     override suspend fun setAccess(uri: Uri, access: PlaylistAccess) {
+        if (access == PlaylistAccess.PRIVATE && published(uri)) setPublished(uri, false)
         bridge.service("PlaylistPermissionsAPI", "setBasePermission", JsonPrimitive(uri), JsonPrimitive(access.permission))
+    }
+
+    /** The library's own "public" flag on the playlist: listed on the profile. */
+    override suspend fun published(uri: Uri): Boolean =
+        (bridge.service("RootlistAPI", "getPublishedState", JsonPrimitive(uri)) as? JsonPrimitive)?.content == "true"
+
+    override suspend fun setPublished(uri: Uri, published: Boolean) {
+        bridge.service("RootlistAPI", "setPublishedState", JsonPrimitive(uri), JsonPrimitive(published))
     }
 
     override suspend fun setCover(uri: Uri, jpeg: ByteArray?) {

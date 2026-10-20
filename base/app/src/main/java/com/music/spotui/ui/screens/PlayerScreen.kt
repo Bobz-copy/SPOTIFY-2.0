@@ -211,6 +211,9 @@ fun PlayerScreen(navController: NavController) {
         mutableStateOf(Palette.cachedSecond(songCoverUri) ?: Color(AppBackground.toArgb()))
     }
     LaunchedEffect(songCoverUri) {
+        // Known: kept as it is (extracted again it could come out a shade off, and the background
+        // shifted after the player had opened).
+        Palette.cachedSecond(songCoverUri)?.let { coverColor = it; return@LaunchedEffect }
         if (songCoverUri.isNotBlank()) Palette().extractSecondColorFromCoverUrl(context = context, songCoverUri) { color ->
             coverColor = color
         }
@@ -322,7 +325,6 @@ fun PlayerScreen(navController: NavController) {
     LaunchedEffect(mv.state.value, remote, audioBuffering, displayedTrackId) { if (videoReady && !audioBuffering) mv.warm() }
     // Pulled down from the top, the player closes, like the back button (issue #4).
     val pullToClose = com.music.spotui.ui.components.rememberPullToDismiss { com.music.spotui.ui.navigation.PlayerSheet.close() }
-    androidx.compose.runtime.SideEffect { com.music.spotui.ui.components.CoverFlight.pulledPx = { pullToClose.offset } }
     pullToClose.enabled = !showLyrics && !mv.fullscreen.value
     Box(
         modifier = Modifier
@@ -369,9 +371,13 @@ fun PlayerScreen(navController: NavController) {
                     )
             )
         }
+        // The content comes in after the sheet's background (see PlayerOverlay).
+        val reveal = com.music.spotui.ui.navigation.LocalPlayerReveal.current
+        val revealShift = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.toPx() }
         androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer { val r = reveal(); alpha = r; translationY = (1f - r) * revealShift }
                 .nestedScroll(pullToClose.connection)
                 .statusBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -467,18 +473,8 @@ fun PlayerScreen(navController: NavController) {
                         modifier = (if (immersive) Modifier.fillMaxSize()
                             // Normal layout keeps the inset, rounded cover.
                             else Modifier.padding(horizontal = 24.dp).aspectRatio(1f).clip(RoundedCornerShape(8.dp)))
-                            // Where the mini player's cover flies to (CoverFlight), the sheet's
-                            // slide taken out, only for the plain cover of the current song.
-                            .then(if (page == 1) Modifier.onGloballyPositioned {
-                                val flight = com.music.spotui.ui.components.CoverFlight
-                                val sheet = flight.sheetCoords?.takeIf { s -> s.isAttached }
-                                // Against the sheet, which sits at the window's top once open: the
-                                // same rect on every frame of the slide (an equal Rect notifies no one).
-                                flight.player = if (immersive || coverAlpha < 1f) null
-                                    else sheet?.localBoundingBoxOf(it, clipBounds = false) ?: it.boundsInWindow()
-                            } else Modifier)
                             .graphicsLayer {
-                                alpha = coverAlpha * (if (page == 1) com.music.spotui.ui.components.CoverFlight.playerCoverAlpha() else 1f)
+                                alpha = coverAlpha
                                 val grow = 1f + (1f - coverAlpha) * 0.06f
                                 scaleX = grow; scaleY = grow
                             },

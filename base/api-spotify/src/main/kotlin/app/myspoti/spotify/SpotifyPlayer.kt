@@ -166,7 +166,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     private suspend fun reloadAndPlayOn(s: PlayerState?, next: Boolean = true) {
         val reload = reloadHost ?: return
-        if (recoveryHeld()) { bridge.logger?.invoke("reload held: Spotify is limiting playback"); return }
+        if (recoveryHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting playback"); return }
         ownReload = true
         try {
             runCatching {
@@ -187,7 +187,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      */
     suspend fun reloadPage(): Boolean {
         val reload = reloadHost ?: return false
-        if (recoveryHeld()) { bridge.logger?.invoke("reload held: Spotify is limiting playback"); return false }
+        if (recoveryHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting playback"); return false }
         ownReload = true
         try {
             reload()
@@ -318,7 +318,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             if (withTimeoutOrNull(if (quiet) WATCH_IDLE_TICK_MS else WATCH_TICK_MS) { wake.receive() } != null)
                 delay(AD_PLAYING_SKIP_MS + 50)
             tick++
-            if (!bridge.ready.value || ownReload) { key = null; attempts = 0; silentSince = 0L; continue }
+            // Repairs held (a sign-in page open, playback limited): nothing is judged, not even a
+            // silent page, which is what a sign-in page looks like from here.
+            if (!bridge.ready.value || ownReload || recoveryHeld()) { key = null; attempts = 0; silentSince = 0L; frozenMisses = 0; continue }
             val now = System.currentTimeMillis()
             // The page answers nothing, not even a ping: frozen (a stuck renderer). Reloaded
             // at once, the song going on where it was.

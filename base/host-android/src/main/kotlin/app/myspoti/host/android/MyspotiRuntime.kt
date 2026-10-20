@@ -35,7 +35,10 @@ object MyspotiRuntime {
         host.onPageLoaded = { scope.launch { spotify.onPageLoaded() } }
         host.onPageStarting = { spotify.onPageStarting() }
         spotify.player.reloadHost = { host.reload() }
-        spotify.player.recoveryHeld = { host.licenseLimited() }
+        // Repairs wait while Spotify limits playback, and while a Spotify sign-in page is open:
+        // the player is not there to answer, and the "page not answering" reload threw the user
+        // off the e-mail code step while they were away reading the code (reported, log seen).
+        spotify.player.recoveryHeld = { host.licenseLimited() || host.loginRequired.value }
         // Spotify limiting this client: stop asking (a paused player requests no licence).
         scope.launch {
             host.licenseLimitedUntil.collect { until ->

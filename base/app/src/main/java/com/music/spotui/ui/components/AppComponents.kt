@@ -163,13 +163,10 @@ fun MiniPlayer(navController: NavHostController) {
         }
     }
 
-    // The big cover the player will open on, loaded now: the cover that flies into the player
-    // (CoverFlight) and the player's own then come from memory, with nothing to wait for.
+    // The big cover the player will open on, loaded now: it is then read from Glide's caches.
     LaunchedEffect(songCoverUri) {
-        val target = CoverFlight.player ?: return@LaunchedEffect
         if (songCoverUri.isBlank()) return@LaunchedEffect
-        com.bumptech.glide.Glide.with(context).load(songCoverUri)
-            .override(target.width.toInt(), target.height.toInt()).optionalCenterCrop().preload()
+        com.bumptech.glide.Glide.with(context).load(songCoverUri).preload()
     }
 
     // A new song cross-fades the card's colour instead of snapping to it.
@@ -208,6 +205,8 @@ fun MiniPlayer(navController: NavHostController) {
 
     Column(
         modifier = Modifier.pressable(0.96f) { com.music.spotui.ui.navigation.PlayerSheet.show() }
+            // Where the full player rises from and sinks back to.
+            .onGloballyPositioned { com.music.spotui.ui.navigation.PlayerSheet.miniTop = it.boundsInWindow().top }
             .padding(horizontal = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(animatedTint)
@@ -242,12 +241,6 @@ fun MiniPlayer(navController: NavHostController) {
                         transition = CrossFade,
                         modifier = Modifier
                             .size(40.dp)
-                            // The current song's cover is where the player's cover flies from
-                            // and back to (CoverFlight), and is hidden while it flies.
-                            .then(if (page == 1) Modifier
-                                .onGloballyPositioned { CoverFlight.mini = it.boundsInWindow() }
-                                .graphicsLayer { alpha = CoverFlight.miniCoverAlpha() }
-                                else Modifier)
                             .clip(RoundedCornerShape(4.dp)),
                         model = m.cover,
                         contentScale = ContentScale.Crop,

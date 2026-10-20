@@ -38,6 +38,13 @@ SERIAL = None
 # no force-stop of other apps, no pull_back scenario (launches the Spotify app, transfers playback to
 # another device). The screen stays as the user left it.
 SAFE = bool(os.environ.get("PT_SAFE"))
+# PT_HEADLESS=1 (default off): the owner is on the phone, so nothing may reach the foreground or the
+# input system. The app is started as a foreground service only (no activity), and the media keys
+# of key() are sent as the debug receiver's commands (next, previous, resume, pause) instead of
+# `input keyevent`; every other key is dropped. Implies PT_SAFE.
+HEADLESS = bool(os.environ.get("PT_HEADLESS"))
+if HEADLESS:
+    SAFE = True
 
 
 def adb(*args, check=True, timeout=60):
@@ -271,7 +278,15 @@ class Run:
             raise Fail("log: " + " | ".join(bad[:4]))
 
 
+KEY_COMMANDS = {87: "next", 88: "previous", 126: "resume", 127: "pause"}
+
+
 def key(code):
+    if HEADLESS:
+        for c in (code if isinstance(code, list) else [code]):
+            if c in KEY_COMMANDS:
+                test(KEY_COMMANDS[c])
+        return
     if SAFE:
         code = [c for c in (code if isinstance(code, list) else [code]) if c not in (3, 26, 223, 224)]  # HOME wakes the screen too
         if not code:
@@ -290,6 +305,10 @@ NEXT, PREV, PLAY, PAUSE, HOME, SLEEP, WAKE = 87, 88, 126, 127, 3, 223, 224
 
 
 def launch():
+    if HEADLESS:
+        # The playback service alone (no activity, nothing in front): the engine runs without a screen.
+        adb("shell", "am", "start-foreground-service", "-n", PKG + "/app.myspoti.host.android.PlaybackService")
+        return
     adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
 
 

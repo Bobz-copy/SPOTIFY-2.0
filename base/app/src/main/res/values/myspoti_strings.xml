@@ -313,6 +313,11 @@
     <string name="playlist_access_collaborative_detail">Anyone with the link can add and remove songs</string>
     <string name="playlist_on_profile">On your profile</string>
     <string name="playlist_on_profile_detail">Listed on your profile for others to see</string>
+    <string name="choose_artist">Choose an artist</string>
+    <string name="quality_streaming_wifi_title">Wi-Fi streaming</string>
+    <string name="quality_streaming_cell_title">Mobile data streaming</string>
+    <string name="canvas_wifi_only">Canvas on Wi-Fi only</string>
+    <string name="canvas_wifi_only_detail">The looping videos play on Wi-Fi, never on mobile data</string>
     <string name="playlist_delete_confirm">Delete "%1$s"? It can be restored from your Spotify account for 90 days.</string>
     <string name="playlist_saved">Playlist updated</string>
     <string name="go_to_profile">Go to profile</string>

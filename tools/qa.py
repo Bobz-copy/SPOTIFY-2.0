@@ -19,6 +19,8 @@ usage: tools/qa.py [--build] [--unit] [--battery all|light|name,name] [--perf] [
 Every phone step also counts Spotify's HTTP 429 on audio licences: a run that triggers them
 is stopped, since more runs would only make Spotify's limit on the test account last.
 Debug build only; one driver at a time on the phone.
+PT_HEADLESS=1: no activity, no input (the app starts as its service, media keys become the test receiver's
+commands): see tools/playback_test.py. --perf and --anim need the screen and are refused then.
 """
 import argparse, glob, json, os, re, subprocess, sys, time
 
@@ -69,6 +71,13 @@ def step_unit(out):
 
 
 def ensure_app():
+    if pt.HEADLESS:
+        # PT_HEADLESS=1: the service alone, only when the app is not running (see tools/playback_test.py)
+        if not adb("shell", "pidof", PKG).strip():
+            pt.launch()
+            time.sleep(18)
+        pt.wait_ready(60)
+        return
     adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1")
     time.sleep(2)
     pt.wait_ready(60)
@@ -230,6 +239,8 @@ def main():
     a = ap.parse_args()
     pt.SERIAL = a.serial or next((l.split()[0] for l in sh(pt.ADB, "devices").splitlines()[1:] if l.endswith("device")), None)
     out = {}
+    if pt.HEADLESS and (a.perf or a.anim):
+        sys.exit("PT_HEADLESS=1: --perf and --anim tap the screen; refused")
     if a.unit:
         step_unit(out)
     if a.build and not step_build(out):

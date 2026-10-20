@@ -225,6 +225,8 @@ fun PlayerScreen(navController: NavController) {
     val currentTrack = queueSongs.firstOrNull { it.id == songId }
     val actualTrackId = confirmedTrackIdFromUri(np.uri)
     val displayedTrackId = confirmedTrackIdForDisplay(np.uri, songId)
+    // The artists are looked up ahead: a tap on the artist line opens the page (or the choice) at once.
+    LaunchedEffect(displayedTrackId) { com.music.spotui.ui.components.ArtistChooser.prefetch(displayedTrackId) }
 
     // Smooth progress: redrawn every frame from the engine clock (see SpotifySeekBar).
     // As many ticks as the knob has pixels to move: ~5 a second on a 3-minute song, up to 15 on
@@ -257,7 +259,8 @@ fun PlayerScreen(navController: NavController) {
     // Hide a stale result in this composition, before the loading effect runs.
     LaunchedEffect(displayedTrackId, energy.policy.allowCanvas, audioBuffering) {
         playerViewModel.loadCanvas(
-            if (energy.policy.allowCanvas && !com.music.spotui.data.DataSaver.active) displayedTrackId else "",
+            if (energy.policy.allowCanvas && !com.music.spotui.data.DataSaver.active &&
+                !(com.music.spotui.data.DataSaver.metered && com.music.spotui.data.preferences.isCanvasWifiOnly(context))) displayedTrackId else "",
             allowFetch = !audioBuffering,
         )
     }
@@ -266,7 +269,8 @@ fun PlayerScreen(navController: NavController) {
     // only follows one frame later): the screen then opens on the Canvas, not on the cover.
     val knownCanvas = remember(displayedTrackId) { com.music.spotui.di.Graph.api.knownCanvas(displayedTrackId)?.getOrNull() }
     val canvasUrl = (if (canvas.trackId == displayedTrackId) canvas.url else knownCanvas).takeIf {
-        energy.policy.allowCanvas && !com.music.spotui.data.DataSaver.active && displayedTrackId.isNotBlank()
+        energy.policy.allowCanvas && !com.music.spotui.data.DataSaver.active &&
+                !(com.music.spotui.data.DataSaver.metered && com.music.spotui.data.preferences.isCanvasWifiOnly(context)) && displayedTrackId.isNotBlank()
     }
     // The cover stays until the Canvas has drawn its first frame: hiding it earlier showed
     // the bare background for a moment (a flash) between the cover and the clip.
@@ -275,6 +279,8 @@ fun PlayerScreen(navController: NavController) {
     // Cover to Canvas as one cross-fade: the clip (full screen) fades in while the cover fades
     // out and grows a little into it, instead of the background switching at once.
     val canvasOn = canvasUrl != null && canvasShown
+    // The immersive view is the Canvas's: a song without one leaves it.
+    LaunchedEffect(canvasOn) { if (!canvasOn) immersive = false }
     // A clip already loaded shows at once; one still loading fades in over the cover.
     val readyAtOnce = remember(canvasUrl) { canvasUrl != null && com.music.spotui.ui.components.CanvasPlayer.isReady(canvasUrl) }
     val canvasProgress = remember { androidx.compose.animation.core.Animatable(if (readyAtOnce) 1f else 0f) }
@@ -408,11 +414,12 @@ fun PlayerScreen(navController: NavController) {
             // screens): otherwise play / pause ends up under the lyrics card.
             // A clear upward drag on the artwork opens the lyrics (observed on the initial pass,
             // never consumed, so the pager and the pull-to-close keep working).
-            Box(modifier = Modifier.size(artSide).pointerInput(immersive, videoOn) {
+            Box(modifier = Modifier.size(artSide).pointerInput(immersive, videoOn, canvasOn) {
                 detectTapGestures(onTap = {
-                    // Plain tap on the artwork: the immersive toggle, with or without a Canvas
-                    // (it used to depend on the Canvas being there, and only ever turned on).
-                    if (!videoOn) immersive = !immersive
+                    // A tap on a Canvas hides the rest to show the whole clip. A plain cover has
+                    // nothing more to show: blown up to the screen's height it was only cropped
+                    // on both sides (reported: the tap "broke" the image), so it does nothing.
+                    if (!videoOn && canvasOn) immersive = !immersive
                 })
             }.pointerInput(Unit) {
                 val threshold = 80.dp.toPx()

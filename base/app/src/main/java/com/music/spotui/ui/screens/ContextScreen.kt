@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -667,6 +668,37 @@ private fun ContextContent(navController: NavController, vm: ContextViewModel, p
         item { Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace())) }
     }
     com.music.spotui.ui.components.FastScrollbar(listState, Modifier.align(Alignment.CenterEnd))
+    // As in the official app: once the header has mostly scrolled away, a bar in the page's colour
+    // fades in at the top with the back arrow and the name; the list no longer runs bare under the
+    // status bar. Its opacity follows the scroll in the draw phase (no recomposition per frame).
+    val barAlpha = remember(listState) {
+        androidx.compose.runtime.derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) 1f else {
+                val h = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.toFloat() ?: return@derivedStateOf 0f
+                ((listState.firstVisibleItemScrollOffset - h * 0.6f) / (h * 0.2f)).coerceIn(0f, 1f)
+            }
+        }
+    }
+    val barShown by remember(listState) { androidx.compose.runtime.derivedStateOf { barAlpha.value > 0f } }
+    if (barShown) Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { alpha = barAlpha.value }
+            .background(lerp(tint, Color.Black, 0.45f))
+            .statusBarsPadding()
+            .height(56.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 8.dp).size(40.dp).clip(CircleShape).clickable { navController.navigateUp() },
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
+        }
+        // Centred, as on the artist page.
+        Text(p.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f).padding(end = 56.dp))
+    }
     androidx.compose.material3.SnackbarHost(
         hostState = snackbar,
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = com.music.spotui.ui.components.bottomBarsSpace()),

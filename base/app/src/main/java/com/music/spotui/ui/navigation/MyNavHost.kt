@@ -69,12 +69,13 @@ fun MyNavHost(
             if (navHostController.currentDestination?.route != Routes.Spotiflac.route) navHostController.navigate(Routes.Spotiflac.route)
         }
     }
+    com.music.spotui.ui.components.ArtistChooserHost(navHostController)
     NavHost(
         navController = navHostController,
         startDestination = startDestination,
-        // Same motion as the official app: tabs switch instantly, pages slide in from
-        // the right over a slight parallax, the player and queue rise from the bottom.
-        // Slides only (no alpha): a fade puts the whole page in an offscreen layer.
+        // Pages: a short shift with a fade-through, tabs fade in, the player and queue rise
+        // from the bottom (see navEnter). The fades put a page in an offscreen layer for
+        // their 0.1-0.2 s: the owner's call, a page change read as a hard block without them.
         enterTransition = { navEnter(initialState, targetState) },
         exitTransition = { navExit(initialState, targetState) },
         popEnterTransition = { navPopEnter(initialState, targetState) },

@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +68,15 @@ fun SettingsScreen(navController: NavController) {
         }
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             Section(R.string.settings_section_playback)
-            StreamingQualityPicker()
+            StreamingQualityPicker(title = R.string.quality_streaming_wifi_title)
+            StreamingQualityPicker(cellular = true, title = R.string.quality_streaming_cell_title)
+            var canvasWifiOnly by remember { mutableStateOf(com.music.spotui.data.preferences.isCanvasWifiOnly(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.canvas_wifi_only),
+                detail = stringResource(R.string.canvas_wifi_only_detail),
+                checked = canvasWifiOnly,
+                onChecked = { canvasWifiOnly = it; com.music.spotui.data.preferences.setCanvasWifiOnly(ctx, it) },
+            )
             OptionRow(
                 label = stringResource(R.string.settings_autoplay_title),
                 detail = stringResource(R.string.settings_autoplay_detail),
@@ -184,7 +193,9 @@ fun SettingsScreen(navController: NavController) {
                 Text(stringResource(R.string.diagnostic_export_title), color = Color.White, fontSize = 16.sp)
                 Text(stringResource(R.string.diagnostic_export_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
             }
-            Spacer(Modifier.height(96.dp))
+            // Clear of the mini player and the navigation bar, as every other page (96 dp left the
+            // last rows, "Restart the player" among them, under the mini player).
+            Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace()))
         }
     }
 }

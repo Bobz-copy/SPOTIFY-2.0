@@ -17,6 +17,7 @@ import kotlinx.serialization.json.jsonObject
  * cmd: uitrace (--ei secs <n>, default 30) logs, 5 times a second under the tag MspTrace, what the
  * app shows (position, duration, playing, title, cover) next to what the page plays, so a run
  * can tell a jumping bar or a stale title/cover from the engine's own state (tools/qa.py --ui).
+ * cmd: crossfade (--ei secs <0..12>) sets the crossfade between songs, as the Settings slider does.
  * cmd: gql (--es op <operation> --es vars <json>) runs a persisted operation through the app's own
  * Gql layer and logs the raw response: learning a server shape from the phone's real account beats
  * guessing one from a bundle.
@@ -46,6 +47,7 @@ class TestControlReceiver : BroadcastReceiver() {
             // The player's own "next" button and the mini player's swipe.
             "swipenext" -> SongPlayer.swipeNext()
             "previous" -> SongPlayer.previous()
+            "crossfade" -> com.music.spotui.data.preferences.CrossfadePref.set(context, intent.getIntExtra("secs", 0))
             "uitrace" -> {
                 val secs = intent.getIntExtra("secs", 30).coerceIn(1, 600)
                 app.myspoti.host.android.MyspotiRuntime.scope.launch(kotlinx.coroutines.Dispatchers.Main) {

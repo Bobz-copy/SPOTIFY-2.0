@@ -60,7 +60,7 @@ def check_ui(traces, cmds):
     for i in range(1, len(traces)):
         a, b = traces[i - 1], traces[i]
         dt = b["t"] - a["t"]
-        if dt > 1000:
+        if 1000 < dt <= 20000:  # a longer hole is a new uitrace session (the trace is requested for a number of seconds)
             E.append(ev("trace_gap", b["ms"], cmds, f"{dt} ms without a trace line", b["no"]))
         if a["ui_uri"] == b["ui_uri"] and a["ui_play"] and b["ui_play"] and a["ui_uri"] not in ("", "null"):
             d = b["ui_pos"] - a["ui_pos"]
@@ -301,6 +301,124 @@ def natural_boundaries(traces, merged, samples, cmds):
     return out
 
 
+# ── fades: the resume rise, the pause ramp, the crossfade ─────────────────────
+
+def _fit_cubic(rows, t_lo, t_hi, own, model):
+    """Best start time t0 (ms) of [model](t - t0) -> 0..1, vol = own * k^3, over the samples in [t_lo, t_hi]. -> (t0, rms)"""
+    pts = [(r[0], r[4]) for r in rows if t_lo <= r[0] <= t_hi]
+    if len(pts) < 4:
+        return None, None
+    best = None
+    for t0 in range(int(t_lo) - 300, int(t_hi) + 1, 4):
+        e = sum((v - max(0.001, own * model(t - t0) ** 3)) ** 2 for t, v in pts)
+        if best is None or e < best[0]:
+            best = (e, t0)
+    return best[1], round((best[0] / len(pts)) ** 0.5, 4)
+
+
+def fade_metrics(samples, events, cmds, rise_ms=500, pause_ms=160):
+    """Per resume: when the element is silent, when its clock moves, when the volume starts to rise (cubic fit),
+    how long to the full level, the level reached. Per pause: the ramp down (cubic fit) and the pause event."""
+    S = [s for s in samples if not s[7]]
+    rises, pauses = [], []
+    for idx, (ms, name, no) in enumerate(cmds):
+        nxt = cmds[idx + 1][0] if idx + 1 < len(cmds) else ms + 20000
+        before = [s for s in S if s[0] <= ms]
+        if not before:
+            continue
+        last = before[-1]
+        el, ct0 = last[1], last[2]
+        E = [s for s in S if s[1] == el]
+        if name == "pause" and not last[3]:
+            pe = next((e for e in events if e[2] == el and ms <= e[0] <= ms + 3000 and e[1] == "pause"), None)
+            lvl = max(s[4] for s in E if ms - 600 <= s[0] <= ms) or last[4]
+            ramp = [(s[0] - ms, s[4]) for s in E if ms - 60 <= s[0] <= (pe[0] if pe else ms + 400)]
+            d = dict(cmd="pause", ms=ms, line=no, level_before=lvl, to_pause_event_ms=(pe[0] - ms) if pe else None,
+                     vol_at_pause_event=pe[4] if pe else None, ramp=ramp[::max(1, len(ramp) // 10)])
+            t0, rms = _fit_cubic(E, ms - 50, (pe[0] if pe else ms + 300), lvl, lambda dt: max(0.0, 1 - dt / pause_ms))
+            d["fit_start_after_cmd_ms"] = None if t0 is None else t0 - ms
+            d["fit_rms"] = rms
+            vols = [v for _, v in ramp]
+            d["monotonic_down"] = all(b <= a + 0.02 for a, b in zip(vols, vols[1:]))
+            pauses.append(d)
+        elif name == "resume":
+            pre = [s for s in before if s[1] == el and s[3]]
+            own = max([s[4] for s in E if ms - 12000 <= s[0] <= ms] or [1.0])  # the level the element is brought back to while paused
+            horizon = min(nxt, ms + 12000)
+            win = [s for s in E if ms <= s[0] <= horizon]
+            tm = next((s for i, s in enumerate(win) if not s[3] and s[2] > ct0 + 0.03), None)
+            d = dict(cmd="resume", ms=ms, line=no, el=el, own=own, ct_before=ct0, t_move_ms=(tm[0] - ms) if tm else None)
+            if tm:
+                silent = [s for s in win if s[4] <= 0.0015]
+                d["t_silent_ms"] = (silent[0][0] - ms) if silent else None
+                # media.rise sets the silence ~20-100 ms after the command; until then the element still has the level it
+                # was restored to while paused (not heard: paused). From the first sample below half of it, up to the clock
+                # moving, it must stay silent.
+                setp = next((s for s in win if s[4] < 0.5 * own), None)
+                d["t_rise_set_ms"] = (setp[0] - ms) if setp else None
+                gate = [s for s in win if setp and setp[0] <= s[0] < tm[0] - 60]
+                d["vol_max_before_move"] = max((s[4] for s in gate), default=None)
+                d["vol_at_move"] = tm[4]
+                # exact (event-stamped) view: volumechange events carry the element's own currentTime at the moment
+                vc = [e for e in events if e[2] == el and e[1] == "volumechange" and ms <= e[0] <= horizon]
+                sil = next((e for e in vc if e[4] <= 0.0015), None)
+                up = next((e for e in vc if sil and e[0] > sil[0] and e[4] > 0.002), None)
+                d["ev_silence_set_ms"] = (sil[0] - ms) if sil else None
+                d["ev_silence_set_clock_ahead_s"] = round(sil[3] - ct0, 3) if sil else None
+                d["ev_rise_first_ms"] = (up[0] - ms) if up else None
+                d["ev_rise_first_clock_ahead_s"] = round(up[3] - ct0, 3) if up else None
+                t0, rms = _fit_cubic(E, setp[0] if setp else tm[0] - 100, tm[0] + rise_ms + 200, own, lambda dt: min(1.0, max(0.0, dt / rise_ms)))
+                d["fit_start_after_move_ms"] = None if t0 is None else t0 - tm[0]
+                d["fit_rms"] = rms
+                after = [s for s in E if tm[0] + 1000 <= s[0] <= min(horizon - 100, tm[0] + 6000) and not s[3]]
+                lvl_end = sorted(s[4] for s in after)[len(after) // 2] if after else None
+                d["level_after_median"] = lvl_end
+                d["level_ratio_to_own"] = round(lvl_end / own, 3) if lvl_end and own else None
+                full = next((s for s in E if s[0] >= tm[0] and s[4] >= 0.98 * own), None)
+                d["to_full_after_move_ms"] = (full[0] - tm[0]) if full else None
+                low = [s[4] for s in E if (full[0] if full else tm[0]) <= s[0] <= min(horizon - 100, tm[0] + 6000) and not s[3]]
+                d["vol_min_after_full"] = min(low) if low else None
+                d["ramp"] = [(s[0] - tm[0], s[4]) for s in E if tm[0] - 100 <= s[0] <= tm[0] + 700][::2]
+            rises.append(d)
+    return rises, pauses
+
+
+def crossfade_metrics(samples, bounds, traces, other, own=1.0):
+    """Per natural song change: the element volume 12 s before to 6 s after the switch (every 500 ms), the longest span at
+    volume < 0.1 / < 0.02 while the clock advances, silence (no clock progress) around the switch, the level 3-6 s after."""
+    S = [s for s in samples if not s[7]]
+    out = []
+    xlines = [(o[0], o[3], o[2][:140]) for o in other if "crossfade" in o[2].lower()]
+    for b in bounds:
+        sw = b["eng_switch_ms"]
+        rows = [s for s in S if sw - 12000 <= s[0] <= sw + 6000]
+        if not rows:
+            continue
+        tl = []
+        for t in range(-12000, 6001, 500):
+            near = min(rows, key=lambda s: abs(s[0] - (sw + t)))
+            tl.append((t, near[4], near[1], 0 if near[3] else 1))
+        def longest(th):
+            best = cur = 0
+            start = None
+            for a, c in zip(rows, rows[1:]):
+                low = c[4] < th and not c[3]
+                if low:
+                    start = start if start is not None else a[0]
+                    cur = c[0] - start
+                    best = max(best, cur)
+                else:
+                    start = None
+            return best
+        aft = [s[4] for s in rows if sw + 3000 <= s[0] <= sw + 6000]
+        pre = [s for s in rows if s[0] < sw - 6500]
+        out.append(dict(switch_ms=sw, line=b["line"], from_title=b["from_title"], to_title=b["to_title"], audio_gap_ms=b.get("audio_gap_ms"),
+                        vol_before_fade=(pre[-1][4] if pre else None), longest_below_0_1_ms=longest(0.1), longest_below_0_02_ms=longest(0.02),
+                        vol_min_overall=min(s[4] for s in rows), level_3_6s_after_min=min(aft) if aft else None,
+                        timeline=tl, log=[x for x in xlines if sw - 14000 <= x[0] <= sw + 6000]))
+    return out
+
+
 def log_flags(other):
     pats = [("player stalled", r"player stalled"), ("reload", r"(?<![a-z])reload"), ("crossfade", r"crossfade"), ("volume", r"volume"),
             ("ad", r"\bad (muted|stuck)|ad .*asked the page|blocked ad request|\"kind\":\"ad\""), ("http 429", r"http 429"), ("call timeout", r"timeout after \d+ ms"),
@@ -321,13 +439,15 @@ def analyse(base, ref=1.0):
     bounds = natural_boundaries(traces, merged, samples, cmds)
     flags = log_flags(other)
     cm = command_metrics(samples, events, cmds, traces, ref)
+    rises, pauses = fade_metrics(samples, events, cmds)
+    xf = crossfade_metrics(samples, bounds, traces, other)
     # A silence of < 3 s at a song's own end is judged as a boundary (tools/pilot.py: limit 3 s), not as a stall.
     med = [e for e in med if not (e["kind"] == "silence_gap" and any(abs(e["ms"] - b.get("old_audio_end_ms", -10**12)) < 500 and (b.get("audio_gap_ms") or 0) < 3000 for b in bounds))]
     allev = sorted(ui + med, key=lambda e: e["ms"])
     counts = Counter((e["kind"], e["scope"]) for e in allev)
     return dict(base=base, trace_lines=len(traces), media_samples=len(samples), media_events=len(events), commands=[(c[0], c[1]) for c in cmds],
                 counts={f"{k}/{s}": n for (k, s), n in sorted(counts.items())}, events=allev, gaps=gaps, boundaries=bounds, cmd_metrics=cm,
-                log_flags={k: len(v) for k, v in flags.items()}, log_flag_lines={k: v[:6] for k, v in flags.items()})
+                rises=rises, pause_fades=pauses, crossfades=xf, log_flags={k: len(v) for k, v in flags.items()}, log_flag_lines={k: v[:6] for k, v in flags.items()})
 
 
 def summary(a, limit=12):

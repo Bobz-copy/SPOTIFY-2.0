@@ -43,6 +43,12 @@ def telling(base, f, n=6):
 
 def scenario_failures(name, base, an, res):
     f = pilot.failures(an)
+    if name == "H":
+        return list(res.get("fail", []))  # no media sampler in H: the scenario's own verdict
+    if name == "X":
+        f = pilot.xfade_failures(an, (res.get("key", {}).get("notes") or {}).get("own") or 1)
+    if name in ("A1", "A2", "A2b", "D"):
+        f += pilot.fade_failures(an, os.path.basename(base))
     if name in ("B", "B2", "B3", "C", "A2", "A2b"):
         f += pilot.boundary_failures(an)
     if name in ("A2", "A2b"):
@@ -71,7 +77,9 @@ SCEN = [("A1", "A1_short_pause", "A1 short pause (5 s) x3, resume rise + latency
         ("B2", "B2_end_of_track", "B2 end of track, second song"),
         ("B3", "B3_end_of_track", "B3 end of track, third song"),
         ("C", "C_long_play", "C 4 min continuous play across a boundary"),
-        ("D", "D_commands", "D pause/resume x10, next/previous, swipenext bursts, seeks")]
+        ("D", "D_commands", "D pause/resume x10, next/previous, swipenext bursts, seeks"),
+        ("X", "X_crossfade", "X crossfade 6 s over 2 natural song ends, then crossfade 0 and a third end"),
+        ("H", "H_headless", "H headless: pause 3 min, process / foreground service, then a resume broadcast")]
 
 
 def fmt(v):
@@ -121,6 +129,21 @@ def main(d):
                 md.append(f"- {n_}: ms to engine song change {g(n_, 'to_eng_uri_change_ms')}, to app song change {g(n_, 'to_ui_uri_change_ms')}, to first audio {g(n_, 'to_audio_ms')}"
                           + (f", to restart {g(n_, 'to_eng_restart_ms')}" if n_ == "previous" else ""))
             md.append(f"- seek: engine positions after each seek (sampled) {g('seek', 'eng_pos_after')}")
+        if key in ("A1", "A2", "A2b", "D"):
+            for i_, x in enumerate(an.get("rises", [])):
+                md.append(f"- rise {i_ + 1} (log:{x['line']}): rise-set +{x.get('t_rise_set_ms')} ms, clock moved +{x['t_move_ms']} ms, vol max before move {x.get('vol_max_before_move')}, vol at move {x.get('vol_at_move')}, "
+                          f"cubic start {x.get('fit_start_after_move_ms')} ms from the move (fit rms {x.get('fit_rms')}), events: silence set +{x.get('ev_silence_set_ms')} ms with the clock {x.get('ev_silence_set_clock_ahead_s')} s ahead of the pause point, first rise step +{x.get('ev_rise_first_ms')} ms with the clock {x.get('ev_rise_first_clock_ahead_s')} s ahead, full {x.get('to_full_after_move_ms')} ms after the move, "
+                          f"level {x.get('level_after_median')} / pre-pause {x['own']}, min after full {x.get('vol_min_after_full')}")
+            for i_, x in enumerate(an.get("pause_fades", [])):
+                md.append(f"- pause {i_ + 1} (log:{x['line']}): element pause event +{x['to_pause_event_ms']} ms, volume then {x['vol_at_pause_event']}, ramp (ms, vol) {x['ramp']}, cubic start {x.get('fit_start_after_cmd_ms')} ms (rms {x.get('fit_rms')})")
+        if key == "X":
+            for i_, x in enumerate(an.get("crossfades", [])):
+                md.append(f"- end {i_ + 1} ({'crossfade 6 s' if i_ < 2 else 'crossfade 0'}) `{x['from_title']}` -> `{x['to_title']}` (log:{x['line']}): silence at the switch {x['audio_gap_ms']} ms, "
+                          f"longest < 0.1: {x['longest_below_0_1_ms']} ms, < 0.02: {x['longest_below_0_02_ms']} ms, min {x['vol_min_overall']}, 3-6 s after min {x['level_3_6s_after_min']}; log {[l[2] for l in x['log']]}")
+                md.append("  - element volume vs time from the engine's song switch (ms:vol): " + " ".join(f"{t}:{v}" for t, v, _, _ in x["timeline"] if -6500 <= t <= 2500))
+        if key == "H":
+            md.append(f"- {fmt({x: v for x, v in k.items() if x != 'timeline'})}")
+            md.append(f"- process / foreground flag while paused: {fmt(k.get('timeline'))}")
         for b in an["boundaries"]:
             md.append(f"- natural song change `{b['from_title']}` -> `{b['to_title']}`: audio gap {b.get('audio_gap_ms')} ms, engine switch {b.get('switch_after_audio_end_ms')} ms after old audio end, "
                       f"new song min volume 1.5-4 s after start {b.get('new_vol_min_1.5s_to_4s')} (log:{b['line']})")

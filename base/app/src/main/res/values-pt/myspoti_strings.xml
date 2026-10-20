@@ -273,6 +273,11 @@
     <string name="playlist_access_collaborative_detail">Quem tiver a ligação pode adicionar e remover músicas</string>
     <string name="playlist_on_profile">No seu perfil</string>
     <string name="playlist_on_profile_detail">Aparece no seu perfil para outras pessoas</string>
+    <string name="choose_artist">Escolha um artista</string>
+    <string name="quality_streaming_wifi_title">Streaming por Wi-Fi</string>
+    <string name="quality_streaming_cell_title">Streaming com dados móveis</string>
+    <string name="canvas_wifi_only">Canvas só no Wi-Fi</string>
+    <string name="canvas_wifi_only_detail">Os vídeos em loop tocam no Wi-Fi, nunca com dados móveis</string>
     <string name="playlist_delete_confirm">Eliminar «%1$s»? Pode ser restaurada na tua conta Spotify durante 90 dias.</string>
     <string name="playlist_saved">Playlist atualizada</string>
     <string name="go_to_profile">Ir para o perfil</string>

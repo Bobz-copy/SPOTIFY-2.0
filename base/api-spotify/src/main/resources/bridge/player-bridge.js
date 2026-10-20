@@ -220,6 +220,30 @@
   let fadeTimers = [];
   const cancelFade = () => { fadeTimers.forEach(clearTimeout); fadeTimers = []; };
 
+  // A ramp heard as even: the gain follows a cubic curve (the usual "audio taper", the one the
+  // page applies to its own volume when _cubicVolume is set), so equal times give equal steps
+  // to the ear. A linear or stepped ramp was heard as a jump: most of it in the first moments.
+  // Ticks every 16 ms; each sets the level the clock is at (a late tick never stretches it).
+  // fromK/toK: positions on that curve (0 = silent, 1 = the player's own level, read at every
+  // tick so a volume change meanwhile is kept). -> a function that starts it.
+  const ramp = (el, player, fromK, toK, ms, done) => () => {
+    cancelFade();
+    const t0 = performance.now();
+    const tick = () => {
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      const p = fromK + (toK - fromK) * k;
+      el.volume = Math.min(1, Math.max(SILENT, ownLevel(player) * p * p * p));
+      if (k < 1) fadeTimers.push(setTimeout(tick, 16));
+      else if (done) done();
+    };
+    tick();
+  };
+  // Where the element stands on that curve now.
+  const curveAt = (el, player) => {
+    const own = ownLevel(player);
+    return own > 0 ? Math.min(1, Math.cbrt(Math.max(0, el.volume) / own)) : 1;
+  };
+
   // "Is this page Spotify Connect's active device": a full device-list round trip, so it is
   // read at most once every ACTIVE_CACHE_MS and reused (a transfer happens minutes apart).
   const ACTIVE_CACHE_MS = 6000;
@@ -438,36 +462,37 @@
       return true;
     },
 
-    // The sound rising back when a paused song plays again, as the official app does. The
-    // element goes down to {from} (a share of the player's own level) now; the rise starts when
-    // the element's clock really moves, the moment sound comes out. Not on the state saying
-    // "playing", nor on the element's own 'playing' event: after a long pause both came 0.5 to
-    // 0.9 s before the first sound (measured), and the whole ramp was spent on silence. It ends
-    // on the player's own level, read on every step (a volume change during it is kept). Not
-    // playing within {wait} ms: the level comes back as it was. {from, ms, wait} -> true
+    // The sound going down (a pause) or up, as one smooth ramp. {to: 0..1, ms} -> true
+    'media.ramp': async a => {
+      const player = await localPlayer();
+      const el = player && player._player;
+      if (!(el instanceof HTMLMediaElement)) return null;
+      ramp(el, player, curveAt(el, player), Math.min(1, Math.max(0, Number(a.to) || 0)), Math.max(1, Number(a.ms) || 150))();
+      return true;
+    },
+
+    // The sound rising back when a paused song plays again, as the official app does: silent
+    // now, then up along the curve once the element's clock really moves, the moment sound comes
+    // out. Not on the state saying "playing", nor on the element's own 'playing' event: after a
+    // long pause both came 0.5 to 0.9 s before the first sound (measured), and the whole ramp
+    // was spent on silence. Not playing within {wait} ms: the level comes back as it was.
+    // {ms, wait, keep?} -> true
     'media.rise': async a => {
       const player = await localPlayer();
       const el = player && player._player;
       if (!(el instanceof HTMLMediaElement)) return null;
       cancelFade();
-      const from = Math.min(1, Math.max(0.01, Number(a.from) || 0.05));
-      const ms = Math.max(1, Number(a.ms) || 300);
-      el.volume = Math.max(SILENT, from * ownLevel(player));
-      const rise = () => {
-        cancelFade();
-        const t0 = performance.now();
-        // Even steps in loudness (dB), not in amplitude: a linear amplitude ramp is heard as a jump.
-        const tick = () => {
-          const k = Math.min(1, (performance.now() - t0) / ms);
-          const own = ownLevel(player);
-          el.volume = Math.min(1, Math.max(SILENT, own * Math.pow(from, 1 - k)));
-          if (k < 1) fadeTimers.push(setTimeout(tick, 16));
-        };
-        tick();
-      };
-      const at = el.currentTime;
+      // keep: from where the element is now (the end of a crossfade), not from silence.
+      const from = a.keep ? curveAt(el, player) : 0;
+      if (!a.keep) el.volume = SILENT;
+      const rise = ramp(el, player, from, 1, Math.max(1, Number(a.ms) || 500));
+      // Moving: ahead of the last look by a little (a new song's clock starting again from 0 is
+      // a jump back, not sound; a seek is a jump, not sound either).
+      let prev = el.currentTime;
       const waitSound = () => {
-        if (!el.paused && el.currentTime > at + 0.01) rise();
+        const t = el.currentTime, step = t - prev;
+        prev = t;
+        if (!el.paused && step > 0.005 && step < 0.5) rise();
         else fadeTimers.push(setTimeout(waitSound, 16));
       };
       fadeTimers.push(setTimeout(() => { cancelFade(); el.volume = ownLevel(player); }, Math.max(500, Number(a.wait) || 3000)));

@@ -273,6 +273,11 @@
     <string name="playlist_access_collaborative_detail">Alle mit dem Link können Songs hinzufügen und entfernen</string>
     <string name="playlist_on_profile">Auf deinem Profil</string>
     <string name="playlist_on_profile_detail">Auf deinem Profil für andere sichtbar</string>
+    <string name="choose_artist">Künstler auswählen</string>
+    <string name="quality_streaming_wifi_title">Streaming über WLAN</string>
+    <string name="quality_streaming_cell_title">Streaming über mobile Daten</string>
+    <string name="canvas_wifi_only">Canvas nur im WLAN</string>
+    <string name="canvas_wifi_only_detail">Die Loop-Videos laufen im WLAN, nie über mobile Daten</string>
     <string name="playlist_delete_confirm">"%1$s" löschen? Sie kann innerhalb von 90 Tagen aus deinem Spotify-Konto wiederhergestellt werden.</string>
     <string name="playlist_saved">Playlist aktualisiert</string>
     <string name="go_to_profile">Zum Profil</string>

@@ -144,7 +144,7 @@ fun DevicesSheet(onDismiss: () -> Unit) {
                         Text(activeDeviceLabel(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (remote == null) Text(
-                            stringResource(streamingLabel(com.music.spotui.data.preferences.getStreamingQuality(context))),
+                            stringResource(streamingLabel(com.music.spotui.data.preferences.getStreamingQuality(context, com.music.spotui.data.DataSaver.metered))),
                             color = Color(0xFFDDDDDD), fontSize = 12.sp, fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF4A4A4A))
                                 .clickable { quality = true }.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -260,7 +260,9 @@ private fun QualitySheet(onDismiss: () -> Unit) {
                 },
                 color = Green, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
-            if (!local) StreamingQualityPicker(Modifier.padding(top = 12.dp))
+            // The level of the network in use now (Wi-Fi and mobile data each keep their own).
+            if (!local) StreamingQualityPicker(Modifier.padding(top = 12.dp), cellular = com.music.spotui.data.DataSaver.metered,
+                title = if (com.music.spotui.data.DataSaver.metered) R.string.quality_streaming_cell_title else R.string.quality_streaming_wifi_title)
         }
     }
 }

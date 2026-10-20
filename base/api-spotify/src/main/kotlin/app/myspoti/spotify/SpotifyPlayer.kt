@@ -844,6 +844,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     @Volatile private var crossfadeUntil = 0L
     /** The fail-safe that puts the level back if the page never moved on. */
     private var crossfadeJob: kotlinx.coroutines.Job? = null
+    /** Arms the fade-out on the dot when its window opens between two watcher ticks. */
+    private var crossfadeTimer: kotlinx.coroutines.Job? = null
 
     private fun disarmCrossfade() {
         crossfadeArmed = false
@@ -882,6 +884,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             if (item.uri != crossfadeUri || remaining > window) endCrossfade(restore = true)
             return
         }
+        // The watcher ticks every WATCH_TICK_MS: a window that opens before the next tick is armed
+        // on time by a timer, not up to a tick late (a 6 s crossfade lasted 4.3-4.5 s, measured).
+        if (remaining > window && remaining <= window + WATCH_TICK_MS) {
+            if (crossfadeTimer?.isActive != true) crossfadeTimer = scope.launch {
+                delay(remaining - window)
+                val st = _state.value ?: return@launch
+                if (crossfadeArmed || st.isPaused || st.item?.uri != item.uri) return@launch
+                tickCrossfade(st, lastMedia, System.currentTimeMillis())
+            }
+            return
+        }
         if (remaining <= 0 || remaining > window) return
         // Nothing after it: a fade-out into silence is not a crossfade.
         if (s.next == null && upcoming().isEmpty()) return
@@ -894,10 +907,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     private suspend fun armCrossfade(uri: String, remainingMs: Long, own: Double) {
         val steps = (remainingMs / CROSSFADE_STEP_MS).toInt().coerceIn(2, CROSSFADE_MAX_STEPS)
         val per = (remainingMs / steps).coerceAtLeast(1L)
-        // A linear ramp in amplitude, ending on CROSSFADE_FLOOR of the page's own level: the last
-        // step lands on the song's end, so the fade is over exactly when the song is.
+        // Down the ear's curve (the cubic taper of the resume and pause ramps: even steps to the
+        // ear; linear in amplitude it stayed loud, then fell away in the last second), ending on
+        // CROSSFADE_FLOOR of the page's own level: the last step lands on the song's end.
+        val floor = Math.cbrt(CROSSFADE_FLOOR)
         val levels = (1..steps).map { i ->
-            (own * (1.0 - (1.0 - CROSSFADE_FLOOR) * i / steps)).coerceAtLeast(CROSSFADE_SILENT)
+            val p = 1.0 - (1.0 - floor) * i / steps
+            (own * p * p * p).coerceAtLeast(CROSSFADE_SILENT)
         }
         crossfadeArmed = true
         crossfadeUri = uri
@@ -928,10 +944,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             runCatching { restoreLevel() }
             return
         }
-        val own = m.own.coerceAtLeast(CROSSFADE_SILENT)
-        // Ends on the page player's own volume, so a volume change during the fade is kept.
-        runCatching { fade(CROSSFADE_IN.map { it * own }, restore = true, ms = CROSSFADE_IN_STEP_MS) }
-            .onFailure { runCatching { restoreLevel() } }
+        // From where the fade-out left it, up the ear's curve once the new song's sound really
+        // starts ('media.rise', keep): stepped on a timer it was spent while the song loaded, and
+        // the new song was first heard at 70-90 % (measured).
+        runCatching {
+            bridge.call("media.rise", buildJsonObject { put("ms", CROSSFADE_IN_MS); put("wait", RISE_WAIT_MS); put("keep", true) },
+                timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
+        }.onFailure { runCatching { restoreLevel() } }
     }
 
     override suspend fun play(contextUri: Uri, trackUri: Uri?, index: Int?, positionMs: Long?, order: List<Uri>?) {
@@ -988,8 +1007,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         val fadeOut = level != null && !_adPlaying.value && !adMuted && lastMedia?.active != false
         if (fadeOut) {
             fadeBack?.cancel()
-            runCatching { fade(PAUSE_STEPS.map { it * level!! }, ms = PAUSE_STEP_MS) }
-            delay(PAUSE_STEPS.size * PAUSE_STEP_MS)
+            runCatching {
+                bridge.call("media.ramp", buildJsonObject { put("to", 0); put("ms", PAUSE_MS) }, timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
+            }
+            delay(PAUSE_MS)
         }
         try {
             command("player.pause")
@@ -1001,10 +1022,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     }
     /*
      * The owner's call: a song coming back after a pause (or after another app had the sound)
-     * rises in under half a second instead of starting at full level, and a pause fades out in
-     * an eighth of one, as the official app does. The rise runs in the page and starts on the
-     * media element's own 'playing' event (see 'media.rise'); [fadeBackTo]/[fadeBack] mark it as
-     * a fade meanwhile, so the silence watchdog and the volume guard leave it be.
+     * rises from silence in half a second, and a pause fades out in a sixth of one, both along
+     * the ear's curve, as the official app does. The ramps run in the page on its media element
+     * ('media.rise', 'media.ramp'); the rise starts when the element's clock moves, and
+     * [fadeBackTo]/[fadeBack] mark it as a fade meanwhile, so the silence watchdog and the volume
+     * guard leave it be.
      */
     override suspend fun resume() {
         pausedByUser = false
@@ -1012,8 +1034,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (quiet) { command("player.resume"); return }
         fadeBackTo = lastMedia?.own?.takeIf { it > 0.01 } ?: 1.0
         fadeBack?.cancel()
+        bridge.logger?.invoke("resume: rising from silence over $RISE_MS ms once the sound starts")
         runCatching {
-            bridge.call("media.rise", buildJsonObject { put("from", RISE_FROM); put("ms", RISE_MS); put("wait", RISE_WAIT_MS) },
+            bridge.call("media.rise", buildJsonObject { put("ms", RISE_MS); put("wait", RISE_WAIT_MS) },
                 timeoutMs = LEVEL_TIMEOUT_MS, quiet = true)
         }
         try {
@@ -1244,8 +1267,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
          */
         const val CROSSFADE_FAILSAFE_MS = 6_000L
         /** The next song's ramp up: short, it is already playing. Ends on the own level. */
-        val CROSSFADE_IN = listOf(0.2, 0.45, 0.7, 0.9)
-        const val CROSSFADE_IN_STEP_MS = 100L
+        /** The song after a crossfade rises back to its level in this long. */
+        const val CROSSFADE_IN_MS = 600L
         /** Play commands: the page answers within a few seconds or not at all. */
         const val PLAY_TIMEOUT_MS = 10_000L
         /** A refusal that long after a play belongs to it. */
@@ -1254,15 +1277,12 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val PICK_AD_MS = 8_000L
         /** After this the user has moved on: a pick is no longer replayed after its ad. */
         const val PICK_REPLAY_MS = 120_000L
-        /** A resumed song starts at this share of its level (-26 dB) ... */
-        const val RISE_FROM = 0.05
-        /** ... and rises to it in this long. */
-        const val RISE_MS = 450L
+        /** A resumed song rises from silence to its level in this long, along the ear's curve. */
+        const val RISE_MS = 500L
         /** How long the rise waits for sound before the level simply comes back. */
         const val RISE_WAIT_MS = 4_000L
-        /** Pause ramp: ~0.12 s down before the pause itself. */
-        val PAUSE_STEPS = listOf(0.6, 0.32, 0.12, 0.03)
-        const val PAUSE_STEP_MS = 30L
+        /** A pause first lowers the sound to silence in this long, along the same curve. */
+        const val PAUSE_MS = 160L
         /** A plain skip still on its song after this: the page lost it. */
         const val NEXT_LOST_MS = 2_500L
         /** After the refusal fallback's transfer, before the song is asked again. */

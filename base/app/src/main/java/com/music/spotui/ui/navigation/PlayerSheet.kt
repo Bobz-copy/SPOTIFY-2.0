@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -47,10 +46,11 @@ val LocalPlayerReveal = androidx.compose.runtime.staticCompositionLocalOf<() -> 
 
 /*
  * Opening, as the official app: the player grows out of the mini player. Its background rises
- * from the mini player's top edge and fades in over the first part of the way while the page
- * behind dims, then the cover, titles and controls fade in and settle a few dp up. Closing plays
- * it backwards: the content fades first, then the sheet sinks into the mini player and fades
- * into it as the page lights up again.
+ * from the mini player's top edge and fades in over the first part of the way, then the cover,
+ * titles and controls fade in and settle a few dp up. Closing plays it backwards: the content
+ * fades first, then the sheet sinks into the mini player and fades into it. No dimming of the
+ * page behind: darker than the player's own background, it made the screen blink dark then light
+ * on the first and last frames (measured on a recording, reported).
  *
  * It replaces a cover flown between the two players (a copy that ran out of step with the real
  * one: a ghost square during the slide, a lone cover crossing the page on the way down) and a
@@ -61,8 +61,6 @@ private const val OPEN_MS = 380
 private const val CLOSE_MS = 300
 /** The sheet's background is fully there by this share of the way. */
 private const val SHEET_FADE = 0.3f
-/** How dark the page behind gets under the open player. */
-private const val SCRIM = 0.6f
 private val CloseEasing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
 
 @Composable
@@ -92,13 +90,6 @@ fun PlayerOverlay(navController: NavController) {
     if (!shown) return
     BackHandler(enabled = open) { PlayerSheet.close() }
     var heightPx by remember { mutableIntStateOf(0) }
-    // The page behind dims as the player rises and comes back as it goes: the player is seen to
-    // come over the page instead of being pasted on it. Only while it moves (covered once open).
-    if (!settled.value) Box(
-        Modifier.fillMaxSize()
-            .graphicsLayer { alpha = progress.value * SCRIM }
-            .background(androidx.compose.ui.graphics.Color.Black),
-    )
     val reveal = remember { { ((progress.value - 0.25f) / 0.6f).coerceIn(0f, 1f) } }
     Box(
         Modifier.fillMaxSize().onSizeChanged { heightPx = it.height }.graphicsLayer {

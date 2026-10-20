@@ -105,7 +105,8 @@ object MyspotiRuntime {
     }
 
     /** True when the Web Player holds a signed-in user's token (not an anonymous one). */
-    suspend fun isSignedIn(): Boolean = spotify.isSignedIn()
+    /** Never while a Spotify sign-in page is open: whatever a token says, the user is mid sign-in. */
+    suspend fun isSignedIn(): Boolean = !host.loginRequired.value && spotify.isSignedIn()
 
     /**
      * Waits for a signed-in session (a non-anonymous token) up to [timeoutMs]. The login flow is

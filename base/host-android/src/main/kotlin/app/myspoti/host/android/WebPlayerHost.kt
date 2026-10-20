@@ -294,7 +294,9 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
     }
 
     private fun isLoginPage(url: String?) =
-        url != null && (url.contains("accounts.spotify.com") || url.contains("/login") || url.contains("challenge.spotify.com"))
+        url != null && (url.contains("accounts.spotify.com") || url.contains("/login") || url.contains("challenge.spotify.com") ||
+            // "Continue with Google / Facebook / Apple": still mid sign-in on their pages.
+            url.contains("accounts.google.com") || url.contains("facebook.com") || url.contains("appleid.apple.com"))
 
     fun load() = main.post {
         pageStarts = 0

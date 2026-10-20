@@ -326,6 +326,11 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             // at once, the song going on where it was.
             val read = runCatching { readMedia() }
             if (read.isFailure && bridge.ready.value && !bridge.ping() && bridge.ready.value) {
+                // Paused: a page that does not answer is most often one Android froze with the
+                // app in the background (seen: "freezing <renderer pid>" in the system log, then
+                // a reload every minute that could not help). Nothing is lost while paused: the
+                // page is only marked, and the next resume loads it again at once ([resume]).
+                if (quiet) { pageSuspect = true; frozenMisses = 0; key = null; silentSince = 0L; continue }
                 // One silent page is not a dead one: a busy main thread (a long render, a reload
                 // still settling, an ad break starting) also holds the bridge for seconds, and
                 // reloading on the first miss turned a short hiccup into a full page reload — the
@@ -345,6 +350,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             }
             // The page answered: it is alive, whatever happened before.
             frozenMisses = 0
+            pageSuspect = false
             val media = read.getOrNull()
             lastMedia = media
             val s = _state.value
@@ -1030,8 +1036,22 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * [fadeBackTo]/[fadeBack] mark it as a fade meanwhile, so the silence watchdog and the volume
      * guard leave it be.
      */
+    /** The page stopped answering while paused (see the watcher): checked before the next resume. */
+    @Volatile private var pageSuspect = false
+
     override suspend fun resume() {
         pausedByUser = false
+        // A page that went silent while paused (frozen in the background): a quick ping, and if it
+        // still says nothing, the page is loaded again and plays on where it was, instead of the
+        // resume waiting out its 20 s timeout.
+        if (pageSuspect && !bridge.ping(RESUME_PING_MS)) {
+            pageSuspect = false
+            val s = lastTrackState
+            bridge.logger?.invoke("resume: the page stopped answering while paused: loading it again")
+            reloadAndPlayOn(s?.copy(isPaused = false, positionMs = s.positionMs, timestampMs = System.currentTimeMillis()), next = false)
+            return
+        }
+        pageSuspect = false
         val quiet = _adPlaying.value || adMuted || crossfadeArmed || _state.value?.isPaused == false || lastMedia?.active == false
         if (quiet) { command("player.resume"); return }
         fadeBackTo = lastMedia?.own?.takeIf { it > 0.01 } ?: 1.0
@@ -1279,6 +1299,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val PICK_AD_MS = 8_000L
         /** After this the user has moved on: a pick is no longer replayed after its ad. */
         const val PICK_REPLAY_MS = 120_000L
+        /** How long a resume waits for a page that went silent while paused before loading it again. */
+        const val RESUME_PING_MS = 1_500L
         /** A resumed song rises from silence to its level in this long, along the ear's curve. */
         const val RISE_MS = 500L
         /** How long the rise waits for sound before the level simply comes back. */

@@ -94,7 +94,12 @@ class SpotifyHttp(
     suspend fun forgetWebToken() = lock.withLock { web = null }
 
     /** True when the page's token belongs to a signed-in user (the cached one is reused). */
-    suspend fun isSignedIn(): Boolean = lock.withLock { !webToken().anonymous }
+    /**
+     * Asks the page, never the cached token: a token cached before a logout (valid up to an hour)
+     * said "signed in" while the user was still on the e-mail code step, the sign-in page was put
+     * away under them and the code was lost (log seen). A fresh answer also refreshes the cache.
+     */
+    suspend fun isSignedIn(): Boolean = lock.withLock { web = null; !webToken().anonymous }
 
     /** The account's token, fetched again only when the cached one is missing or stale. */
     private suspend fun webToken(): WebToken {

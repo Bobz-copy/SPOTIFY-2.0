@@ -36,11 +36,13 @@ private val SPACES = Regex("""\s+""")
  * and held the main thread over a second a key on a big playlist (reported: typing in the search
  * froze the player until the app crashed).
  */
-private val folded = object : android.util.LruCache<String, String>(20_000) {
-    override fun create(key: String): String = Normalizer.normalize(key, Normalizer.Form.NFD).replace(MARKS, "").lowercase(Locale.ROOT)
+private const val FOLDED_KEEP = 20_000
+private val folded = object : LinkedHashMap<String, String>(1024, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > FOLDED_KEEP
 }
-
-private fun fold(s: String): String = if (s.isEmpty()) s else folded.get(s)
+private fun fold(s: String): String = if (s.isEmpty()) s else synchronized(folded) {
+    folded.getOrPut(s) { Normalizer.normalize(s, Normalizer.Form.NFD).replace(MARKS, "").lowercase(Locale.ROOT) }
+}
 
 /**
  * "Find in…" match: every word of [query] appears in one of [fields], ignoring case and

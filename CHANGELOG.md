@@ -2,7 +2,24 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
-## Unreleased
+## 2.0.0
+
+Myspoti 2.0 is a new app, rebuilt from the ground up: Spotify with no ads and with lossless downloads, on a free account.
+
+- 🚫 **No ads, on a free account**: the ad breaks of Spotify's own player are switched off at the source. Pick any song, skip as much as you want.
+- ⬇️ **Lossless downloads**: songs, albums, playlists and Liked Songs in FLAC (CD or 24-bit hi-res) or small AAC — the very recording, found by its ISRC on Tidal or Qobuz, encrypted on your phone. Downloaded playlists stay in step.
+- 🚀 **A new engine**: faster screens, quicker skips, and playback that recovers by itself.
+- 🎤 **Word-by-word lyrics** from several sources, with translation and **song meanings from Genius**.
+- 🎬 **Official music videos**, in sync, in full screen, silent or with the clip's own sound.
+- 👥 **Playlists**: create and edit them, **add songs** from a search, **collaborative playlists** with invites and who added what.
+- 🔀 **Smart Shuffle**, a draggable queue, crossfade, sleep timer.
+- 🎙️ **Podcasts and audiobooks**, with their own player and downloads.
+- 📷 **Spotify Codes** to share, profiles, Recents, Browse, New releases, Your recap, Jam, Android Auto.
+- 🌍 **7 languages**, in-app updates, and a diagnostic report to send in one tap.
+
+This release installs as **Myspoti**, next to Myspoti Beta if you have it.
+
+## Since 2.0.0-beta.9
 
 - **Word-by-word lyrics from more sources** (Apple Music timing through LyricsPlus, lrc.red, Kugou), lined up with Spotify's own, words lit whole as they are sung; a setting picks word by word or line by line.
 - **Song meanings from Genius**: the light bulb opens the story of the song; underlined lines open their explanation with a long press, best-liked first, translated into your language as they arrive.
@@ -123,19 +140,6 @@ Each release on GitHub shows its section below. The app shows it too when it off
 - **Sort in both directions** (tap the chosen sort again), remembered for each playlist.
 - **Fixes**: AMOLED black everywhere, lists no longer end under the mini player, full-screen music videos show, the Spotify account page stays under the status bar, "Saved in" confirms each change, fast skips no longer jam the player, no white screen on phones in light mode.
 - **Security and reliability fixes** (Android Auto, library pages, logout, links, video lookups).
-
-## 2.0.0
-
-A new engine, written from scratch, and a cleaner app on top of it.
-
-- **No ads**, with a free account: the ad audio is refused and the next song starts.
-- **New engine**: faster screens, playback that works on every phone, Spotify updates picked up by themselves.
-- **Lossless downloads** (FLAC CD or hi-res, or small AAC), encrypted, with their own offline queue.
-- **Sound quality** for streaming and downloads, and a **Settings** page.
-- **Connect** shows your headphones; music pauses when they go away.
-- **Podcasts and audiobooks**, **Jam**, **New releases**, **Browse**, **Your recap**, **widget**.
-- **Library**: sort by title, artist, album, duration or date added; smart shuffle; folders.
-- **In-app updates**, **Italian**, new icon; beta and release install side by side.
 
 ## 1.1.1
 

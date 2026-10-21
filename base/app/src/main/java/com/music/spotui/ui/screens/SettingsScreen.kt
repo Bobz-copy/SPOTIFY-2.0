@@ -84,6 +84,26 @@ fun SettingsScreen(navController: NavController) {
                 onChecked = { com.music.spotui.data.preferences.AutoplayPref.set(ctx, it) },
             )
             CrossfadeRow()
+            var keepPlaying by remember { mutableStateOf(app.myspoti.host.android.PlaybackService.keepsPlayingOnClose(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.settings_keep_playing_title),
+                detail = stringResource(R.string.settings_keep_playing_detail),
+                checked = keepPlaying,
+                onChecked = { keepPlaying = it; app.myspoti.host.android.PlaybackService.setKeepsPlayingOnClose(ctx, it) },
+            )
+            // Lyrics: word by word (karaoke) first, or line by line with Spotify's first.
+            var wordSync by remember { mutableStateOf(com.music.spotui.data.preferences.isLyricsWordSync(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.lyrics_word_sync_title),
+                detail = stringResource(if (wordSync) R.string.lyrics_word_sync_on else R.string.lyrics_word_sync_off),
+                checked = wordSync,
+                onChecked = {
+                    wordSync = it
+                    com.music.spotui.data.preferences.setLyricsWordSync(ctx, it)
+                    com.music.spotui.data.api.LyricsApi.wordSync = it
+                    com.music.spotui.data.api.LyricsApi.forgetAll()
+                },
+            )
             Divider()
 
             Section(R.string.settings_section_downloads)

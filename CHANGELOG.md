@@ -4,6 +4,18 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 ## Unreleased
 
+- **Word-by-word lyrics from more sources** (Apple Music timing through LyricsPlus, lrc.red, Kugou), lined up with Spotify's own, words lit whole as they are sung; a setting picks word by word or line by line.
+- **Song meanings from Genius**: the light bulb opens the story of the song; underlined lines open their explanation with a long press, best-liked first, translated into your language as they arrive.
+- **Music videos with their own sound**: "Sound: clip" plays the clip's audio while the song keeps playing silently on Spotify (it still counts). Clips in 1080p on Wi-Fi, fewer freezes, the full-screen button in the clip's corner, the right cover after the clip, and label uploads found when Spotify itself has the video.
+- **Add songs to a playlist** from a Spotify search right under its cover, with suggestions.
+- **Collaborative playlists**: invite with a link, members' faces in the header, who added each song, and collaborators can add and remove songs.
+- **Share as a Spotify Code**, with the link under it.
+- **Queue**: a line shows where a dragged song will land, and a song moved into or out of the queue no longer gets stuck.
+- **Smart Shuffle**: suggested songs are marked and can be kept with +, and they light up when they play.
+- **Shared links open the page** (playlist, album, artist, show) instead of starting it.
+- **Fixed**: a crash when typing or deleting in a playlist's search while music plays, a skip when a clip went full screen, the status bar over the login page, the + of a song played from your own playlist, and lyrics hard to read on some colours.
+- **A crash or a freeze now shows in the next diagnostic report.**
+- **A new welcome screen** and a smoother setup.
 - **Smoother player, lighter on the battery**: the hidden player page was redrawn with every frame the app drew (and kept animating its own UI underneath), and the progress bar redrew the whole player 15 times a second. The page now stays out of the app's drawing and the bar redraws only itself, as often as it actually moves. Measured on the player screen: 0 late frames instead of 86 %, about a third less CPU — and a tap on a song or "next" is heard ~150 ms sooner.
 - **The player recovers from a page that fails to load**: when Spotify answered an error to a reload (seen: 504), the app stayed on it, refusing every command until restarted. The page is now loaded again, sooner first, then every minute.
 - **"Next" that does nothing**: when the player page answered "ok" to a skip but stayed on the song (the sound dipped, then nothing), the song after it is now asked for by name.

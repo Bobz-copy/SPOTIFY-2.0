@@ -85,8 +85,8 @@ object MyspotiRuntime {
                 // report needs the session itself — a token that is anonymous means no account.
                 val session = when {
                     host.loginRequired.value -> "login-page"
-                    runCatching { isSignedIn() }.getOrDefault(false) -> "signed-in"
-                    else -> "anonymous"
+                    // The token in hand: a fresh one every 10 s held every request behind the page's answer.
+                    else -> when (spotify.signedInHint()) { true -> "signed-in"; false -> "anonymous"; null -> "unknown" }
                 }
                 val line = "status ready=${spotify.ready.value} session=$session " +
                     "track=${s?.item?.name} paused=${s?.isPaused} buffering=${s?.isBuffering} url=${host.url.value.take(60)}"

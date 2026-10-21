@@ -146,9 +146,27 @@ class PlaybackService : MediaBrowserServiceCompat() {
         super.onDestroy()
     }
 
+    /**
+     * The app closed from the recent apps. The music stops with it (asked by users: it went on
+     * playing with nothing on screen), unless the setting keeps it playing ([keepsPlayingOnClose]);
+     * a Spotify Connect device that plays is left playing. The pause fades out, then the
+     * notification goes with the service.
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
+        if (current?.playing == true && !playingRemote && !keepsPlayingOnClose(this)) {
+            controls?.pause()
+            handler.postDelayed({
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                foreground = false
+                stopSelf()
+            }, CLOSE_STOP_MS)
+            return
+        }
         if (current?.playing != true) stopSelf()
     }
+
+    /** A Spotify Connect device plays (the session's volume is that device's). */
+    private var playingRemote = false
 
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() { controls?.play() }
@@ -351,6 +369,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     /** Playback on a Connect device: the volume keys drive that device instead of the phone. */
     private fun setRemote(remote: Boolean, volume: Int) {
+        playingRemote = remote
         if (!remote) {
             session.setPlaybackToLocal(android.media.AudioManager.STREAM_MUSIC)
             return
@@ -428,6 +447,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     companion object {
+        /** Time left to the pause's fade-out before the notification goes. */
+        private const val CLOSE_STOP_MS = 800L
+        private const val CLOSE_PREFS = "playback_service"
+        private const val KEEP_PLAYING_KEY = "keep_playing_on_close"
+
+        /** The music goes on when the app is closed from the recent apps (off: it stops). */
+        fun keepsPlayingOnClose(context: Context): Boolean =
+            context.getSharedPreferences(CLOSE_PREFS, Context.MODE_PRIVATE).getBoolean(KEEP_PLAYING_KEY, false)
+
+        fun setKeepsPlayingOnClose(context: Context, on: Boolean) =
+            context.getSharedPreferences(CLOSE_PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEEP_PLAYING_KEY, on).apply()
+
         const val ROOT_ID = "root"
         /** Root for callers that may control playback but not browse (see onGetRoot). */
         private const val EMPTY_ROOT_ID = "empty"

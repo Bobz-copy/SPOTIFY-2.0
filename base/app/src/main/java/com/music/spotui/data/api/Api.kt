@@ -153,6 +153,7 @@ class Api constructor(
             durationMs = t.durationMs.toInt(),
             addedAt = t.addedAt.orEmpty(),
             playable = t.playable,
+            rowUid = t.uid.orEmpty(),
         )
         return SongsModel(
             id = stableId("track:$id"),
@@ -168,6 +169,7 @@ class Api constructor(
             addedAt = t.addedAt.orEmpty(),
             playable = t.playable,
             artistIds = t.artists.map { it.uri.substringAfterLast(':') },
+            rowUid = t.uid.orEmpty(),
         )
     }
 
@@ -822,6 +824,7 @@ class Api constructor(
             ownerAvatar = cover(pl.ownerImages),
             ownerUri = pl.ownerUri.orEmpty(),
             metaLine = saves,
+            isBlend = pl.isBlend,
         )
         // The first page gives the total: the rest is asked for PLAYLIST_PARALLEL pages at a time
         // and shown in order as it lands, at most every PLAYLIST_EMIT_MS. One page after the
@@ -888,7 +891,7 @@ class Api constructor(
             emit(Response.Success(songs.toList()))
             offset = page.nextOffset ?: break
         }
-        if (songs.isEmpty()) emit(Response.Error("Couldn't load this playlist"))
+        if (songs.isEmpty()) emit(Response.Error(context.getString(R.string.page_load_failed)))
     }
 
     // ── Library ──
@@ -943,7 +946,7 @@ class Api constructor(
         HomeCache.libraryRoot?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
         if (!ready()) { if (HomeCache.libraryRoot == null) emit(Response.Error(notSignedIn())); return@flow }
         runCatching { listOf(likedEntry()) + libraryLevel(null).mapNotNull(::entryOf) }.fold(
-            onSuccess = { HomeCache.libraryRoot = it; ScreenCache.libraryRoot.write(it); emit(Response.Success(it)) },
+            onSuccess = { HomeCache.libraryRoot = it; ScreenCache.libraryRoot.write(it); PagePrefetch.schedule(it); emit(Response.Success(it)) },
             onFailure = { Log.e("Api", "getLibraryRoot failed", it); if (HomeCache.libraryRoot == null) emit(Response.Error(it.message ?: "error")) },
         )
     }
@@ -991,7 +994,7 @@ class Api constructor(
                 LikedCache.tracks = songs
                 emit(Response.Success(songs))
             },
-            onFailure = { emit(Response.Error("Couldn't load Liked Songs")) },
+            onFailure = { emit(Response.Error(context.getString(R.string.couldnt_load, context.getString(R.string.collection_liked_songs_title)))) },
         )
     }
 

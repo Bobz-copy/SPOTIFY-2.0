@@ -118,6 +118,39 @@ fun Loader(kind: SkeletonKind = SkeletonKind.List) {
 
 enum class SkeletonKind { List, Home, Header }
 
+/**
+ * Rows of grey shapes for a list that is loading, inside a page already drawn (a search, a
+ * profile's lists): the same static placeholder as [Loader], without taking the whole screen.
+ * [round] draws circles (people) instead of covers.
+ */
+@Composable
+fun SkeletonList(count: Int = 6, round: Boolean = false, modifier: Modifier = Modifier) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(200); visible = true }
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        if (!visible) return@Column
+        if (round) repeat(count) {
+            Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFF242424)))
+                Box(Modifier.padding(start = 12.dp).width(150.dp).height(14.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF2A2A2A)))
+            }
+        } else SkeletonRows(Color(0xFF242424), Color(0xFF2A2A2A), count)
+    }
+}
+
+/** Lyrics loading: lines of grey bars of varied widths, in the lyrics' own colour. */
+@Composable
+fun SkeletonLyrics(color: Color, modifier: Modifier = Modifier) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(200); visible = true }
+    Column(modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+        if (!visible) return@Column
+        for (w in floatArrayOf(0.85f, 0.6f, 0.75f, 0.5f, 0.9f, 0.65f, 0.7f, 0.45f)) {
+            Box(Modifier.padding(vertical = 9.dp).fillMaxWidth(w).height(22.dp).clip(RoundedCornerShape(6.dp)).background(color.copy(alpha = 0.18f)))
+        }
+    }
+}
+
 @Composable
 private fun SkeletonRows(tile: Color, line: Color, count: Int) {
     repeat(count) {
@@ -182,6 +215,24 @@ fun MiniPlayer(navController: NavHostController) {
             runCatching { com.music.spotui.di.Graph.api.getCanvasUrl(id) }.getOrNull()
         } ?: return@LaunchedEffect
         CanvasPlayer.preload(context, url)
+    }
+
+    // The next song, made ready while this one plays, so a skip shows it whole at once: its big
+    // cover (on storage, not in memory), its colour, and its Canvas (the address always, the clip
+    // itself on storage over Wi-Fi only). After the current song's own loads.
+    LaunchedEffect(np.next?.spotifyTrackId, energy.policy.allowCanvas, com.music.spotui.data.DataSaver.active) {
+        val next = np.next ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(2_500)
+        if (next.coverUri.isNotBlank()) {
+            com.bumptech.glide.Glide.with(context).downloadOnly().load(next.coverUri).submit()
+            Palette().extractFirstColorFromImageUrl(context, next.coverUri) { }
+            Palette().extractSecondColorFromCoverUrl(context, next.coverUri) { }
+        }
+        if (next.spotifyTrackId.isBlank() || !energy.policy.allowCanvas || com.music.spotui.data.DataSaver.active) return@LaunchedEffect
+        val url = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { com.music.spotui.di.Graph.api.getCanvasUrl(next.spotifyTrackId) }.getOrNull()
+        } ?: return@LaunchedEffect
+        if (!com.music.spotui.data.DataSaver.metered) CanvasPlayer.warm(context, url)
     }
 
     // The thin bar moves ~2 px/s: 4 ticks a second look identical to 20.

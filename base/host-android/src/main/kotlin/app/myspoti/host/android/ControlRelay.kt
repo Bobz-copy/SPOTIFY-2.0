@@ -32,6 +32,8 @@ import java.util.concurrent.TimeUnit
  * client token, connection id), then hands the response back to the page.
  */
 internal class ControlRelay(private val view: WebView, private val fingerprint: Fingerprint) {
+    /** The page's player registered its playback device (it started, and takes commands). */
+    @Volatile var onDeviceRegistered: (() -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
 
     /**
@@ -180,6 +182,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     val net = android.os.SystemClock.uptimeMillis() - asked
                     Logbook.log("relay $method ${shortPath(url)} -> ${it.code} in $net ms")
                     if (it.code >= 400) Logbook.log("relay error body: ${text.take(400)}")
+                    if (it.code in 200..299 && method == "POST" && url.substringBefore('?').endsWith("/track-playback/v1/devices")) onDeviceRegistered?.invoke()
                     // B3 (402 on some free accounts): what a tester's report must carry to tell the
                     // causes apart — the refusal's own headers, and what the refused command asked
                     // (the license the page put in it, a picked song or not). No ids, no cookies.
@@ -193,7 +196,18 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                         ?.let { m -> Logbook.log("registration: effective_license=${m.groupValues[1]}") }
                     if (debuggable && registration) Logbook.log("registration answered: ${text.take(500)}")
                     if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
-                    reply(id, it.code, out.toString(), text)
+                    // An ad in the queue Spotify sends: the song before it goes on to the next song
+                    // instead, before the page sees the queue (see AdBlock.withoutAds).
+                    val given = if (url.contains("/track-playback/")) app.myspoti.spotify.bridge.AdBlock.withoutAds(text) else null
+                    given?.second?.forEach { note -> Logbook.log("ad left out: $note") }
+                    val sent = given?.first ?: text
+                    // Both ways on from this song lead to the ad: the player plays the next song
+                    // just before this one ends (AdBlock.adAhead).
+                    if (url.contains("/track-playback/")) app.myspoti.spotify.bridge.AdBlock.adAhead(sent)?.let { a ->
+                        if (app.myspoti.spotify.bridge.AdBlock.ahead.value != a) Logbook.log("ad ahead: ${a.nextUri} is played before the end")
+                        app.myspoti.spotify.bridge.AdBlock.ahead.value = a
+                    }
+                    reply(id, it.code, out.toString(), sent)
                 }
             }
         })

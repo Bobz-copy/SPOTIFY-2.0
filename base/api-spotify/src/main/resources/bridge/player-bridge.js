@@ -277,10 +277,12 @@
   // web player to force `adsEnabled` off; the very same managers are reachable at runtime through
   // the service registry, so they are turned off here instead of patching a bundle we do not ship.
   //
-  // `disable` alone is not enough: the page re-arms its managers at every ad opportunity (a
-  // "Test ad" still came through on a free account, 19/10 02:29). `enable`/`disable` sit on the
-  // prototype and `enabled` is a plain field, so the instance is shadowed here: after this, the
-  // page cannot arm an ad again for the life of the page.
+  // `enable`/`disable` sit on the prototype and `enabled` is a plain field, so the instance is
+  // shadowed here: after this, the page cannot arm its own managers again for the life of the page.
+  // This does not stop audio ads: Spotify's server puts those in the queue itself (measured on
+  // 20/10, desktop, free account: one ad after ~17 min with this latch on, as without it). Those
+  // are left out of the queue by the host (AdBlock.withoutAds). The "Test ad" once taken for an
+  // ad that came through was tools/playback_test.py's own fake.
   let adsLatched = false;
   const adsOff = () => {
     if (!services) return 'not ready';
@@ -304,9 +306,8 @@
   };
 
   /**
-   * Ends the ad the in-stream ad manager owns, its own way (a skip of the ad break, not of the
-   * song). The app asks for this before it falls back to reloading the page, which is what a
-   * "Test ad" used to cost: a visible reload of the whole player.
+   * Asks the in-stream ad manager to end its break. Kept for diagnosis only: on a real ad whose
+   * audio was refused it did nothing (20/10), the server holds the ad ("ad_disallow").
    */
   const adsSkip = () => {
     if (!services) return 'not ready';
@@ -404,6 +405,26 @@
       for (const el of els) {
         el.muted = false;
         el.volume = a.on ? SILENT : (player && el === player._player ? ownLevel(player) : 1);
+      }
+      return els.size;
+    },
+
+    // "Clip sound": the music video's own soundtrack is heard instead of the song. The song keeps
+    // playing here (still Spotify's play of it, counted as one), only unheard, at the same
+    // unheard volume as above. Held against the page's own volume sets (a new song, a fade, a
+    // volume change) by a listener on each element; an ad's mute keeps the upper hand. {on} -> elements.
+    'media.hush': async a => {
+      window.__mspHushed = !!a.on;
+      const player = await localPlayer().catch(() => null);
+      const els = new Set([...(window.__mspMedia || []), ...document.querySelectorAll('audio, video'), ...await playerMedia()]);
+      for (const el of els) {
+        if (!el.__mspHush) {
+          el.__mspHush = () => { if (window.__mspHushed && !window.__mspMuted && el.volume > SILENT) el.volume = SILENT; };
+          el.addEventListener('volumechange', el.__mspHush);
+          el.addEventListener('playing', el.__mspHush);
+        }
+        if (a.on) { cancelFade(); el.muted = false; el.volume = SILENT; }
+        else if (!window.__mspMuted) el.volume = player && el === player._player ? ownLevel(player) : 1;
       }
       return els.size;
     },
@@ -562,11 +583,16 @@
     },
   };
 
+  // Inside one of the app's own commands (see traceSkips).
+  let calling = 0;
   const call = async (id, method, args) => {
     try {
       const fn = commands[method];
       if (!fn) throw new Error(`unknown method ${method}`);
-      const value = await fn(args || {});
+      let pending;
+      calling++;
+      try { pending = fn(args || {}); } finally { calling--; }
+      const value = await pending;
       const out = value === undefined ? null : value;
       post({ type: 'result', id, ok: true, value: out });
       return out;
@@ -600,6 +626,41 @@
     events.addListener('queue_update', pushQueue);
     // Ads off from the first moment: a break queued before the bridge attached never starts.
     try { adsOff(); } catch (e) { /* no service yet */ }
+    traceSkips();
+  };
+
+  // Diagnosis (read-only): who asks the page for another song. A tester's song changed with no
+  // command from the app (the clip going full screen); the caller's stack, a key or a media
+  // session action says where it came from.
+  const stackTop = () => String(new Error().stack || '').split('\n').slice(2, 8).map(l => l.trim()).join(' < ').slice(0, 400);
+  const traceSkips = () => {
+    try {
+      const p = services.player;
+      for (const name of ['skipToNext', 'skipToPrevious', 'seekTo']) {
+        const own = p[name];
+        if (typeof own !== 'function' || own.__mspTraced) continue;
+        const traced = function (...args) {
+          if (!calling) post({ type: 'skip', by: name, stack: stackTop() });
+          return own.apply(this, args);
+        };
+        traced.__mspTraced = true;
+        p[name] = traced;
+      }
+    } catch (e) { /* left as it is */ }
+    try {
+      const ms = navigator.mediaSession;
+      if (ms && !ms.__mspTraced) {
+        const set = ms.setActionHandler.bind(ms);
+        ms.setActionHandler = (action, handler) => set(action, handler && ((...a) => {
+          post({ type: 'skip', by: 'mediaSession.' + action });
+          return handler(...a);
+        }));
+        ms.__mspTraced = true;
+      }
+    } catch (e) { /* no media session */ }
+    window.addEventListener('keydown', e => {
+      if (/Arrow|Media|Key[NPJL]/.test(e.code)) post({ type: 'skip', by: 'key ' + e.code + (e.ctrlKey ? '+ctrl' : '') + (e.shiftKey ? '+shift' : '') });
+    }, true);
   };
 
   // --- boot -----------------------------------------------------------------

@@ -48,6 +48,8 @@ class PlaybackFollowUpTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         host = FakeHost()
         player = SpotifyPlayer(Bridge(host, scope), scope)
+        // A message posted before the bridge listens is lost (a slow CI machine): wait for it.
+        waitFor("bridge listening") { host.messages.subscriptionCount.value > 0 }
     }
 
     @AfterEach fun down() {
@@ -125,8 +127,10 @@ class PlaybackFollowUpTest {
         host.post("""{"type":"ready"}""")
         host.post(state(track("A")))
         player.play("spotify:playlist:C", trackUri = "spotify:track:P")
-        // The watcher reads the element within its tick.
-        waitFor("element read") { called("media.state") > 0 }
+        // The watcher, idle until a song plays, reads the element at its first tick (up to
+        // WATCH_IDLE_TICK_MS after it started, 4 s): the wait is a bound, not a sleep. The read
+        // must also be taken in (the call alone is not): another device is known to be active.
+        waitFor("another device seen", ms = 10_000) { player.remoteActive }
         host.post("""{"type":"refused","status":402,"late":true}""")
         delay(300)
         assertEquals(1, host.calls.count { it.first == "player.play" }, "no fallback play on another device: ${host.calls.map { it.first }}")

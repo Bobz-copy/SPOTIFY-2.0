@@ -282,7 +282,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * still while the state is that device's. Judged on the element too, as the active flag is read
      * every few seconds and lags a transfer to this phone (whose element then moves).
      */
-    private val remoteActive: Boolean get() = lastMedia?.let { it.active == false && it.paused } == true
+    internal val remoteActive: Boolean get() = lastMedia?.let { it.active == false && it.paused } == true
 
     /** Loads the song after the current one in advance (see "player.preloadNext"); on by default. */
     @Volatile var preloadNext = true

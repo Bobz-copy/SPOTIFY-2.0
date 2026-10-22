@@ -121,6 +121,16 @@ class PlaybackFollowUpTest {
         assertTrue(player.drmMissing.value)
     }
 
+    // Asked at boot in 2.0.2-beta.1, the probe ran beside the player's own EME set-up and the page
+    // never registered its device: it is asked only once a play has gone wrong.
+    @Test fun `widevine is probed after a refusal, not at boot`() = runBlocking {
+        host.post("""{"type":"ready","version":"t"}""")
+        delay(300)
+        assertEquals(0, host.calls.count { it.first == "drm.probe" })
+        host.post("""{"type":"refused","status":402}""")
+        waitFor("drm probe") { host.calls.any { it.first == "drm.probe" } }
+    }
+
     @Test fun `a refusal told late is dropped while another device plays`() = runBlocking {
         host.mediaActive = false
         host.mediaPaused = true

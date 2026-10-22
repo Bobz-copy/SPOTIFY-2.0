@@ -555,6 +555,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * then the user is told.
      */
     private fun onRefused(late: Boolean = false) {
+        probeDrm()
         val last = lastPlay ?: return
         val now = System.currentTimeMillis()
         if (now - last.third > if (late) LATE_REFUSED_WINDOW_MS else REFUSED_WINDOW_MS) return
@@ -1182,14 +1183,28 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         pausedByUser = false
         repeatRestoreUntil = System.currentTimeMillis() + REPEAT_RESTORE_MS
         withFade {
-            command("player.play", timeoutMs = PLAY_TIMEOUT_MS, args = buildJsonObject {
-                put("contextUri", contextUri)
-                order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
-                trackUri?.let { put("trackUri", it) }
-                index?.let { put("index", it) }
-                positionMs?.let { put("positionMs", it) }
-            })
+            try {
+                command("player.play", timeoutMs = PLAY_TIMEOUT_MS, args = buildJsonObject {
+                    put("contextUri", contextUri)
+                    order?.let { uris -> putJsonArray("order") { uris.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } } }
+                    trackUri?.let { put("trackUri", it) }
+                    index?.let { put("index", it) }
+                    positionMs?.let { put("positionMs", it) }
+                })
+            } catch (e: app.myspoti.spotify.bridge.BridgeException) {
+                probeDrm()
+                throw e
+            }
         }
+    }
+
+    /**
+     * Asks the page whether its WebView has a working Widevine ([drmMissing]), after a play failed:
+     * never at boot, where the probe ran alongside the player's own EME set-up and the page of
+     * 2.0.2-beta.1 never registered its device. The page asks once; later calls only repeat the answer.
+     */
+    private fun probeDrm() {
+        scope.launch { runCatching { bridge.call("drm.probe", timeoutMs = 5_000, quiet = true) } }
     }
 
     /**

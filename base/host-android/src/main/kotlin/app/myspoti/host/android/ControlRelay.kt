@@ -279,17 +279,16 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
          * removes it; the playback commands were only the first ones (that header alone was enough to
          * silence them). One rule on Spotify's side is all it takes to flag every install.
          *
-         * Only the text endpoints are on the list, the ones whose bodies survive a `String`:
-         * the playback commands and states, and the telemetry that reports what was played
-         * (`melody`: the plays and the milliseconds really heard, base64 JSON; `gabo-receiver-service`:
-         * the event batches). That report is what counts a listen in the history and in Wrapped,
-         * and it left the WebView with the package name on it while the commands did not. Widening
-         * this to everything else broke the page (protobuf and binary bodies, see the notes).
+         * Only the playback commands and states are on the list. The play telemetry (`melody`,
+         * `gabo-receiver-service`) was added in 2.0.2-beta.1 and that beta's page never registered
+         * its playback device on a free account ("Device not found", nothing plays): it leaves from
+         * the WebView again, as in 2.0.1, until it is proven harmless on a phone. Widening this to
+         * everything else broke the page too (protobuf and binary bodies, see the notes).
          *
          * Login and consent hosts stay out: their flows post forms and redirect, and a relay would
          * have to reproduce every step exactly to sign in.
          */
-        private val RELAYED = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/((connect-state|track-playback|melody)/v1/|gabo-receiver-service/)")
+        private val RELAYED = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/(connect-state|track-playback)/v1/")
         private val NOT_RELAYED = Regex("^https://(accounts|challenge|www)\\.spotify\\.com/")
 
         fun isRelayed(url: String) = RELAYED.containsMatchIn(url) && !NOT_RELAYED.containsMatchIn(url)
@@ -329,7 +328,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 if (window.__mspMuted) { this.muted = false; this.volume = 0.001; }
                 return play.apply(this, arguments);
               };
-              const relayed = /^https:\/\/([a-z0-9-]+\.)*spotify\.com\/((connect-state|track-playback|melody)\/v1\/|gabo-receiver-service\/)/;
+              const relayed = /^https:\/\/([a-z0-9-]+\.)*spotify\.com\/(connect-state|track-playback)\/v1\//;
               const notRelayed = /^https:\/\/(accounts|challenge|www)\.spotify\.com\//;
               const pending = new Map();
               let seq = 0;

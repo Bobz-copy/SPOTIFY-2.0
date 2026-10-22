@@ -2,6 +2,21 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.2-beta.1
+
+- 📊 **Your plays count on Spotify**: the report of what you really listened to now leaves from the app like the playback itself, so normal plays should reach your Recents and your Wrapped. Recents also no longer hides a play whose playlist or album row was not announced.
+- 🎵 **"Spotify refused to play this"**: a play Spotify acknowledges but never starts now goes on to the fallbacks instead of staying at 0:00.
+- 📺 **Ads**: a song left paused right after an ad break starts by itself.
+- 💻 **Spotify Connect**: while another device plays, Myspoti no longer seeks or skips on it, so the computer stops jumping tracks.
+- 🔁 **Repeat** keeps your choice after a new play or a reload.
+- 🔒 **No sound at all?** If your WebView cannot play protected audio, the app now says so and tells you to update Android System WebView and Chrome.
+- 🔑 **Sign-in**: a slow phone is no longer sent back to the login page in a loop.
+- ⬇️ **Downloads**: slowed, remastered and featured versions are found.
+- 🚗 **Android Auto** no longer freezes on big libraries (300 items per folder).
+- ❤️ **The + button** of other songs is no longer checked because an own playlist plays.
+- 🖼️ **Playlists without a cover** show the mosaic of their albums; big playlists show their controls sooner.
+- 🔤 **New font, Manrope**: Cyrillic and Greek text now uses the app's font.
+
 ## 2.0.1
 
 - 🎵 **"Spotify refused to play this"**: on the accounts where Spotify refused every play (free accounts on some phones and in some countries), a refused command is now sent again the way other web-player apps send it, and playback keeps going that way when it works. If it still refuses, please send a new diagnostic report: it now says which way was tried.

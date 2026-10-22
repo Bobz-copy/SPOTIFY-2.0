@@ -1,0 +1,134 @@
+package app.myspoti.spotify
+
+import app.myspoti.api.Repeat
+import app.myspoti.spotify.bridge.AdBlock
+import app.myspoti.spotify.bridge.Bridge
+import app.myspoti.spotify.bridge.BridgeHost
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * What the player does after the page did something the user did not ask for: a pause at the end
+ * of an ad break, a repeat mode forgotten by a play, a WebView without Widevine.
+ */
+class PlaybackFollowUpTest {
+    private class FakeHost : BridgeHost {
+        override val messages = MutableSharedFlow<String>(extraBufferCapacity = 64)
+        val calls = CopyOnWriteArrayList<Pair<String, String>>()
+        override suspend fun evaluate(script: String) {
+            val m = Regex("""Myspoti\.call\((\d+), "([^"]+)", (.*)\)\.catch""", RegexOption.DOT_MATCHES_ALL).find(script) ?: return
+            calls += m.groupValues[2] to m.groupValues[3]
+            // The page's media element: standing still, this phone the active device (or not).
+            val value = if (m.groupValues[2] == "media.state") """{"paused":${mediaPaused},"muted":false,"level":1,"own":1,"time":0,"active":${mediaActive}}""" else "null"
+            messages.emit("""{"type":"result","id":${m.groupValues[1]},"ok":true,"value":$value}""")
+        }
+        suspend fun post(json: String) = messages.emit(json)
+        @Volatile var mediaActive = true
+        @Volatile var mediaPaused = false
+    }
+
+    private lateinit var scope: CoroutineScope
+    private lateinit var host: FakeHost
+    private lateinit var player: SpotifyPlayer
+
+    @BeforeEach fun up() {
+        AdBlock.ahead.value = null
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        host = FakeHost()
+        player = SpotifyPlayer(Bridge(host, scope), scope)
+    }
+
+    @AfterEach fun down() {
+        AdBlock.ahead.value = null
+        scope.cancel()
+    }
+
+    private fun track(name: String) =
+        """{"kind":"track","uri":"spotify:track:$name","uid":"u$name","name":"$name","durationMs":200000}"""
+
+    private fun state(item: String, paused: Boolean = false, repeat: Int = 0) =
+        """{"type":"state","state":{"track":$item,"contextUri":"spotify:playlist:C","next":${track("N")},"isPaused":$paused,"isBuffering":false,
+            |"repeat":$repeat,"positionMs":0,"timestamp":${System.currentTimeMillis()},"restrictions":{}}}""".trimMargin()
+
+    private val ad = """{"kind":"ad","uri":"spotify:ad:1","name":"ad","durationMs":30000}"""
+
+    private fun waitFor(what: String, ms: Long = 4_000, cond: () -> Boolean) = runBlocking {
+        val end = System.currentTimeMillis() + ms
+        while (!cond()) {
+            check(System.currentTimeMillis() < end) { "timed out: $what" }
+            delay(20)
+        }
+    }
+
+    private fun called(method: String) = host.calls.count { it.first == method }
+
+    @Test fun `a song left paused by the page after an ad break is resumed`() = runBlocking {
+        host.post("""{"type":"ready"}""")
+        host.post(state(track("A")))
+        host.post(state(ad))
+        waitFor("ad flag") { player.adPlaying.value }
+        host.post(state(track("B"), paused = true))
+        waitFor("resumed") { called("player.resume") > 0 }
+    }
+
+    @Test fun `a pause by the user during the ad break is left alone`() = runBlocking {
+        host.post("""{"type":"ready"}""")
+        host.post(state(track("A")))
+        host.post(state(ad))
+        waitFor("ad flag") { player.adPlaying.value }
+        runCatching { player.pause() }
+        val before = called("player.resume")
+        host.post(state(track("B"), paused = true))
+        delay(SpotifyPlayer.AD_END_SETTLE_MS + 500)
+        assertEquals(before, called("player.resume"), "the user's pause holds")
+    }
+
+    @Test fun `the repeat mode the user chose is set again when a play leaves the page on another`() = runBlocking {
+        host.post("""{"type":"ready"}""")
+        host.post(state(track("A"), repeat = 1))
+        player.setRepeat(Repeat.CONTEXT)
+        val sent = called("player.setRepeat")
+        player.play("spotify:playlist:C", trackUri = "spotify:track:P")
+        host.post(state(track("P"), repeat = 0))
+        waitFor("repeat set again") { called("player.setRepeat") == sent + 1 }
+        // Set again once, not on every state until the page agrees.
+        host.post(state(track("P"), repeat = 0))
+        delay(300)
+        assertEquals(sent + 1, called("player.setRepeat"))
+    }
+
+    @Test fun `a webview without widevine is reported`() = runBlocking {
+        assertFalse(player.drmMissing.value)
+        host.post("""{"type":"drm","ok":true}""")
+        delay(100)
+        assertFalse(player.drmMissing.value)
+        host.post("""{"type":"drm","ok":false,"error":"no EME in this WebView"}""")
+        waitFor("drm flag") { player.drmMissing.value }
+        assertTrue(player.drmMissing.value)
+    }
+
+    @Test fun `a refusal told late is dropped while another device plays`() = runBlocking {
+        host.mediaActive = false
+        host.mediaPaused = true
+        host.post("""{"type":"ready"}""")
+        host.post(state(track("A")))
+        player.play("spotify:playlist:C", trackUri = "spotify:track:P")
+        // The watcher reads the element within its tick.
+        waitFor("element read") { called("media.state") > 0 }
+        host.post("""{"type":"refused","status":402,"late":true}""")
+        delay(300)
+        assertEquals(1, host.calls.count { it.first == "player.play" }, "no fallback play on another device: ${host.calls.map { it.first }}")
+    }
+}

@@ -2,6 +2,11 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.2-beta.2
+
+- 🎵 **Playback works again**: beta.1 could leave Spotify's player without a device ("Device not found"), so nothing played. The page now starts exactly like in 2.0.1: the play reports leave from the page again, and the check for protected audio runs only after a play fails.
+- Everything else from beta.1 stays (Recents, refused plays, ads, Connect, repeat, sign-in, downloads, Android Auto, playlists, font).
+
 ## 2.0.2-beta.1
 
 - 📊 **Your plays count on Spotify**: the report of what you really listened to now leaves from the app like the playback itself, so normal plays should reach your Recents and your Wrapped. Recents also no longer hides a play whose playlist or album row was not announced.

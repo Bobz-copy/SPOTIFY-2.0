@@ -277,13 +277,19 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
          * "X-Requested-With: <our package>" — no browser does that, and it was measured on the wire
          * riding on the telemetry and on the audio files themselves. Relaying through OkHttp is what
          * removes it; the playback commands were only the first ones (that header alone was enough to
-         * silence them). One rule on Spotify's side is all it takes to flag every install, so the
-         * whole API goes through here now.
+         * silence them). One rule on Spotify's side is all it takes to flag every install.
+         *
+         * Only the text endpoints are on the list, the ones whose bodies survive a `String`:
+         * the playback commands and states, and the telemetry that reports what was played
+         * (`melody`: the plays and the milliseconds really heard, base64 JSON; `gabo-receiver-service`:
+         * the event batches). That report is what counts a listen in the history and in Wrapped,
+         * and it left the WebView with the package name on it while the commands did not. Widening
+         * this to everything else broke the page (protobuf and binary bodies, see the notes).
          *
          * Login and consent hosts stay out: their flows post forms and redirect, and a relay would
          * have to reproduce every step exactly to sign in.
          */
-        private val RELAYED = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/(connect-state|track-playback)/v1/")
+        private val RELAYED = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/((connect-state|track-playback|melody)/v1/|gabo-receiver-service/)")
         private val NOT_RELAYED = Regex("^https://(accounts|challenge|www)\\.spotify\\.com/")
 
         fun isRelayed(url: String) = RELAYED.containsMatchIn(url) && !NOT_RELAYED.containsMatchIn(url)
@@ -323,7 +329,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 if (window.__mspMuted) { this.muted = false; this.volume = 0.001; }
                 return play.apply(this, arguments);
               };
-              const relayed = /^https:\/\/([a-z0-9-]+\.)*spotify\.com\/(connect-state|track-playback)\/v1\//;
+              const relayed = /^https:\/\/([a-z0-9-]+\.)*spotify\.com\/((connect-state|track-playback|melody)\/v1\/|gabo-receiver-service\/)/;
               const notRelayed = /^https:\/\/(accounts|challenge|www)\.spotify\.com\//;
               const pending = new Map();
               let seq = 0;

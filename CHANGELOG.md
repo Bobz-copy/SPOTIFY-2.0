@@ -2,6 +2,12 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.2-beta.3
+
+- 👋 **Leave a collaborative playlist** you joined, from the playlist's menu, like on the web player.
+- ⬇️ **Downloaded playlists play from your phone**: picking a song in a fully downloaded list plays its file, online too, instead of streaming it again.
+- 🩺 **"Spotify refused to play this"**: the diagnostic report now says much more about why Spotify refuses. If it happens to you, please send a report from this version.
+
 ## 2.0.2-beta.2
 
 - 🎵 **Playback works again**: beta.1 could leave Spotify's player without a device ("Device not found"), so nothing played. The page now starts exactly like in 2.0.1: the play reports leave from the page again, and the check for protected audio runs only after a play fails.

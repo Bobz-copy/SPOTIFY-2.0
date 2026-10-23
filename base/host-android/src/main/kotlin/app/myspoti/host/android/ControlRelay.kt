@@ -164,6 +164,17 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         val registration = body != null && app.myspoti.spotify.bridge.AdBlock.isDeviceRegistration(method, url)
         if (debuggable && body != null && url.contains("/connect-state/"))
             Logbook.log("connect-state body: ${body.take(500)}")
+        if (registration) runCatching { JSONObject(body!!).optJSONObject("device")?.optString("device_id") }
+            .getOrNull()?.takeIf { it.isNotEmpty() }?.let { self = it }
+        // 402 on some free accounts: which headers the page gave its commands (names only), so a
+        // refused session can be set against a working one. Logged when the set changes.
+        if (COMMAND.containsMatchIn(url)) {
+            val names = headerNames(given)
+            if (names != commandHeaders) {
+                commandHeaders = names
+                Logbook.log("command headers: $names")
+            }
+        }
         val sent = if (registration) {
             val rewritten = app.myspoti.spotify.bridge.AdBlock.withDeviceName(body!!, deviceName)
             if (debuggable && rewritten != body) Logbook.log("device registered as \"$deviceName\"")
@@ -194,11 +205,17 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                     if (it.code == 402) {
                         val heads = it.headers.names().filterNot { n -> n.equals("set-cookie", true) || n.startsWith("authorization", true) }
                             .joinToString(", ") { n -> "$n=${it.header(n)?.take(80)}" }
-                        Logbook.log("refusal headers: $heads")
+                        Logbook.log("refusal headers (${it.protocol}, ${it.handshake?.tlsVersion?.javaName ?: "no tls"}): $heads")
                         if (body != null) Logbook.log("refused command: ${commandSummary(body)}")
                     }
                     if (registration) Regex("\"effective_license\"\\s*:\\s*\"([^\"]*)\"").find(text)
                         ?.let { m -> Logbook.log("registration: effective_license=${m.groupValues[1]}") }
+                    if (registration && it.code in 200..299) Logbook.log("registration answer: ${registrationSummary(text)}")
+                    // What Spotify holds for this account's devices (this player's license, whether
+                    // it may play, another device active): the cluster comes back on joining and
+                    // on every cluster read, the one the page makes after a refused command.
+                    if (it.code in 200..299 && (url.contains("/connect-state/v1/cluster") || (method == "PUT" && url.contains("/connect-state/v1/devices/"))))
+                        clusterSummary(text, self)?.let { s -> Logbook.log("cluster: $s") }
                     if (debuggable && registration) Logbook.log("registration answered: ${text.take(500)}")
                     if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
                     // An ad in the queue Spotify sends: the song before it goes on to the next song
@@ -231,6 +248,10 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             null,
         )
     }
+
+    /** This page's playback device id, read from its registration: never logged, only compared. */
+    @Volatile private var self: String? = null
+    @Volatile private var commandHeaders: String? = null
 
     private val debuggable = view.context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -292,6 +313,78 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         private val NOT_RELAYED = Regex("^https://(accounts|challenge|www)\\.spotify\\.com/")
 
         fun isRelayed(url: String) = RELAYED.containsMatchIn(url) && !NOT_RELAYED.containsMatchIn(url)
+
+        private val COMMAND = Regex("/connect-state/v1/(player/command|connect/transfer)/")
+
+        /** The header names a request carries, lowercased and sorted: never their values. */
+        internal fun headerNames(given: JSONObject): String =
+            given.keys().asSequence().map { it.lowercase() }.sorted().joinToString(",")
+
+        /** Keys that can hold an id, a token or an address: named, never shown. */
+        private val PRIVATE_KEY = Regex("id|token|ref|ip|url|name|seq", RegexOption.IGNORE_CASE)
+
+        /**
+         * The registration's answer without ids: every key, with the value of the short plain ones
+         * (`effective_license`, `supports_observing`, the format filter...). A refused account and a
+         * working one can then be told apart by what Spotify granted their player.
+         */
+        internal fun registrationSummary(text: String): String = runCatching {
+            val j = JSONObject(text)
+            j.keys().asSequence().sorted().joinToString(" ") { k ->
+                val v = j.opt(k)
+                when {
+                    PRIVATE_KEY.containsMatchIn(k) -> k
+                    v is Boolean || v is Number -> "$k=$v"
+                    v is String && v.length <= 24 -> "$k=$v"
+                    v is org.json.JSONArray && v.length() <= 8 && (0 until v.length()).all { i -> v.opt(i) is String && v.optString(i).length <= 24 } ->
+                        "$k=[${(0 until v.length()).joinToString("|") { i -> v.optString(i) }}]"
+                    else -> k
+                }
+            }.take(500)
+        }.getOrDefault("unreadable")
+
+        /**
+         * The cluster without ids or names: each device's type, license, whether it may play and
+         * take commands, which one is this player (`self`) and which one is active; then the
+         * player state's restrictions that hold a reason. Null when the body is not a cluster.
+         */
+        internal fun clusterSummary(text: String, self: String?): String? = runCatching {
+            val j = JSONObject(text)
+            val c = j.optJSONObject("cluster") ?: j
+            val devices = c.optJSONObject("devices") ?: return null
+            val active = c.optString("active_device_id")
+            val list = devices.keys().asSequence().sortedBy { if (it == self) "" else it }.map { id ->
+                val d = devices.optJSONObject(id) ?: JSONObject()
+                val caps = d.optJSONObject("capabilities")
+                val marks = listOfNotNull("self".takeIf { id == self }, "active".takeIf { id == active && active.isNotEmpty() })
+                val facts = listOfNotNull(
+                    d.optString("device_type").ifEmpty { "?" },
+                    "license=${d.optString("license").ifEmpty { "-" }}",
+                    "can_play=${d.opt("can_play") ?: "-"}",
+                    caps?.opt("is_controllable")?.let { v -> "controllable=$v" },
+                    caps?.opt("can_be_player")?.let { v -> "player=$v" },
+                    caps?.opt("hidden")?.takeIf { v -> v == true }?.let { "hidden" },
+                    (d.opt("device_software_version") as? String)?.takeIf { v -> v.isNotEmpty() }?.take(24),
+                )
+                (marks + facts).joinToString(" ")
+            }.toList()
+            val activeWhere = when {
+                active.isEmpty() -> "none"
+                active == self -> "self"
+                devices.has(active) -> "other"
+                else -> "unlisted"
+            }
+            val restrictions = c.optJSONObject("player_state")?.optJSONObject("restrictions")?.let { r ->
+                r.keys().asSequence().sorted().mapNotNull { k ->
+                    val reasons = r.optJSONArray(k) ?: return@mapNotNull null
+                    if (reasons.length() == 0) null
+                    else "${k.removePrefix("disallow_").removeSuffix("_reasons")}=${(0 until reasons.length()).joinToString("|") { i -> reasons.optString(i) }}"
+                }.joinToString(",")
+            }.orEmpty()
+            ("devices=${list.size} active=$activeWhere self_listed=${self != null && devices.has(self)} " +
+                list.joinToString("; ", "[", "]") +
+                (if (restrictions.isNotEmpty()) " restrictions: $restrictions" else "")).take(700)
+        }.getOrNull()
 
         private val AD_MARK = Regex("\"is_advertisement\"\\s*:\\s*\"?true|spotify:ad:|\"ad_id\"")
 

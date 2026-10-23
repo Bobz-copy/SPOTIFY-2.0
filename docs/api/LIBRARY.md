@@ -466,6 +466,29 @@ Rootlist and liked-songs-artist pushes carried only fields 1, 2 and 9. Simplest 
 rule: on any playlist push, re-fetch that playlist (or the rootlist / `libraryV3`) unless
 the revision equals the one already held.
 
+## Leaving a collaborative playlist
+
+The playlist menu of the Web Player shows "Leave playlist" only when the playlist's
+`currentUserCapabilities.canCancelMembership` is true (a member who is not the owner; same flag
+in `fetchPlaylist` and in the rootlist item `permissions`). The entry opens a confirmation
+dialog (`leave-playlist.dialog.*`: title, a description that depends on private / public
+contributor / public listener, Cancel, Leave). Read from the bundle (`xpui-root-dialogs`, module
+`PlaylistPermissionsAPI`; not sent on a live account yet):
+
+| Step | Call |
+|---|---|
+| private playlist only (base permission `BLOCKED`) and in the library | `RootlistAPI.remove([{uri}])` (the playlist leaves the library) |
+| the leave itself | page service `PlaylistPermissionsAPI.removeMember(playlistUri, ownUsername)` |
+| then | the dialog closes and the page navigates to `/` |
+
+`removeMember` sends spclient `DELETE /playlist/{id}/permission/member/user/{username}` (JSON content
+type, no body, no market; endpoint id `/playlist/{id}/permission/member/user/{username}`). The
+username is the account's own (`UserAPI.getUser().username`); the same call, with someone else's
+username, is the owner's "Remove from playlist" in the members list. A public playlist stays in the
+library after leaving (followed, read-only); to join again a new invitation link is needed
+(`claimPermissions`). In the app: `Playlists.leave(uri)`, offered in the playlist's menu when
+`Playlist.canLeave`.
+
 ## Blend ("Mix à plusieurs")
 
 The Web Player has Blend routes (`/blend/invitation`, `/blend/taste-match/{id}`), all on one

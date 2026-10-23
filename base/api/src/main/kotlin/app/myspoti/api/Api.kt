@@ -171,6 +171,13 @@ interface Playlists {
     /** The owner and the collaborators of a playlist (just the owner when it is not shared). */
     suspend fun members(uri: Uri): List<PlaylistMember>
 
+    /**
+     * Leaves a playlist this account joined as a collaborator ([Playlist.canLeave]): the page's
+     * `PlaylistPermissionsAPI.removeMember(uri, ownUsername)`. A private one (owner-only base
+     * permission) also leaves the library, as in the Web Player's dialog.
+     */
+    suspend fun leave(uri: Uri)
+
     /** Who added each row of a playlist (shown on collaborative ones). */
     suspend fun addedBy(uri: Uri): List<RowAdder>
 

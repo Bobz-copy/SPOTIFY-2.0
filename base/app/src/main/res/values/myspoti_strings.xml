@@ -493,6 +493,9 @@
     <string name="playlist_invite_message">Join my playlist “%1$s” on Spotify, you can add songs to it: %2$s</string>
     <string name="playlist_invite_failed">Couldn’t make the invitation link</string>
     <string name="playlist_by">By %1$s</string>
+    <string name="playlist_leave">Leave playlist</string>
+    <string name="playlist_leave_confirm">Leave %1$s? You will no longer be a collaborator and won’t be able to add or remove songs. To join again, you will need a new invitation link.</string>
+    <string name="playlist_leave_button">Leave</string>
     <string name="playlist_make_public">Make public</string>
     <string name="playlist_make_private">Make private</string>
     <string name="playlist_stop_collab">Stop collaborating</string>

@@ -189,6 +189,38 @@ class SpotifyWritesTest {
         assertEquals("""["spotify:playlist:p","tok123"]""", host.calls[0].args())
     }
 
+    @Test fun `leaving a collaborative playlist removes this account from its members, by username`() = runBridge({ call ->
+        when (call.method()) {
+            "getUser" -> Bridge.json.parseToJsonElement("""{"username":"user0002"}""")
+            "getBasePermission" -> kotlinx.serialization.json.JsonPrimitive("CONTRIBUTOR")
+            else -> JsonNull
+        }
+    }) { host, bridge ->
+        val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        playlists.leave("spotify:playlist:p")
+        assertEquals(listOf("getUser", "getBasePermission", "removeMember"), host.calls.map { it.method() })
+        assertEquals("""["spotify:playlist:p","user0002"]""", host.calls.last().args())
+    }
+
+    @Test fun `leaving a private playlist takes it out of the library first, as the page's dialog does`() = runBridge({ call ->
+        when (call.method()) {
+            "getUser" -> Bridge.json.parseToJsonElement("""{"username":"user0002"}""")
+            "getBasePermission" -> kotlinx.serialization.json.JsonPrimitive("BLOCKED")
+            else -> JsonNull
+        }
+    }) { host, bridge ->
+        val playlists = SpotifyPlaylists(FakeGql { _, _ -> JsonNull }, bridge, SpotifyHttp(OkHttpClient(), bridge))
+        playlists.leave("spotify:playlist:p")
+        assertEquals(listOf("getUser", "getBasePermission", "remove", "removeMember"), host.calls.map { it.method() })
+    }
+
+    @Test fun `a playlist can be left only when its capabilities say canCancelMembership`() {
+        fun parse(flag: String) = playlist(Bridge.json.parseToJsonElement("""{"uri":"spotify:playlist:p","name":"n","currentUserCapabilities":{"canEditItems":true,"canCancelMembership":$flag}}"""))!!
+        assertEquals(true, parse("true").canLeave)
+        assertEquals(false, parse("false").canLeave)
+        assertEquals(false, playlist(Bridge.json.parseToJsonElement("""{"uri":"spotify:playlist:p","name":"n"}"""))!!.canLeave)
+    }
+
     @Test fun `a Blend invitation id is read from the link the page generates, or given bare`() {
         val blends = SpotifyBlends(SpotifyHttp(OkHttpClient(), Bridge(RecordingHost { JsonNull }, scope)))
         assertEquals("f6c3d87d8beb9a3f", blends.idOf("https://open.spotify.com/blend/taste-match/f6c3d87d8beb9a3f?si=DJpS4omqRFOjF4es_Fnm8A&fallback=getapp&blendDecoration=5f9c38d2"))

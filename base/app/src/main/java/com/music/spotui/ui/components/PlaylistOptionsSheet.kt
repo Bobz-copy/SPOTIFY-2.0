@@ -112,6 +112,7 @@ fun PlaylistOptionsSheet(
     var deleting by remember { mutableStateOf(false) }
     var renamingBlend by remember { mutableStateOf(false) }
     var leavingBlend by remember { mutableStateOf(false) }
+    var leavingPlaylist by remember { mutableStateOf(false) }
     LaunchedEffect(page.uri, mine) {
         if (mine) {
             access = runCatching { MyspotiRuntime.api.playlists.access(page.uri) }.getOrNull()
@@ -210,6 +211,8 @@ fun PlaylistOptionsSheet(
                 OptionRow(Icons.Outlined.Delete, stringResource(R.string.local_delete_playlist)) { deleting = true }
             } else {
                 OptionRow(Icons.Outlined.QrCode2, stringResource(R.string.context_menu_share), onClick = share)
+                // The Web Player offers it only where canCancelMembership is true (a collaborator, not the owner).
+                if (page.canLeave) OptionRow(Icons.AutoMirrored.Outlined.Logout, stringResource(R.string.playlist_leave)) { leavingPlaylist = true }
             }
             if (!mine && !page.isBlend && page.ownerUri.startsWith("spotify:user:")) {
                 OptionRow(Icons.Outlined.Person, stringResource(R.string.go_to_profile)) {
@@ -267,6 +270,24 @@ fun PlaylistOptionsSheet(
             }) { Text(stringResource(R.string.blend_leave_button), color = Color(0xFFF15E6C)) }
         },
         dismissButton = { TextButton(onClick = { leavingBlend = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
+    )
+
+    if (leavingPlaylist) AlertDialog(
+        onDismissRequest = { leavingPlaylist = false },
+        containerColor = Color(0xFF282828),
+        title = { Text(stringResource(R.string.playlist_leave), color = Color.White) },
+        text = { Text(stringResource(R.string.playlist_leave_confirm, page.name), color = Color(0xFFB3B3B3)) },
+        confirmButton = {
+            TextButton(onClick = {
+                leavingPlaylist = false
+                // The page closes now (as in the Web Player); a refusal says so, and the library is read again.
+                com.music.spotui.data.api.LibraryEdits.run(context, null,
+                    write = { MyspotiRuntime.api.playlists.leave(page.uri) },
+                    onDone = { ok -> if (ok) com.music.spotui.data.api.LibraryEdits.reloadSoon() })
+                onDismiss(); onDeleted()
+            }) { Text(stringResource(R.string.playlist_leave_button), color = Color(0xFFF15E6C)) }
+        },
+        dismissButton = { TextButton(onClick = { leavingPlaylist = false }) { Text(stringResource(R.string.cancel), color = Color.White) } },
     )
 
     if (deleting) AlertDialog(

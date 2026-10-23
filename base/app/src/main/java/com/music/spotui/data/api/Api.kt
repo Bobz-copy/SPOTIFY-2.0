@@ -825,6 +825,7 @@ class Api constructor(
             ownerUri = pl.ownerUri.orEmpty(),
             metaLine = saves,
             isBlend = pl.isBlend,
+            canLeave = pl.canLeave,
         )
         // The first page gives the total: the rest is asked for PLAYLIST_PARALLEL pages at a time
         // and shown in order as it lands, at most every PLAYLIST_EMIT_MS. One page after the

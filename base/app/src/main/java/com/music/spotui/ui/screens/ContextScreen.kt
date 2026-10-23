@@ -389,15 +389,21 @@ class ContextViewModel(
 
     fun play(p: ContextPageModel, song: SongsModel, sort: TrackOrder = TrackOrder()) {
         // No connection (the Web Player cannot stream), or the data saver on mobile data:
-        // the page's downloaded songs play from the phone.
+        // the page's downloaded songs play from the phone. Online, a downloaded song also plays
+        // from its file when the whole list is downloaded (it used to stream anyway).
         val app = Graph.app
-        if (com.music.spotui.data.offline.OfflineStore.isDownloaded(song.spotifyTrackId) &&
-            (com.music.spotui.data.DataSaver.active || !com.music.spotui.data.offline.OfflineStore.isOnline(app))) {
-            val local = sort.apply(p.tracks).mapNotNull { com.music.spotui.data.offline.OfflineStore.tracks[it.spotifyTrackId] }.distinctBy { it.trackId }
+        val store = com.music.spotui.data.offline.OfflineStore
+        val limited = com.music.spotui.data.DataSaver.active || !store.isOnline(app)
+        val ids = com.music.spotui.data.offline.LocalPlayPlan.localIds(
+            sort.apply(p.tracks).map { it.spotifyTrackId }, song.spotifyTrackId, p.complete,
+            offline = !store.isOnline(app), dataSaver = com.music.spotui.data.DataSaver.active, isDownloaded = store::isDownloaded,
+        )
+        if (ids != null) {
+            val local = ids.mapNotNull { store.tracks[it] }
             val at = local.indexOfFirst { it.trackId == song.spotifyTrackId }.coerceAtLeast(0)
-            if (local.size < p.tracks.size)
+            if (limited && local.size < p.tracks.size)
                 android.widget.Toast.makeText(app, app.getString(R.string.offline_only_downloaded, local.size, p.tracks.size), android.widget.Toast.LENGTH_SHORT).show()
-            com.music.spotui.di.LocalPlayer.play(local.map(com.music.spotui.data.offline.OfflineStore::toLocalTrack), at, context = p.name)
+            com.music.spotui.di.LocalPlayer.play(local.map(store::toLocalTrack), at, shuffle = state.shuffle.value, context = p.name)
             return
         }
         state.updateQueue(p.tracks)

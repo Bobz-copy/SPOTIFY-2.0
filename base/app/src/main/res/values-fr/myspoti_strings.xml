@@ -492,6 +492,9 @@
     <string name="playlist_invite_message">Rejoins ma playlist « %1$s » sur Spotify, tu pourras y ajouter des titres : %2$s</string>
     <string name="playlist_invite_failed">Impossible de créer le lien d’invitation</string>
     <string name="playlist_by">De %1$s</string>
+    <string name="playlist_leave">Quitter la playlist</string>
+    <string name="playlist_leave_confirm">Quitter %1$s ? Tu ne seras plus collaborateur et ne pourras plus ajouter ni retirer de titres. Pour revenir, il faudra un nouveau lien d’invitation.</string>
+    <string name="playlist_leave_button">Quitter</string>
     <string name="playlist_make_public">Rendre publique</string>
     <string name="playlist_make_private">Rendre privée</string>
     <string name="playlist_stop_collab">Arrêter la collaboration</string>

@@ -313,6 +313,18 @@ class SpotifyPlaylists(private val gql: Gql, private val bridge: Bridge, private
         }.sortedByDescending { it.isOwner }
 
     /**
+     * The page's "Leave playlist" (menu entry gated by `canCancelMembership`, then its dialog):
+     * `PlaylistPermissionsAPI.removeMember(uri, ownUsername)`, which is spclient
+     * `DELETE /playlist/{id}/permission/member/user/{username}`. As in the dialog, a private
+     * playlist is taken out of the rootlist first; a public one stays followed (read-only).
+     */
+    override suspend fun leave(uri: Uri) {
+        val me = bridge.service("UserAPI", "getUser").str("username")?.takeIf { it.isNotBlank() } ?: error("no signed-in user")
+        if (access(uri) == PlaylistAccess.PRIVATE) unfollow(uri)
+        bridge.service("PlaylistPermissionsAPI", "removeMember", JsonPrimitive(uri), JsonPrimitive(me))
+    }
+
+    /**
      * The page's `PlaylistAPI.getContents(uri, {offset, limit})`: each row carries `uid` and
      * `addedBy {username}`. Read a page at a time to the end (a few hundred rows a request).
      */

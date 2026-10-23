@@ -62,6 +62,8 @@ data class Playlist(
     val followers: Long? = null,
     /** A Spotify Blend (a playlist shared by taste between people). */
     val isBlend: Boolean = false,
+    /** This account is a member (not the owner) and may leave: `currentUserCapabilities.canCancelMembership`. */
+    val canLeave: Boolean = false,
 )
 
 /**

@@ -27,6 +27,8 @@ android {
     defaultConfig {
         applicationId = if (beta) "app.myspoti" else "app.myspoti.stable"
         manifestPlaceholders["appLabel"] = if (beta) "Myspoti Beta" else "Myspoti"
+        // The adb command line (com.music.spotui.cli): betas and debug builds only.
+        manifestPlaceholders["cliEnabled"] = beta.toString()
         minSdk = 29
         targetSdk = 36
         // CI release builds pass the tag's version (-PappVersionName / -PappVersionCode).
@@ -34,8 +36,6 @@ android {
         versionName = version
         // GitHub "owner/repo" whose releases the app checks for updates; empty = off
         // (local builds). CI sets it to the repository it builds.
-        // Inspectable hidden player in a test build (-PwebDebug=true); never in releases.
-        buildConfigField("boolean", "WEB_DEBUG", "${(findProperty("webDebug") as String?) == "true"}")
         buildConfigField("String", "UPDATE_REPO", "\"${(findProperty("updateRepo") as String?) ?: System.getenv("MYSPOTI_UPDATE_REPO") ?: ""}\"")
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
@@ -73,6 +73,7 @@ android {
             // Installs next to the release apps (own data, own sign-in).
             applicationIdSuffix = ".dev"
             manifestPlaceholders["appLabel"] = "Myspoti dev"
+            manifestPlaceholders["cliEnabled"] = "true"
         }
         release {
             // Real key when provided (CI releases); otherwise the debug key, so a local
@@ -102,10 +103,10 @@ android {
 
 dependencies {
     implementation(project(":host-android"))
+    // Third-party extensions: the sandbox (Rhino), manifests, packages and catalogues.
+    implementation(project(":extensions"))
     // Jam: scan the invite QR code (Google code scanner, no camera permission).
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
-    // The SpotiFLAC verification opens in a browser tab, as SpotiFLAC Mobile does.
-    implementation("androidx.browser:browser:1.8.0")
     testImplementation("junit:junit:4.13.2")
     // The real org.json in unit tests (android.jar only has stubs).
     testImplementation("org.json:json:20240303")

@@ -1,5 +1,7 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.ui.res.stringResource
 
 import com.music.spotui.ui.components.pressable
@@ -74,7 +76,7 @@ fun CategoryScreen(navController: NavController, genre: String, title: String) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.accessibility_navigate_back),
-                tint = Color.White,
+                tint = AppText,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(20.dp))
@@ -84,7 +86,7 @@ fun CategoryScreen(navController: NavController, genre: String, title: String) {
             Text(
                 text = title,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = AppText,
                 fontSize = 22.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -135,7 +137,7 @@ private fun CategoryGrid(entries: List<LibraryEntry>, navController: NavControll
                 )
                 Text(
                     text = entry.name,
-                    color = Color.White,
+                    color = AppText,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     lineHeight = 16.sp,

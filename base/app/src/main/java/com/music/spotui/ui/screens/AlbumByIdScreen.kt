@@ -1,5 +1,7 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.AppText
+
 import app.myspoti.engine.R
 
 import androidx.compose.ui.res.stringResource
@@ -31,7 +33,7 @@ fun AlbumByIdScreen(navController: NavController, name: String, artist: String, 
     val albumId = resolved
     when {
         albumId != null -> ContextScreen(navController, type = "album", id = albumId)
-        failed -> Text(stringResource(R.string.album_not_found), color = Color.White)
+        failed -> Text(stringResource(R.string.album_not_found), color = AppText)
         else -> Loader(SkeletonKind.Header)
     }
 }

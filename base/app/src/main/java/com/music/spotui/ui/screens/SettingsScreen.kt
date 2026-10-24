@@ -1,5 +1,9 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -52,7 +56,7 @@ import com.music.spotui.ui.components.StreamingQualityPicker
 import com.music.spotui.ui.theme.AppBackground
 
 /**
- * Settings, on one page: sound quality (streaming and downloads), the lossless source,
+ * Settings, on one page: sound quality (streaming and downloads), the download source,
  * data and battery, display, language, and the player's own repair tools.
  */
 @Composable
@@ -62,9 +66,9 @@ fun SettingsScreen(navController: NavController) {
     Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(4.dp)) {
             IconButton(onClick = { navController.popBackStack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_navigate_back), tint = AppText)
             }
-            Text(stringResource(R.string.settings_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.settings_title), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             Section(R.string.settings_section_playback)
@@ -108,18 +112,18 @@ fun SettingsScreen(navController: NavController) {
 
             Section(R.string.settings_section_downloads)
             DownloadQualityPicker()
-            // The lossless source: SpotiFLAC's own servers once verified.
+            // Where downloads come from: a download-source extension.
             Column(
-                Modifier.fillMaxWidth().clickable { navController.navigate(com.music.spotui.ui.navigation.Routes.Spotiflac.route) }
+                Modifier.fillMaxWidth().clickable { navController.navigate(com.music.spotui.ui.navigation.Routes.Extensions.route) }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
-                Text(stringResource(R.string.spotiflac_row_title), color = Color.White, fontSize = 16.sp)
+                Text(stringResource(R.string.downloads_source_row_title), color = AppText, fontSize = 16.sp)
                 Text(
                     stringResource(
-                        if (com.music.spotui.data.preferences.hasSpotiflacSession(ctx)) R.string.spotiflac_row_on
-                        else R.string.spotiflac_row_off,
+                        if (com.music.spotui.extensions.Extensions.hasDownloadSource()) R.string.downloads_source_row_on
+                        else R.string.downloads_source_row_off,
                     ),
-                    color = Color(0xFFB3B3B3), fontSize = 12.sp,
+                    color = AppMuted, fontSize = 12.sp,
                 )
             }
             if (com.music.spotui.data.offline.OfflineStore.tracks.isNotEmpty()) RemoveDownloadsRow()
@@ -169,6 +173,12 @@ fun SettingsScreen(navController: NavController) {
                 onChecked = app.myspoti.power.EnergySettings::setCanvasEnabled,
             )
             OptionRow(
+                label = stringResource(R.string.settings_music_video_title),
+                detail = stringResource(R.string.settings_music_video_detail),
+                checked = com.music.spotui.data.preferences.MusicVideoPref.on,
+                onChecked = { com.music.spotui.data.preferences.MusicVideoPref.set(ctx, it) },
+            )
+            OptionRow(
                 label = stringResource(R.string.settings_solid_nav_title),
                 detail = stringResource(R.string.settings_solid_nav_detail),
                 checked = com.music.spotui.data.preferences.SolidNavBar.on,
@@ -179,6 +189,8 @@ fun SettingsScreen(navController: NavController) {
             LanguageRow()
             Divider()
 
+            ExtensionSettingsRows(navController)
+
             Section(R.string.settings_section_app)
             // A18: the launch check can be turned off; the manual check below keeps working.
             OptionRow(
@@ -188,6 +200,14 @@ fun SettingsScreen(navController: NavController) {
                 onChecked = { com.music.spotui.data.preferences.AutoUpdateCheckPref.set(ctx, it) },
             )
             CheckUpdateRow()
+            // Third-party extensions: lyrics, a song's audio, scripts reacting to the music.
+            Column(
+                Modifier.fillMaxWidth().clickable { navController.navigate(com.music.spotui.ui.navigation.Routes.Extensions.route) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(stringResource(R.string.extensions_title), color = AppText, fontSize = 16.sp)
+                Text(stringResource(R.string.extensions_row_detail), color = AppMuted, fontSize = 12.sp)
+            }
             // The hidden Web Player stuck or crashed: rebuild it without leaving the app.
             Column(
                 Modifier.fillMaxWidth().clickable {
@@ -197,8 +217,8 @@ fun SettingsScreen(navController: NavController) {
                 }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
-                Text(stringResource(R.string.restart_player_title), color = Color.White, fontSize = 16.sp)
-                Text(stringResource(R.string.restart_player_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                Text(stringResource(R.string.restart_player_title), color = AppText, fontSize = 16.sp)
+                Text(stringResource(R.string.restart_player_detail), color = AppMuted, fontSize = 12.sp)
             }
             // The report a tester hands us. The engine's log is otherwise reachable only through
             // adb logcat, which the person reporting the bug cannot run: the label is a literal
@@ -210,14 +230,38 @@ fun SettingsScreen(navController: NavController) {
                     else android.widget.Toast.makeText(ctx, ctx.getString(R.string.diagnostic_export_failed), android.widget.Toast.LENGTH_SHORT).show()
                 }.padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
-                Text(stringResource(R.string.diagnostic_export_title), color = Color.White, fontSize = 16.sp)
-                Text(stringResource(R.string.diagnostic_export_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                Text(stringResource(R.string.diagnostic_export_title), color = AppText, fontSize = 16.sp)
+                Text(stringResource(R.string.diagnostic_export_detail), color = AppMuted, fontSize = 12.sp)
             }
             // Clear of the mini player and the navigation bar, as every other page (96 dp left the
             // last rows, "Restart the player" among them, under the mini player).
             Spacer(Modifier.height(com.music.spotui.ui.components.bottomBarsSpace()))
         }
     }
+}
+
+/**
+ * The installed extensions that declare settings (manifest `settings`), each one opening its page,
+ * where they are edited. Nothing when none has any.
+ */
+@Composable
+private fun ExtensionSettingsRows(navController: NavController) {
+    val registry by com.music.spotui.extensions.Extensions.registry.collectAsStateWithLifecycle()
+    val withSettings = registry.extensions.mapNotNull { e ->
+        com.music.spotui.extensions.Extensions.manifest(e.id)?.settings?.takeIf { it.isNotEmpty() }?.let { e to it }
+    }
+    if (withSettings.isEmpty()) return
+    Section(R.string.extensions_title)
+    withSettings.forEach { (e, settings) ->
+        Column(
+            Modifier.fillMaxWidth().clickable { navController.navigate(installedRoute(e.id)) }
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+        ) {
+            Text(e.name, color = AppText, fontSize = 16.sp)
+            Text(settings.joinToString { it.label }, color = AppMuted, fontSize = 12.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+    }
+    Divider()
 }
 
 @Composable
@@ -227,14 +271,14 @@ private fun Section(title: Int) {
 }
 
 @Composable
-private fun Divider() = HorizontalDivider(color = Color(0xFF2A2A2A), modifier = Modifier.padding(top = 8.dp))
+private fun Divider() = HorizontalDivider(color = tone(0xFF2A2A2A), modifier = Modifier.padding(top = 8.dp))
 
 /** The app's accent colour, for everyone (the same palette the supporter sheet uses). */
 @Composable
 private fun AccentRow() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
-        Text(stringResource(R.string.supporter_accent), color = Color.White, fontSize = 16.sp)
+        Text(stringResource(R.string.supporter_accent), color = AppText, fontSize = 16.sp)
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 10.dp)) {
             for (a in com.music.spotui.data.api.SupportReminder.Accent.entries) {
                 val selected = com.music.spotui.data.api.SupportReminder.accent == a
@@ -249,7 +293,7 @@ private fun AccentRow() {
                     Modifier.size(40.dp)
                         .semantics { contentDescription = name; role = Role.RadioButton }
                         .clip(CircleShape).background(a.color)
-                        .then(if (selected) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
+                        .then(if (selected) Modifier.border(3.dp, AppText, CircleShape) else Modifier)
                         .clickable { com.music.spotui.data.api.SupportReminder.setAccent(ctx, a) },
                 )
             }
@@ -267,10 +311,10 @@ private fun CrossfadeRow() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val pref = com.music.spotui.data.preferences.CrossfadePref
     androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
-        Text(stringResource(R.string.settings_crossfade_title), color = Color.White, fontSize = 16.sp)
+        Text(stringResource(R.string.settings_crossfade_title), color = AppText, fontSize = 16.sp)
         Text(
             stringResource(R.string.settings_crossfade_detail),
-            color = Color(0xFFB3B3B3), fontSize = 12.sp,
+            color = AppMuted, fontSize = 12.sp,
             modifier = Modifier.padding(top = 2.dp),
         )
         Row(
@@ -282,9 +326,9 @@ private fun CrossfadeRow() {
                 Text(
                     if (v == 0) stringResource(R.string.settings_crossfade_off)
                     else stringResource(R.string.settings_crossfade_seconds, v),
-                    color = if (selected) Color.Black else Color.White, fontSize = 14.sp,
+                    color = if (selected) Color.Black else AppText, fontSize = 14.sp,
                     modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else Color(0xFF2A2A2A))
+                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else tone(0xFF2A2A2A))
                         .clickable { pref.set(ctx, v) }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
@@ -299,7 +343,7 @@ private fun OrientationRow() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val pref = com.music.spotui.data.preferences.OrientationPref
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
-        Text(stringResource(R.string.settings_rotation_title), color = Color.White, fontSize = 16.sp)
+        Text(stringResource(R.string.settings_rotation_title), color = AppText, fontSize = 16.sp)
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
             for ((value, label) in listOf(
                 pref.PORTRAIT to R.string.settings_rotation_portrait,
@@ -309,9 +353,9 @@ private fun OrientationRow() {
                 val selected = pref.mode == value
                 Text(
                     stringResource(label),
-                    color = if (selected) Color.Black else Color.White, fontSize = 14.sp,
+                    color = if (selected) Color.Black else AppText, fontSize = 14.sp,
                     modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else Color(0xFF2A2A2A))
+                        .background(if (selected) com.music.spotui.ui.theme.AppAccent else tone(0xFF2A2A2A))
                         .clickable { pref.set(ctx, value) }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
@@ -332,18 +376,18 @@ private fun LanguageRow() {
     androidx.compose.foundation.layout.Column(
         Modifier.fillMaxWidth().clickable { picking = true }.padding(horizontal = 20.dp, vertical = 10.dp),
     ) {
-        Text(stringResource(R.string.settings_item_app_language_title), color = Color.White, fontSize = 16.sp)
-        Text(label(current), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+        Text(stringResource(R.string.settings_item_app_language_title), color = AppText, fontSize = 16.sp)
+        Text(label(current), color = AppMuted, fontSize = 12.sp)
     }
     if (picking) androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = { picking = false },
-        containerColor = Color(0xFF282828),
+        containerColor = tone(0xFF282828),
     ) {
         androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             item {
-                Text(stringResource(R.string.settings_item_app_language_title), color = Color.White, fontSize = 18.sp,
+                Text(stringResource(R.string.settings_item_app_language_title), color = AppText, fontSize = 18.sp,
                     fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                Text(stringResource(R.string.language_partial_note), color = Color(0xFFB3B3B3), fontSize = 12.sp,
+                Text(stringResource(R.string.language_partial_note), color = AppMuted, fontSize = 12.sp,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
             }
             items(com.music.spotui.data.AppLanguage.AVAILABLE.size) { i ->
@@ -362,9 +406,9 @@ private fun LanguageRow() {
                     }.padding(horizontal = 20.dp, vertical = 8.dp),
                 ) {
                     androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
-                        Text(label(tag), color = if (selected) com.music.spotui.ui.theme.AppAccent else Color.White, fontSize = 16.sp)
+                        Text(label(tag), color = if (selected) com.music.spotui.ui.theme.AppAccent else AppText, fontSize = 16.sp)
                         if (tag == com.music.spotui.data.AppLanguage.SYSTEM)
-                            Text(stringResource(R.string.language_auto_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                            Text(stringResource(R.string.language_auto_detail), color = AppMuted, fontSize = 12.sp)
                     }
                     if (selected) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Check, null, tint = com.music.spotui.ui.theme.AppAccent)
                 }
@@ -382,14 +426,14 @@ private fun RemoveDownloadsRow() {
     androidx.compose.foundation.layout.Column(
         Modifier.fillMaxWidth().clickable { ask = true }.padding(horizontal = 20.dp, vertical = 10.dp),
     ) {
-        Text(stringResource(R.string.settings_item_remove_downloads_title), color = Color.White, fontSize = 16.sp)
-        Text(stringResource(R.string.downloads_size, size), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+        Text(stringResource(R.string.settings_item_remove_downloads_title), color = AppText, fontSize = 16.sp)
+        Text(stringResource(R.string.downloads_size, size), color = AppMuted, fontSize = 12.sp)
     }
     if (ask) androidx.compose.material3.AlertDialog(
         onDismissRequest = { ask = false },
-        containerColor = Color(0xFF282828),
-        title = { Text(stringResource(R.string.settings_storage_remove_downloads_dialog_title), color = Color.White) },
-        text = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_description), color = Color(0xFFB3B3B3)) },
+        containerColor = tone(0xFF282828),
+        title = { Text(stringResource(R.string.settings_storage_remove_downloads_dialog_title), color = AppText) },
+        text = { Text(stringResource(R.string.playlist_entity_remove_download_dialog_description), color = AppMuted) },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = {
                 ask = false
@@ -398,7 +442,7 @@ private fun RemoveDownloadsRow() {
         },
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = { ask = false }) {
-                Text(stringResource(R.string.add_to_playlist_button_cancel), color = Color.White)
+                Text(stringResource(R.string.add_to_playlist_button_cancel), color = AppText)
             }
         },
     )
@@ -414,8 +458,8 @@ private fun OptionRow(label: String, detail: String, checked: Boolean,
             .toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChecked)
             .padding(horizontal = 20.dp, vertical = 10.dp)) {
         androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
-            Text(label, color = Color.White, fontSize = 16.sp)
-            Text(detail, color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            Text(label, color = AppText, fontSize = 16.sp)
+            Text(detail, color = AppMuted, fontSize = 12.sp)
         }
         androidx.compose.material3.Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
@@ -442,9 +486,9 @@ private fun CheckUpdateRow() {
     ) {
         Text(
             stringResource(if (checking) R.string.settings_update_checking else R.string.settings_check_update_title),
-            color = Color.White, fontSize = 16.sp,
+            color = AppText, fontSize = 16.sp,
         )
-        Text(stringResource(R.string.settings_check_update_detail), color = Color(0xFFB3B3B3), fontSize = 12.sp)
+        Text(stringResource(R.string.settings_check_update_detail), color = AppMuted, fontSize = 12.sp)
     }
 }
 

@@ -93,10 +93,15 @@ class Bridge(private val host: BridgeHost, scope: CoroutineScope) {
      * injected again, and the calls still waiting fail now instead of each timing out.
      */
     fun pageGone() {
+        pagesGone++
         gone = true
         _ready.value = false
         pending.values.forEach { it.completeExceptionally(BridgeException("page reloaded")) }
     }
+
+    /** How many pages went away ([pageGone]): a reload waits for this to move, not for "ready" alone. */
+    @Volatile var pagesGone = 0
+        private set
 
     /** Between [pageGone] and the new page's "ready". */
     @Volatile private var gone = false

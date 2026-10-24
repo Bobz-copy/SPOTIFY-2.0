@@ -103,10 +103,13 @@ fun PlayerOverlay(navController: NavController) {
         CompositionLocalProvider(LocalPageSettled provides settled, LocalPlayerReveal provides reveal) {
             // A podcast episode gets the podcast player (±15 s, speed, sleep timer, no shuffle);
             // everything else keeps the music player.
-            if (com.music.spotui.di.SongPlayer.isEpisode) {
-                com.music.spotui.ui.screens.PodcastPlayerScreen(navController)
-            } else {
-                PlayerScreen(navController)
+            // The player's bare texts use the body style as it is (no app-wide letter spacing).
+            androidx.compose.material3.ProvideTextStyle(com.music.spotui.ui.theme.Typography.bodyLarge) {
+                if (com.music.spotui.di.SongPlayer.isEpisode) {
+                    com.music.spotui.ui.screens.PodcastPlayerScreen(navController)
+                } else {
+                    PlayerScreen(navController)
+                }
             }
         }
     }

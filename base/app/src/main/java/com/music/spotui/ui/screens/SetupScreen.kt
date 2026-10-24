@@ -1,5 +1,9 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -83,7 +87,7 @@ private fun granted(context: Context, permission: String) =
     context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
 @Composable
-fun SetupScreen(onDone: () -> Unit, onSpotiflac: () -> Unit = {}) {
+fun SetupScreen(onDone: () -> Unit) {
     val context = LocalContext.current
     // First the sound quality, then the permissions (skipped when done before an update).
     var qualityStep by remember { mutableStateOf(!com.music.spotui.data.preferences.isQualityChosen(context)) }
@@ -106,7 +110,7 @@ fun SetupScreen(onDone: () -> Unit, onSpotiflac: () -> Unit = {}) {
                 if (quality) QualityStep(onNext = {
                     com.music.spotui.data.preferences.setQualityChosen(context)
                     if (Setup.permissionsDone(context)) onDone() else qualityStep = false
-                }) else PermissionsStep(onDone, onSpotiflac)
+                }) else PermissionsStep(onDone)
             }
         }
     }
@@ -118,7 +122,7 @@ private fun StepDots(current: Int, modifier: Modifier = Modifier) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
         for (i in 0..1) {
             val w by animateDpAsState(if (i == current) 22.dp else 8.dp, tween(350), label = "dot")
-            val c by animateColorAsState(if (i == current) Color(0xFF1DB954) else Color.White.copy(alpha = 0.25f), tween(350), label = "dotColor")
+            val c by animateColorAsState(if (i == current) Color(0xFF1DB954) else AppText.copy(alpha = 0.25f), tween(350), label = "dotColor")
             Box(Modifier.height(6.dp).width(w).clip(RoundedCornerShape(50)).background(c))
         }
     }
@@ -133,7 +137,7 @@ private fun Modifier.riseIn(index: Int): Modifier {
 }
 
 @Composable
-private fun PermissionsStep(onDone: () -> Unit, onSpotiflac: () -> Unit) {
+private fun PermissionsStep(onDone: () -> Unit) {
     val context = LocalContext.current
     // Re-read when coming back from a system dialog or the settings.
     var tick by remember { mutableIntStateOf(0) }
@@ -144,8 +148,8 @@ private fun PermissionsStep(onDone: () -> Unit, onSpotiflac: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         var row = 0
-        Text(stringResource(R.string.setup_title), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.riseIn(row++))
-        Text(stringResource(R.string.setup_subtitle), color = Color(0xFFB3B3B3), fontSize = 14.sp, modifier = Modifier.riseIn(row++))
+        Text(stringResource(R.string.setup_title), color = AppText, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.riseIn(row++))
+        Text(stringResource(R.string.setup_subtitle), color = AppMuted, fontSize = 14.sp, modifier = Modifier.riseIn(row++))
         Spacer(Modifier.height(8.dp))
         @Suppress("UNUSED_EXPRESSION") tick
         if (Build.VERSION.SDK_INT >= 33) SetupRow(
@@ -164,12 +168,6 @@ private fun PermissionsStep(onDone: () -> Unit, onSpotiflac: () -> Unit) {
             stringResource(R.string.setup_battery_title), stringResource(R.string.setup_battery_detail),
             BatteryExemption.isExempt(context), Modifier.riseIn(row++),
         ) { BatteryExemption.request(context) }
-        // Lossless downloads need SpotiFLAC's one-off verification (the quality toggle
-        // lives in Settings); not verified yet, the lossless source stays OFF.
-        if (com.music.spotui.data.preferences.getDownloadQuality(context) != com.music.spotui.data.preferences.DownloadQuality.OFF) SetupRow(
-            stringResource(R.string.setup_spotiflac_title), stringResource(R.string.setup_spotiflac_detail),
-            com.music.spotui.data.preferences.hasSpotiflacSession(context), Modifier.riseIn(row++),
-        ) { onSpotiflac() }
         Spacer(Modifier.height(12.dp))
         Box(Modifier.riseIn(row)) {
             Button(
@@ -188,9 +186,9 @@ private fun QualityStep(onNext: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.setup_quality_title), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold,
+        Text(stringResource(R.string.setup_quality_title), color = AppText, fontSize = 26.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 20.dp).riseIn(0))
-        Text(stringResource(R.string.setup_quality_subtitle), color = Color(0xFFB3B3B3), fontSize = 14.sp,
+        Text(stringResource(R.string.setup_quality_subtitle), color = AppMuted, fontSize = 14.sp,
             modifier = Modifier.padding(horizontal = 20.dp).riseIn(1))
         Box(Modifier.riseIn(2)) { com.music.spotui.ui.components.StreamingQualityPicker(Modifier.padding(top = 8.dp)) }
         Box(Modifier.riseIn(3)) { com.music.spotui.ui.components.DownloadQualityPicker() }
@@ -206,11 +204,11 @@ private fun QualityStep(onNext: () -> Unit) {
 private fun SetupRow(title: String, detail: String, on: Boolean, modifier: Modifier = Modifier, onEnable: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.fillMaxWidth().background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp)).padding(16.dp),
+        modifier = modifier.fillMaxWidth().background(tone(0xFF1E1E1E), RoundedCornerShape(12.dp)).padding(16.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text(detail, color = Color(0xFFB3B3B3), fontSize = 13.sp)
+            Text(title, color = AppText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = AppMuted, fontSize = 13.sp)
         }
         // Allowed: the button gives way to a green check that pops in.
         AnimatedContent(

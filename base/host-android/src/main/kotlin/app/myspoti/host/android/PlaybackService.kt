@@ -259,7 +259,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         // An album cover comes in 64, 300 and 640 px under the same id: ask for the 640 one first
         // (the queue and the next song may only carry the small one), the given size is the fallback.
         val candidates = listOfNotNull(
-            SMALL_ALBUM_COVER.find(resolved)?.let { resolved.replace(it.value, LARGE_ALBUM_COVER_PREFIX) },
+            Covers.large(resolved).takeIf { it != resolved },
             resolved,
         ).distinct()
         for (candidate in candidates) {
@@ -393,6 +393,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         // play/pause controls, but browsing and search return nothing.
         val packages = runCatching { packageManager.getPackagesForUid(clientUid)?.toList() }.getOrNull().orEmpty()
         if (clientPackageName != packageName && clientPackageName !in packages) return null
+        if (clientPackageName != packageName) Logbook.log("media browser connected: $clientPackageName (browse: ${if (mayBrowse(clientPackageName)) "yes" else "no"})")
         if (!mayBrowse(clientPackageName)) {
             android.util.Log.w("Myspoti", "media browser: empty root for $clientPackageName")
             return BrowserRoot(EMPTY_ROOT_ID, null)
@@ -478,8 +479,6 @@ class PlaybackService : MediaBrowserServiceCompat() {
         private const val COVER_CACHE_BYTES = 8 * 1024 * 1024
         /** Pause before each new try of a failed cover; after the last one the cover waits for the next state change. */
         private val COVER_RETRY_MS = longArrayOf(2_000L, 6_000L, 15_000L)
-        private val SMALL_ALBUM_COVER = Regex("ab67616d0000(?:1e02|4851)")
-        private const val LARGE_ALBUM_COVER_PREFIX = "ab67616d0000b273"
 
         @Volatile private var instance: PlaybackService? = null
         @Volatile private var current: NowPlayingInfo? = null
@@ -513,7 +512,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
             current = info
             val svc = instance
             if (svc == null) {
-                if (info.playing) runCatching {
+                // Loading counts: Android gives the audio only to a player in the foreground, and a
+                // song an extension is still resolving starts right after.
+                if (info.playing || info.buffering) runCatching {
                     androidx.core.content.ContextCompat.startForegroundService(context, Intent(context, PlaybackService::class.java))
                 }
                 return

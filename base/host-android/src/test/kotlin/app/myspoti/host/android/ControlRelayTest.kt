@@ -13,10 +13,15 @@ class ControlRelayTest {
         assertTrue(ControlRelay.isRelayed("https://gew4-spclient.spotify.com/track-playback/v1/devices/a/state"))
     }
 
-    // Relayed in 2.0.2-beta.1, whose page then never registered its device: back with the WebView.
-    @Test fun `play telemetry stays with the WebView, as in 2_0_1`() {
-        assertFalse(ControlRelay.isRelayed("https://gew4-spclient.spotify.com/melody/v1/msg/batch"))
+    // The play reports count the listen: relayed (the page sends them only once its device is registered).
+    @Test fun `play reports leave from the app`() {
+        assertTrue(ControlRelay.isRelayed("https://gew4-spclient.spotify.com/melody/v1/msg/batch"))
+    }
+
+    // Analytics, the server clock and the Widevine licence address stay with the WebView, as in 2.0.1.
+    @Test fun `the rest of the telemetry stays with the WebView`() {
         assertFalse(ControlRelay.isRelayed("https://gew4-spclient.spotify.com/melody/v1/time"))
+        assertFalse(ControlRelay.isRelayed("https://gew4-spclient.spotify.com/melody/v1/license_url?keySystem=com.widevine.alpha"))
         assertFalse(ControlRelay.isRelayed("https://gew4-spclient.spotify.com/gabo-receiver-service/v3/events"))
         assertFalse(ControlRelay.isRelayed("https://gew4-spclient.spotify.com/gabo-receiver-service/public/v3/events"))
     }
@@ -45,14 +50,14 @@ class ControlRelayTest {
         val s = ControlRelay.clusterSummary(
             """{"active_device_id":"$other","devices":{
               "$self":{"device_type":"COMPUTER","license":"tft","can_play":true,"name":"Pixel","capabilities":{"is_controllable":true,"can_be_player":true}},
-              "$other":{"device_type":"SMARTPHONE","license":"mft","can_play":true,"name":"Daniel","public_ip":"1.2.3.4","device_software_version":"Spotify 9.0.1"}},
+              "$other":{"device_type":"SMARTPHONE","license":"mft","can_play":true,"name":"Alex","public_ip":"1.2.3.4","device_software_version":"Spotify 9.0.1"}},
               "player_state":{"restrictions":{"disallow_resuming_reasons":["not_paused"],"disallow_seeking_reasons":[]}}}""",
             self,
         )!!
         assertTrue(s, s.startsWith("devices=2 active=other self_listed=true [self COMPUTER license=tft can_play=true controllable=true player=true; active SMARTPHONE license=mft"))
         assertTrue(s, s.contains("Spotify 9.0.1"))
         assertTrue(s, s.endsWith("restrictions: resuming=not_paused"))
-        assertFalse(s, s.contains(self) || s.contains(other) || s.contains("Daniel") || s.contains("Pixel") || s.contains("1.2.3.4"))
+        assertFalse(s, s.contains(self) || s.contains(other) || s.contains("Alex") || s.contains("Pixel") || s.contains("1.2.3.4"))
     }
 
     @Test fun `a body that is not a cluster says nothing`() {

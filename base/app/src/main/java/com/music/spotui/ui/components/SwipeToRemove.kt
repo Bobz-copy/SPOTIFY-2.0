@@ -1,5 +1,7 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -55,7 +57,7 @@ fun SwipeToRemove(key: Any, onRemove: () -> Unit, content: @Composable () -> Uni
                 modifier = Modifier.matchParentSize()
                     .background(if (armed) Color(0xFFE22134) else Color(0xFFE22134).copy(alpha = 0.6f)),
             ) {
-                Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.context_menu_undownload), tint = Color.White,
+                Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.context_menu_undownload), tint = AppText,
                     modifier = Modifier.padding(horizontal = 24.dp).size(26.dp))
             }
         }

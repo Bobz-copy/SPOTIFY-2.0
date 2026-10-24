@@ -24,6 +24,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -104,6 +105,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * pick a song): the UI says so.
      */
     val refused: kotlinx.coroutines.flow.SharedFlow<Unit> = _refused
+    /** When each kind of command (play, seek_to, transfer...) was last refused. */
+    private val refusedKinds = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    /** The page was reloaded once this session for an account refused everything. */
+    @Volatile private var refusedReloaded = false
+    @Volatile private var refusedAllToldAt = 0L
+    private val _refusedAll = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /**
+     * Spotify refuses this player every kind of command (a play, a seek, a transfer), whichever
+     * way the host sent them: the fallbacks are pointless, the UI says so.
+     */
+    val refusedAll: kotlinx.coroutines.flow.SharedFlow<Unit> = _refusedAll
 
     private val _drmMissing = kotlinx.coroutines.flow.MutableStateFlow(false)
     /**
@@ -120,6 +132,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * The watchers stand still until it is over.
      */
     @Volatile var recoveryHeld: () -> Boolean = { false }
+    /**
+     * True while Spotify refuses this client its audio licences (set by the host): playback is
+     * held, and a song the page moves on to by itself meanwhile is paused (see [onState]).
+     */
+    @Volatile var playbackHeld: () -> Boolean = { false }
+    /** The song last paused by the hold: paused once, so a play the user asks for on it stands. */
+    @Volatile private var heldPausedUri: Uri? = null
 
     /** Streaming quality ("auto", "low", "normal", "high", "very_high"), kept for every page load. */
     @Volatile var audioQuality: String = "auto"
@@ -137,7 +156,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 when (type) {
                     "state" -> onState(playerState(payload))
                     "queue" -> queue(payload)?.let { q -> _queue.value = q.copy(nextUp = q.nextUp.filter { it.kind != ItemKind.AD }) }
-                    "refused" -> onRefused(late = ((payload as? JsonObject)?.get("late") as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull == true)
+                    "refused" -> onRefused(
+                        late = ((payload as? JsonObject)?.get("late") as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull == true,
+                        kind = ((payload as? JsonObject)?.get("kind") as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull,
+                    )
                     "drm" -> (payload as? JsonObject)?.let { _drmMissing.value = (it["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull == false }
                 }
             }
@@ -200,8 +222,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         ownReload = true
         try {
             runCatching {
-                reload()
-                withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it } } ?: return@runCatching
+                if (!reloadAndWait(reload)) return@runCatching
                 if (s == null) return@runCatching
                 if (next) { delay(1_500); playOn(s) } else resumeAfterReload(s)
             }
@@ -220,12 +241,23 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         if (recoveryHeld()) { bridge.logger?.invoke("reload held: a sign-in page is open or Spotify is limiting playback"); return false }
         ownReload = true
         try {
-            reload()
-            return withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it } } != null
+            return reloadAndWait(reload)
         } finally {
             ownReload = false
             playingAtLoss = null
         }
+    }
+
+    /**
+     * Reloads and waits for the *new* page's "ready". Reported (2.0.1, log seen): an ad stuck,
+     * the page reloaded, and the music stayed off until Play was pressed. The host only asks for
+     * the load; that page started 10 s later, and "ready" — still the old page's — was taken for
+     * the new one after 1.5 s: the song after the ad was sent to the page that was going away.
+     */
+    private suspend fun reloadAndWait(reload: suspend () -> Unit): Boolean {
+        val gone = bridge.pagesGone
+        reload()
+        return withTimeoutOrNull(45_000) { delay(1_500); bridge.ready.first { it && bridge.pagesGone != gone } } != null
     }
 
     /**
@@ -554,15 +586,25 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * 3. the list on shuffle (an account that may only shuffle);
      * then the user is told.
      */
-    private fun onRefused(late: Boolean = false) {
+    private fun onRefused(late: Boolean = false, kind: String? = null) {
         probeDrm()
-        val last = lastPlay ?: return
         val now = System.currentTimeMillis()
-        if (now - last.third > if (late) LATE_REFUSED_WINDOW_MS else REFUSED_WINDOW_MS) return
         // A command acknowledged and never delivered: the page's media element stood still for 10 s
         // while its state may well say "playing". Not a refusal if the user paused, an ad is on or
         // another device plays.
         if (late && (pausedByUser || _adPlaying.value || remoteActive)) return
+        // Reported (402 on free accounts in some countries): play, seek, shuffle and transfer all
+        // refused from the first command of a session, after the host already sent each one again
+        // another way (see RelayRoutes). Two kinds refused: playing the list, transferring and
+        // shuffling would only be refused in turn. The page is loaded again once, the song asked
+        // again there, and the user is told.
+        if (kind != null) {
+            refusedKinds[kind] = now
+            refusedKinds.entries.removeIf { now - it.value > REFUSED_KINDS_MS }
+            if (refusedKinds.size >= 2) { refusedEverything(); return }
+        }
+        val last = lastPlay ?: return
+        if (now - last.third > if (late) LATE_REFUSED_WINDOW_MS else REFUSED_WINDOW_MS) return
         // A play of ours (an ad recovery, a reload restore): refused during an ad, and the steps
         // below would replay the list from its start and turn shuffle on, which nobody asked for.
         if (!lastPlayRefusable) { bridge.logger?.invoke("play refused by Spotify: not the user's, left alone"); return }
@@ -609,6 +651,23 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 }
             }
             else -> _refused.tryEmit(Unit)
+        }
+    }
+
+    private fun refusedEverything() {
+        refusalStep = 0
+        val now = System.currentTimeMillis()
+        if (now - refusedAllToldAt > REFUSED_TOLD_GAP_MS) {
+            refusedAllToldAt = now
+            _refusedAll.tryEmit(Unit)
+        }
+        if (refusedReloaded) { bridge.logger?.invoke("refused: ${refusedKinds.keys.sorted()}: fallbacks stopped"); return }
+        refusedReloaded = true
+        bridge.logger?.invoke("refused: ${refusedKinds.keys.sorted()}: fallbacks stopped, the page loaded again once")
+        val pick = lastPlay
+        val order = lastOrder?.takeIf { pick != null && it.first == pick.first }?.second
+        scope.launch {
+            if (reloadPage() && pick != null) runCatching { play(pick.first, trackUri = pick.second, order = order) }
         }
     }
 
@@ -826,6 +885,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             if (!_adPlaying.value) {
                 adSince = System.currentTimeMillis()
                 adMuteTries = 0
+                bridge.logger?.invoke("ad break started")
                 // A song picked a moment ago and not playing yet: the ad came in its place.
                 val p = lastPlay
                 val came = p?.takeIf {
@@ -845,6 +905,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
         val adJustEnded = _adPlaying.value
         _adPlaying.value = false
+        if (adJustEnded) bridge.logger?.invoke("ad break over after ${(System.currentTimeMillis() - adSince) / 1000} s: ${s?.item?.name ?: "nothing"}${if (s?.isPaused == true) " (paused)" else ""}")
         val pick = pickBeforeAd
         if (adJustEnded && pick != null) {
             pickBeforeAd = null
@@ -887,6 +948,17 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         else if (lastTrackState?.item != null) lastSongUntil = System.currentTimeMillis()
         lastTrackState = s
         _state.value = s
+        // Reported (2.0.2-beta.3, log seen): Spotify refusing the audio licences (429), the page
+        // skips on by itself through every song it gets no licence for, to the end of the list and
+        // round again. The hold's one pause was sent while the page was loading the next song and
+        // never took (the page kept playing for minutes): each song it settles on while held is
+        // paused, once.
+        if (!playbackHeld()) heldPausedUri = null
+        else if (s?.item != null && !s.isPaused && !s.isBuffering && s.item?.uri != heldPausedUri) {
+            heldPausedUri = s.item?.uri
+            bridge.logger?.invoke("playback held (Spotify limiting): ${s.item?.name} paused")
+            scope.launch { runCatching { pause() } }
+        }
         // Reported: the repeat button forgets what it was. A play command (and a reloaded page) starts
         // the page on its own options, repeat off; the mode the user chose is set again, once, when the
         // first song of that play reports another. Only within a few seconds of our own play: a repeat
@@ -1410,6 +1482,16 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
     /** Until when a page reporting another repeat mode than [wantedRepeat] counts as having forgotten it. */
     @Volatile private var repeatRestoreUntil = 0L
 
+    /**
+     * The repeat mode chosen in an earlier run of the app: nothing is sent now. The page starts
+     * with repeat off, so the mode is set again on the first song it reports, as after a play.
+     */
+    fun restoreRepeat(mode: Repeat) {
+        if (wantedRepeat != null) return
+        wantedRepeat = mode
+        repeatRestoreUntil = maxOf(repeatRestoreUntil, System.currentTimeMillis() + REPEAT_RESTORE_MS)
+    }
+
     override suspend fun setRepeat(mode: Repeat) {
         wantedRepeat = mode
         bridge.call("player.setRepeat", buildJsonObject { put("mode", mode.ordinal) })
@@ -1520,6 +1602,10 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         const val RESTORE_WAIT_MS = 6_000L
         /** A page going away reports "nothing plays" that long before it is gone, at most. */
         const val UNLOAD_NULL_MS = 5_000L
+        /** Two kinds of command refused within this: the account is refused everything. */
+        const val REFUSED_KINDS_MS = 120_000L
+        /** The "refused everything" message, at most once in this. */
+        const val REFUSED_TOLD_GAP_MS = 30_000L
         /** Errors of a page not able to take a command yet (see [command]). */
         val TRANSIENT = listOf("No such device", "not ready", "page reloaded", "local player is disabled")
         /** Refusals of a page being reloaded: a skip is then held (see [Intent]). */

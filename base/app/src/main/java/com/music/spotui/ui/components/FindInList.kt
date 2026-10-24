@@ -1,5 +1,8 @@
 package com.music.spotui.ui.components
 
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -61,24 +64,24 @@ fun FindInListField(query: String, onQuery: (String) -> Unit, hint: String, modi
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0x33FFFFFF)).padding(horizontal = 12.dp),
     ) {
-        Icon(Icons.Default.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Icon(Icons.Default.Search, contentDescription = null, tint = AppText, modifier = Modifier.size(18.dp))
         BasicTextField(
             value = query,
             onValueChange = onQuery,
             singleLine = true,
-            textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
-            cursorBrush = SolidColor(Color.White),
+            textStyle = TextStyle(color = AppText, fontSize = 15.sp),
+            cursorBrush = SolidColor(AppText),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             modifier = Modifier.weight(1f).padding(8.dp, 10.dp),
             decorationBox = { inner ->
                 Box {
-                    if (query.isEmpty()) Text(hint, color = Color(0xFFB3B3B3), fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    if (query.isEmpty()) Text(hint, color = AppMuted, fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     inner()
                 }
             },
         )
         if (query.isNotEmpty()) Icon(
-            Icons.Default.Close, contentDescription = null, tint = Color(0xFFB3B3B3),
+            Icons.Default.Close, contentDescription = null, tint = AppMuted,
             modifier = Modifier.size(18.dp).pressable(0.92f) { onQuery("") },
         )
     }
@@ -87,5 +90,5 @@ fun FindInListField(query: String, onQuery: (String) -> Unit, hint: String, modi
 /** "Couldn't find …" under a "Find in…" field with no match. */
 @Composable
 fun FindInListEmpty(text: String) {
-    Text(text, color = Color(0xFFB3B3B3), fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(16.dp, 24.dp))
+    Text(text, color = AppMuted, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(16.dp, 24.dp))
 }

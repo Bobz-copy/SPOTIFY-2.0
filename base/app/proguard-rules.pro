@@ -77,3 +77,8 @@
 # no-argument constructors it fails to start and the scan crashes.
 -keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
 -keep class com.google.mlkit.** { *; }
+
+# Extensions: a Spotify call's result is turned into JSON from the API models' own field names
+# (SpotifyDispatcher reads them by reflection), and the sandbox loads prelude.js from its jar.
+-keepclassmembers class app.myspoti.api.** { <fields>; }
+-keep class app.myspoti.extensions.** { *; }

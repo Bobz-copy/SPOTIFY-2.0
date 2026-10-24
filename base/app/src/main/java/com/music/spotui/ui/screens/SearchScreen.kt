@@ -1,5 +1,9 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+import com.music.spotui.ui.theme.AppMuted
+
 import kotlinx.coroutines.launch
 import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
@@ -210,13 +214,13 @@ fun SumUpSearchScreen(
                     ) {
                         Text(
                             stringResource(R.string.assisted_curation_search_search_history_title),
-                            color = Color.White,
+                            color = AppText,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
                             stringResource(R.string.chat_content_picker_clear_recent_searches),
-                            color = Color(0xFFB3B3B3),
+                            color = AppMuted,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.pressable(0.96f) {
@@ -254,7 +258,7 @@ fun SumUpSearchScreen(
                                         durationMs = item.durationMs,
                                     )
                                     searchViewModel.startRadioFromSong(song)
-                                    SongPlayer.playSong(song.url, context)
+                                    SongPlayer.playSong(song.url, context, songs = listOf(song))
                                     searchViewModel.updateSongState(
                                         song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
                                 }
@@ -293,13 +297,13 @@ fun SumUpSearchScreen(
                         val q = suggestions[i]
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2A2A2A))
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(tone(0xFF2A2A2A))
                                 .pressable(0.96f) { searchViewModel.search(q) }
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                         ) {
-                            Icon(androidx.compose.material.icons.Icons.Default.Search, null, tint = Color(0xFFB3B3B3), modifier = Modifier.size(14.dp))
+                            Icon(androidx.compose.material.icons.Icons.Default.Search, null, tint = AppMuted, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(q, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(q, color = AppText, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -382,6 +386,14 @@ fun SumUpSearchScreen(
                     }, onLongClick = { menuSong = ep })
                 }
             }
+            // What extensions add for this search (search.provide), under Spotify's results.
+            if (filter != SearchFilter.Profiles) item {
+                com.music.spotui.extensions.ExtensionBlocks(
+                    app.myspoti.extensions.Hook.SEARCH, app.myspoti.extensions.Surface.SEARCH,
+                    kotlinx.serialization.json.buildJsonObject { put("query", kotlinx.serialization.json.JsonPrimitive(text.trim())) }.toString(),
+                    delayMs = 400,
+                )
+            }
             }
         }
 
@@ -404,7 +416,7 @@ private fun SearchStatus(query: String, loading: Boolean, failed: Boolean, onRet
             loading -> com.music.spotui.ui.components.SkeletonList(count = 7, modifier = Modifier.padding(top = 0.dp))
             failed -> com.music.spotui.ui.components.ErrorRetry(stringResource(R.string.search_failed), Modifier.padding(0.dp), onRetry)
             else -> Text(stringResource(R.string.assisted_curation_search_empty_view_no_result_title, query.trim()),
-                color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                color = AppText, fontSize = 16.sp, fontWeight = FontWeight.Bold,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
@@ -443,11 +455,11 @@ private fun SearchFilterChips(selected: SearchFilter, onSelect: (SearchFilter) -
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.height(32.dp).clip(RoundedCornerShape(16.dp))
-                    .background(if (on) com.music.spotui.ui.theme.AppAccent else Color(0xFF2A2A2A))
+                    .background(if (on) com.music.spotui.ui.theme.AppAccent else tone(0xFF2A2A2A))
                     .pressable(0.96f) { onSelect(if (on && f != SearchFilter.Top) SearchFilter.Top else f) }
                     .padding(horizontal = 14.dp),
             ) {
-                Text(stringResource(f.label), color = if (on) Color.Black else Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(stringResource(f.label), color = if (on) Color.Black else AppText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -520,7 +532,7 @@ fun RecentItemRow(
                 .weight(1f)
                 .padding(start = 10.dp, end = 8.dp),
         ) {
-            Text(text = item.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(text = item.name, color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             val subtitle = when (item.type) {
                 "song" -> stringResource(R.string.assisted_curation_search_song) + " • ${item.singer}"
                 "artist" -> stringResource(R.string.artist_subtitle)
@@ -533,7 +545,7 @@ fun RecentItemRow(
         }
         Icon(
             imageVector = Icons.Default.Close,
-            tint = Color(0xFFB3B3B3),
+            tint = AppMuted,
             modifier = Modifier.pressable(0.96f) { onRemove() }
                 .size(20.dp)
                 ,
@@ -554,7 +566,7 @@ fun SearchSongRow(
     val context = LocalContext.current
     val isLiked = com.music.spotui.di.rememberTrackSaved(song.spotifyTrackId)
     val currentPlayingIndicatorColor =
-        if (song.id == searchViewModel.currentSongId.value) Color(AppPalette.toArgb()) else Color.White
+        if (song.id == searchViewModel.currentSongId.value) Color(AppPalette.toArgb()) else AppText
 
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -571,7 +583,7 @@ fun SearchSongRow(
                     // Start a radio from the tapped track (queue = this song + Spotify
                     // recommendations) rather than queuing the whole search list.
                     searchViewModel.startRadioFromSong(song)
-                    SongPlayer.playSong(song.url, context)
+                    SongPlayer.playSong(song.url, context, songs = listOf(song))
                     searchViewModel.updateSongState(
                         song.coverUri,
                         song.title,
@@ -621,7 +633,7 @@ com.music.spotui.ui.screens.AddButton(song = { song }, liked = isLiked, size = 2
 fun SearchSectionHeader(title: String) {
     Text(
         text = title,
-        color = Color.White,
+        color = AppText,
         fontSize = 18.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(16.dp, 18.dp, 16.dp, 4.dp),
@@ -651,7 +663,7 @@ fun SearchShowRow(show: com.music.spotui.data.entity.PodcastModel, onClick: () -
             contentDescription = "",
         )
         Column {
-            Text(text = show.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(text = show.name, color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text(
                 text = stringResource(R.string.album_type_podcast) + (if (show.publisher.isNotBlank()) " • ${show.publisher}" else ""),
                 color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -683,7 +695,7 @@ fun SearchArtistRow(artist: com.music.spotui.data.entity.ArtistsModel, onClick: 
             contentDescription = "",
         )
         Column {
-            Text(text = artist.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(text = artist.name, color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text(text = stringResource(R.string.artist_subtitle), color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
     }
@@ -712,7 +724,7 @@ fun SearchAlbumRow(album: com.music.spotui.data.entity.AlbumsModel, onClick: () 
             contentDescription = "",
         )
         Column {
-            Text(text = album.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(text = album.name, color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text(text = stringResource(R.string.album) + " • ${album.artists}", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }
@@ -735,7 +747,7 @@ fun SearchPlaylistRow(playlist: com.music.spotui.data.entity.LibraryEntry, onCli
             contentDescription = "",
         )
         Column {
-            Text(text = playlist.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(text = playlist.name, color = AppText, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text(text = stringResource(R.string.assisted_curation_search_playlist) +
                 (if (playlist.subtitle.isNotBlank()) " • ${playlist.subtitle}" else ""),
                 color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -757,14 +769,14 @@ fun BrowseAllSection(onCategoryClick: (genre: String, title: String) -> Unit) {
         val categories = runCatching { app.myspoti.host.android.MyspotiRuntime.api.home.categories() }.getOrDefault(emptyList())
         value = listOf(BrowseTile(NEW_RELEASES_GENRE, newReleases, Color(0xFFE8115B), "")) +
             categories.filter { com.music.spotui.data.api.Features.PODCASTS || !it.title.contains("odcast", ignoreCase = true) }.map { c ->
-                val color = runCatching { Color(android.graphics.Color.parseColor(c.color ?: "#333333")) }.getOrDefault(Color(0xFF333333))
+                val color = runCatching { Color(android.graphics.Color.parseColor(c.color ?: "#333333")) }.getOrDefault(tone(0xFF333333))
                 BrowseTile(c.uri, c.title, color, c.images.firstOrNull()?.url.orEmpty())
             }
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.browse_all),
-            color = Color.White,
+            color = AppText,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 8.dp),
@@ -821,7 +833,7 @@ private fun BrowseCategoryTile(
         }
         Text(
             text = name,
-            color = Color.White,
+            color = AppText,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -838,7 +850,7 @@ fun SearchTopBar() {
             .fillMaxWidth()
             .padding(16.dp)
     ) {
-        Text(text = stringResource(R.string.navigationbar_musicappitems_search_title), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(text = stringResource(R.string.navigationbar_musicappitems_search_title), color = AppText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         //Icon(imageVector = Icons.Default.Person, contentDescription = "", tint = Color.White)
     }
 
@@ -915,8 +927,8 @@ private fun SearchProfileRow(name: String, image: String?, onClick: () -> Unit) 
         )
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Text(stringResource(R.string.recently_played_user_profile), color = Color(0xFFB3B3B3), fontSize = 13.sp)
+            Text(name, color = AppText, fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(stringResource(R.string.recently_played_user_profile), color = AppMuted, fontSize = 13.sp)
         }
     }
 }

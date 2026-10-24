@@ -31,8 +31,12 @@ sealed class Routes(
     object Episodes : Routes(0, "Episodes", "episodes")
     object Recap : Routes(0, "Recap", "recap")
     object Recent : Routes(0, "Recent", "recent")
-    object Spotiflac : Routes(0, "SpotiFLAC", "spotiflac")
+    object Friends : Routes(0, "Friends", "friends")
     object Settings : Routes(0, "Settings", "settings")
+    object Extensions : Routes(0, "Extensions", "extensions")
+    object Extension : Routes(0, "Extension", "extension")
+    /** A repository's extension, before it is installed (by id). */
+    object ExtensionEntry : Routes(0, "ExtensionEntry", "extension-store")
     object Profile : Routes(0, "Profile", "profile")
 }
 

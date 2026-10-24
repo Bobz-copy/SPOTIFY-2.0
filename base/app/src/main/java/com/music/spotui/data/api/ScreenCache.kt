@@ -37,6 +37,14 @@ object ScreenCache {
     /** A playlist page fetched ahead (see PagePrefetch), one file per playlist. */
     fun page(id: String) = Entry("page_$id", com.music.spotui.data.entity.ContextPageModel.serializer())
 
+    /**
+     * The page of a list downloaded as a whole (see OfflineCollections): cover, details and songs
+     * in order, so it opens offline. Never pruned; gone with the list or at logout.
+     */
+    fun offlinePage(id: String) = Entry("offline_page_$id", com.music.spotui.data.entity.ContextPageModel.serializer())
+
+    fun dropOfflinePage(id: String) { io.launch { File(dir, "offline_page_$id.json").delete() } }
+
     /** When the page of [id] was last saved; null when there is none. */
     fun pageSavedAt(id: String): Long? = File(dir, "page_$id.json").takeIf { it.exists() }?.lastModified()
 

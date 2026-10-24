@@ -838,7 +838,7 @@ private val CARD_CORNER = 12.dp
  * revealed through a window that grows from the inline card's bounds (position, size, corner
  * radius, same colour) to the whole page, while its lines rise in staggered; closing plays
  * it backwards into the card. Only graphicsLayer / draw state moves per frame, no recomposition.
- * Without a visible card (swipe-up open, card scrolled away) it slides up as it always did.
+ * Without a visible card (scrolled away) it slides up as it always did.
  */
 @Composable
 fun LyricsOverlay(

@@ -1,5 +1,8 @@
 package com.music.spotui.ui.screens
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -95,10 +98,10 @@ fun WelcomeScreen(onLogin: () -> Unit) {
                             scaleX = s; scaleY = s
                         }
                         .clip(RoundedCornerShape(32.dp))
-                        .background(Color(0xFF181818)),
+                        .background(tone(0xFF181818)),
                 )
                 Spacer(Modifier.height(28.dp))
-                Text("Myspoti", color = Color.White, fontFamily = AppSans, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp,
+                Text("Myspoti", color = AppText, fontFamily = AppSans, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp,
                     modifier = Modifier.rise(1))
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.rise(2)) { Features() }
@@ -121,7 +124,7 @@ fun WelcomeScreen(onLogin: () -> Unit) {
                 }
                 Text(
                     stringResource(R.string.welcome_privacy),
-                    color = Color.White.copy(alpha = 0.5f), fontFamily = AppSans, fontSize = 13.sp, lineHeight = 18.sp,
+                    color = AppText.copy(alpha = 0.5f), fontFamily = AppSans, fontSize = 13.sp, lineHeight = 18.sp,
                     textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp),
                 )
             }
@@ -148,7 +151,6 @@ private fun Features() {
         stringResource(R.string.welcome_rotate_ads),
         stringResource(R.string.welcome_rotate_lyrics),
         stringResource(R.string.welcome_rotate_clips),
-        stringResource(R.string.welcome_rotate_lossless),
         stringResource(R.string.welcome_rotate_offline),
     )
     var index by remember { mutableIntStateOf(0) }
@@ -157,7 +159,7 @@ private fun Features() {
         while (true) { delay(2_400); index = (index + 1) % features.size }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(stringResource(R.string.welcome_lead), color = Color.White.copy(alpha = 0.7f), fontFamily = AppSans,
+        Text(stringResource(R.string.welcome_lead), color = AppText.copy(alpha = 0.7f), fontFamily = AppSans,
             fontSize = 17.sp, textAlign = TextAlign.Center)
         AnimatedContent(
             targetState = index,
@@ -167,7 +169,7 @@ private fun Features() {
             },
             label = "feature",
         ) { i ->
-            Text(features[i], color = Color.White, fontFamily = AppSans, fontWeight = FontWeight.Bold, fontSize = 19.sp,
+            Text(features[i], color = AppText, fontFamily = AppSans, fontWeight = FontWeight.Bold, fontSize = 19.sp,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
         }
     }

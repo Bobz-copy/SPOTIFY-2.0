@@ -47,6 +47,23 @@ object SpotifySync {
     }
 
     /**
+     * Adds many songs at once (a whole album or playlist, read beforehand) at the bottom of one of
+     * the user's playlists, in 100-song requests. Run in the app's scope so closing the sheet
+     * does not cancel it. [onDone] gets whether Spotify took all of it.
+     */
+    fun addUrisToPlaylist(context: Context, playlistId: String, uris: List<String>, onDone: (Boolean) -> Unit = {}) {
+        if (playlistId.isBlank() || uris.isEmpty()) { onDone(false); return }
+        scope.launch {
+            val ok = runCatching { api.playlists.addTracks("spotify:playlist:$playlistId", uris) }
+                .onFailure { Log.w(TAG, "add ${uris.size} songs to $playlistId failed: ${it.message}") }.isSuccess
+            // Part of it may be in even when refused: read the playlist again when asked.
+            membershipCache.remove(playlistId)
+            com.music.spotui.data.offline.OfflineCollections.refreshOne(context.applicationContext, "spotify:playlist:$playlistId")
+            onDone(ok)
+        }
+    }
+
+    /**
      * Takes one row out of a playlist, named by its row id (not by its song: the same song twice
      * in a playlist is two rows, and removing "the song" took both). Without a row id (an old
      * cache) the first row of that song goes, never all of them.
@@ -93,6 +110,17 @@ object SpotifySync {
             val ok = visibilityWrites.withLock {
                 runCatching { api.playlists.setAccess(uri, access) }
                     .onFailure { Log.w(TAG, "access of $uri to $access refused: ${it.message}") }.isSuccess
+            }
+            onDone(ok)
+        }
+    }
+
+    /** Stops a collaboration (owner): collaborators become listeners (private) or leave (public). */
+    fun stopPlaylistCollaboration(uri: String, onDone: (Boolean) -> Unit = {}) {
+        scope.launch {
+            val ok = visibilityWrites.withLock {
+                runCatching { api.playlists.stopCollaboration(uri) }
+                    .onFailure { Log.w(TAG, "stopping the collaboration on $uri refused: ${it.message}") }.isSuccess
             }
             onDone(ok)
         }

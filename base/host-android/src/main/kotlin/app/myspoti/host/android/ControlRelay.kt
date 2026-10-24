@@ -3,6 +3,9 @@ package app.myspoti.host.android
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import app.myspoti.spotify.bridge.IpFamily
+import app.myspoti.spotify.bridge.RelayRoute
+import app.myspoti.spotify.bridge.RelayRoutes
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Cookie
@@ -62,9 +65,15 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .cookieJar(cookies)
+        .eventListener(RelayEvents)
         .build()
+    /** The same client, pinned to one address family (see RelayRoutes). */
+    private val v4Client by lazy { http.newBuilder().dns(FamilyDns(IpFamily.V4)).build() }
+    private val v6Client by lazy { http.newBuilder().dns(FamilyDns(IpFamily.V6)).build() }
+    private val routes get() = ROUTES
 
     fun install() {
+        NetworkReport.logOnce(view.context.applicationContext)
         view.exposeToPlayer("MyspotiNet", ::onMessage)
         val documentStart = androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)
         if (documentStart) androidx.webkit.WebViewCompat.addDocumentStartJavaScript(view, SCRIPT, setOf("https://open.spotify.com"))
@@ -180,59 +189,142 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
             if (debuggable && rewritten != body) Logbook.log("device registered as \"$deviceName\"")
             rewritten
         } else body
+        val asked = android.os.SystemClock.uptimeMillis()
+        // A refused command (or a refused registration) is sent again another way before the page
+        // hears of it (see RelayRoutes): the other address family, then the platform's own stack.
+        val retriable = COMMAND.containsMatchIn(url) || registration
+        val tried = ArrayList<RelayRoute>()
+        var refusal: Answer? = null
+        fun attempt(route: RelayRoute) {
+            tried += route
+            fetch(route, url, method, built, sent) { answer, error ->
+                val via = if (route == RelayRoute.DEFAULT) "" else " via $route"
+                if (answer == null) {
+                    Logbook.log("relay $method ${shortPath(url)} failed$via: $error")
+                    val first = refusal
+                    when {
+                        first != null -> routes.next(tried, null)?.let { attempt(it) } ?: handle(id, url, method, body, registration, asked, first)
+                        // A kept route the network no longer offers (IPv6 gone with the Wi-Fi): this
+                        // request goes the default way; the route stays kept for the next ones.
+                        route != RelayRoute.DEFAULT && RelayRoute.DEFAULT !in tried -> attempt(RelayRoute.DEFAULT)
+                        else -> reply(id, 0, "{}", "")
+                    }
+                    return@fetch
+                }
+                val refused = answer.code == 402 || (registration && answer.code == 403)
+                if (refused && retriable) {
+                    if (refusal == null) { refusal = answer; logRefusal(answer, body) }
+                    val next = routes.next(tried, answer.family)
+                    if (next != null) {
+                        Logbook.log("relay $method ${shortPath(url)} -> ${answer.code}$via (${answer.family ?: "family unknown"}): sent again via $next")
+                        attempt(next)
+                        return@fetch
+                    }
+                }
+                if (refusal != null) {
+                    if (answer.code in 200..299) {
+                        routes.won(route)
+                        Logbook.log("relay: $route answered ${answer.code} where ${tried.first()} was refused: kept for this session")
+                        Logbook.fact("relay route", "$route (taken after a refusal on ${tried.first()})")
+                    } else Logbook.log("relay: refused on every route (${tried.joinToString()})")
+                }
+                handle(id, url, method, body, registration, asked, answer)
+            }
+        }
+        attempt(routes.kept)
+    }
+
+    /** A relayed request's answer, whichever stack carried it. */
+    private class Answer(
+        val code: Int,
+        val headers: List<Pair<String, String>>,
+        val text: String,
+        val protocol: String,
+        val tls: String?,
+        val family: IpFamily?,
+    ) {
+        fun header(name: String) = headers.lastOrNull { it.first.equals(name, true) }?.second
+    }
+
+    private fun clientFor(route: RelayRoute): OkHttpClient = when (route) {
+        RelayRoute.IPV4 -> v4Client
+        RelayRoute.IPV6 -> v6Client
+        else -> http
+    }
+
+    /** Sends one relayed request over [route]; [done] gets the answer, or null and why it failed. */
+    private fun fetch(route: RelayRoute, url: String, method: String, headers: Headers, sent: String?, done: (Answer?, String?) -> Unit) {
+        if (route == RelayRoute.HTTP_ENGINE && android.os.Build.VERSION.SDK_INT >= 34) {
+            PlatformStack.fetch(view.context.applicationContext, url, method, headers, sent) { code, heads, text, protocol, error ->
+                done(if (error == null) Answer(code, heads, text, protocol, null, null) else null, error)
+            }
+            return
+        }
         // Bytes, not a String body: OkHttp would append "; charset=utf-8" to the content type.
         val payload = if (method == "GET" || method == "HEAD") null else (sent ?: "").toByteArray().toRequestBody(null)
-        val request = Request.Builder().url(url).headers(built).method(method, payload).build()
-        val asked = android.os.SystemClock.uptimeMillis()
-        http.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Logbook.log("relay $method ${shortPath(url)} failed: ${e.message}")
-                reply(id, 0, "{}", "")
-            }
+        val tag = RelayTag()
+        val request = Request.Builder().url(url).headers(headers).method(method, payload).tag(RelayTag::class.java, tag).build()
+        clientFor(route).newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = done(null, e.message)
 
             override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    val out = JSONObject()
-                    it.headers.names().forEach { name -> out.put(name, it.header(name)) }
-                    val text = it.body.string()
-                    val net = android.os.SystemClock.uptimeMillis() - asked
-                    Logbook.log("relay $method ${shortPath(url)} -> ${it.code} in $net ms")
-                    if (it.code >= 400) Logbook.log("relay error body: ${text.take(400)}")
-                    if (it.code in 200..299 && method == "POST" && url.substringBefore('?').endsWith("/track-playback/v1/devices")) onDeviceRegistered?.invoke()
-                    // B3 (402 on some free accounts): what a tester's report must carry to tell the
-                    // causes apart — the refusal's own headers, and what the refused command asked
-                    // (the license the page put in it, a picked song or not). No ids, no cookies.
-                    if (it.code == 402) {
-                        val heads = it.headers.names().filterNot { n -> n.equals("set-cookie", true) || n.startsWith("authorization", true) }
-                            .joinToString(", ") { n -> "$n=${it.header(n)?.take(80)}" }
-                        Logbook.log("refusal headers (${it.protocol}, ${it.handshake?.tlsVersion?.javaName ?: "no tls"}): $heads")
-                        if (body != null) Logbook.log("refused command: ${commandSummary(body)}")
+                val answer = runCatching {
+                    response.use {
+                        Answer(it.code, it.headers.map { h -> h.first to h.second }, it.body.string(), it.protocol.toString(),
+                            it.handshake?.tlsVersion?.javaName, tag.family)
                     }
-                    if (registration) Regex("\"effective_license\"\\s*:\\s*\"([^\"]*)\"").find(text)
-                        ?.let { m -> Logbook.log("registration: effective_license=${m.groupValues[1]}") }
-                    if (registration && it.code in 200..299) Logbook.log("registration answer: ${registrationSummary(text)}")
-                    // What Spotify holds for this account's devices (this player's license, whether
-                    // it may play, another device active): the cluster comes back on joining and
-                    // on every cluster read, the one the page makes after a refused command.
-                    if (it.code in 200..299 && (url.contains("/connect-state/v1/cluster") || (method == "PUT" && url.contains("/connect-state/v1/devices/"))))
-                        clusterSummary(text, self)?.let { s -> Logbook.log("cluster: $s") }
-                    if (debuggable && registration) Logbook.log("registration answered: ${text.take(500)}")
-                    if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
-                    // An ad in the queue Spotify sends: the song before it goes on to the next song
-                    // instead, before the page sees the queue (see AdBlock.withoutAds).
-                    val given = if (url.contains("/track-playback/")) app.myspoti.spotify.bridge.AdBlock.withoutAds(text) else null
-                    given?.second?.forEach { note -> Logbook.log("ad left out: $note") }
-                    val sent = given?.first ?: text
-                    // Both ways on from this song lead to the ad: the player plays the next song
-                    // just before this one ends (AdBlock.adAhead).
-                    if (url.contains("/track-playback/")) app.myspoti.spotify.bridge.AdBlock.adAhead(sent)?.let { a ->
-                        if (app.myspoti.spotify.bridge.AdBlock.ahead.value != a) Logbook.log("ad ahead: ${a.nextUri} is played before the end")
-                        app.myspoti.spotify.bridge.AdBlock.ahead.value = a
-                    }
-                    reply(id, it.code, out.toString(), sent)
                 }
+                done(answer.getOrNull(), answer.exceptionOrNull()?.message)
             }
         })
+    }
+
+    // B3 (402 on some free accounts): what a tester's report must carry to tell the causes apart —
+    // the refusal's own headers, and what the refused command asked (the license the page put in
+    // it, a picked song or not). No ids, no cookies.
+    private fun logRefusal(answer: Answer, body: String?) {
+        val heads = answer.headers.map { it.first }.distinct()
+            .filterNot { n -> n.equals("set-cookie", true) || n.startsWith("authorization", true) }
+            .joinToString(", ") { n -> "$n=${answer.header(n)?.take(80)}" }
+        Logbook.log("refusal headers (${answer.protocol}, ${answer.tls ?: "no tls"}, ${answer.family ?: "family unknown"}): $heads")
+        if (body != null) Logbook.log("refused command: ${commandSummary(body)}")
+    }
+
+    /** What the page gets back, and what the logs keep of it. */
+    private fun handle(id: Int, url: String, method: String, body: String?, registration: Boolean, asked: Long, it: Answer) {
+        val out = JSONObject()
+        it.headers.forEach { (name, value) -> out.put(name, value) }
+        val text = it.text
+        val net = android.os.SystemClock.uptimeMillis() - asked
+        Logbook.log("relay $method ${shortPath(url)} -> ${it.code} in $net ms")
+        if (it.code >= 400) Logbook.log("relay error body: ${text.take(400)}")
+        if (it.code in 200..299 && method == "POST" && url.substringBefore('?').endsWith("/track-playback/v1/devices")) onDeviceRegistered?.invoke()
+        if (it.code == 402 && !(COMMAND.containsMatchIn(url) || registration)) logRefusal(it, body)
+        if (registration) Regex("\"effective_license\"\\s*:\\s*\"([^\"]*)\"").find(text)
+            ?.let { m -> Logbook.log("registration: effective_license=${m.groupValues[1]}") }
+        if (registration && it.code in 200..299) Logbook.log("registration answer: ${registrationSummary(text)}")
+        if (registration) Logbook.fact("registration", "${it.code}" + (Regex("\"effective_license\"\\s*:\\s*\"([^\"]*)\"").find(text)?.let { m -> " effective_license=${m.groupValues[1]}" } ?: ""))
+        // What Spotify holds for this account's devices (this player's license, whether
+        // it may play, another device active): the cluster comes back on joining and
+        // on every cluster read, the one the page makes after a refused command.
+        if (it.code in 200..299 && (url.contains("/connect-state/v1/cluster") || (method == "PUT" && url.contains("/connect-state/v1/devices/"))))
+            clusterSummary(text, self)?.let { s -> Logbook.log("cluster: $s"); Logbook.fact("devices", s) }
+        if (debuggable && registration) Logbook.log("registration answered: ${text.take(500)}")
+        if (debuggable && AD_MARK.containsMatchIn(text)) keepAdSample(method, url, body, text)
+        // An ad in the queue Spotify sends: the song before it goes on to the next song
+        // instead, before the page sees the queue (see AdBlock.withoutAds).
+        val given = if (url.contains("/track-playback/")) app.myspoti.spotify.bridge.AdBlock.withoutAds(text) else null
+        given?.second?.forEach { note -> Logbook.log("ad left out: $note") }
+        val sent = given?.first ?: text
+        // The songs' media manifests, for extensions to read (spotify.media).
+        if (it.code in 200..299 && url.contains("/track-playback/")) app.myspoti.spotify.bridge.MediaManifests.record(sent)
+        // Both ways on from this song lead to the ad: the player plays the next song
+        // just before this one ends (AdBlock.adAhead).
+        if (url.contains("/track-playback/")) app.myspoti.spotify.bridge.AdBlock.adAhead(sent)?.let { a ->
+            if (app.myspoti.spotify.bridge.AdBlock.ahead.value != a) Logbook.log("ad ahead: ${a.nextUri} is played before the end")
+            app.myspoti.spotify.bridge.AdBlock.ahead.value = a
+        }
+        reply(id, it.code, out.toString(), sent)
     }
 
     private fun reply(id: Int, status: Int, headersJson: String, body: String) {
@@ -300,11 +392,10 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
          * removes it; the playback commands were only the first ones (that header alone was enough to
          * silence them). One rule on Spotify's side is all it takes to flag every install.
          *
-         * Only the playback commands and states are on the list. The play telemetry (`melody`,
-         * `gabo-receiver-service`) was added in 2.0.2-beta.1 and that beta's page never registered
-         * its playback device on a free account ("Device not found", nothing plays): it leaves from
-         * the WebView again, as in 2.0.1, until it is proven harmless on a phone. Widening this to
-         * everything else broke the page too (protobuf and binary bodies, see the notes).
+         * The playback commands and states are on the list, and the play reports ([REPORTS]).
+         * `gabo-receiver-service` (product analytics, it counts no listen) leaves from the WebView,
+         * as in 2.0.1. Widening this to everything else broke the page (protobuf and binary
+         * bodies, see the notes).
          *
          * Login and consent hosts stay out: their flows post forms and redirect, and a relay would
          * have to reproduce every step exactly to sign in.
@@ -312,7 +403,25 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
         private val RELAYED = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/(connect-state|track-playback)/v1/")
         private val NOT_RELAYED = Regex("^https://(accounts|challenge|www)\\.spotify\\.com/")
 
-        fun isRelayed(url: String) = RELAYED.containsMatchIn(url) && !NOT_RELAYED.containsMatchIn(url)
+        /**
+         * The play reports: `melody/v1/msg/batch`, base64 JSON text that tells Spotify what was
+         * played and for how long (`jssdk_playback_start`, `track_stream_verification` with the
+         * milliseconds really heard). With the playback states, they are what puts a song in the
+         * account's history and Wrapped; they left the WebView with the package-name header on
+         * them, and plays streamed here were not counted. Only the batches: `melody/v1/time` and
+         * `melody/v1/license_url` (the Widevine licence's address) stay with the WebView.
+         *
+         * The page relays them only once its playback device is registered (see [SCRIPT]): in
+         * 2.0.2-beta.1, which relayed them from the start along with a Widevine probe at boot, the
+         * page never registered its device on a free account. Until the registration is answered
+         * the page boots exactly as 2.0.1 did.
+         */
+        private val REPORTS = Regex("^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.spotify\\.com/melody/v1/msg/")
+
+        fun isRelayed(url: String) = (RELAYED.containsMatchIn(url) || REPORTS.containsMatchIn(url)) && !NOT_RELAYED.containsMatchIn(url)
+
+        /** The route kept for this session, shared by every page and WebView of the process. */
+        private val ROUTES = RelayRoutes(engineAvailable = android.os.Build.VERSION.SDK_INT >= 34)
 
         private val COMMAND = Regex("/connect-state/v1/(player/command|connect/transfer)/")
 
@@ -423,6 +532,11 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               };
               const relayed = /^https:\/\/([a-z0-9-]+\.)*spotify\.com\/(connect-state|track-playback)\/v1\//;
               const notRelayed = /^https:\/\/(accounts|challenge|www)\.spotify\.com\//;
+              // The play reports (REPORTS on the host side), relayed only once this page's device
+              // is registered: until then the page boots exactly as in 2.0.1.
+              const reports = /^https:\/\/([a-z0-9-]+\.)*spotify\.com\/melody\/v1\/msg\//;
+              const registration = /^https:\/\/([a-z0-9-]+\.)*spotify\.com\/track-playback\/v1\/devices(\?|$)/;
+              let registered = false;
               const pending = new Map();
               let seq = 0;
               const original = window.fetch;
@@ -430,9 +544,15 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               // A refused play or transfer (free accounts in some countries): the app tries another way.
               // late: the command was acknowledged but nothing played (see trust): the host judges it
               // more than its usual few seconds after the play.
-              const tell = (status, url, late) => {
+              // kind: what was refused (a transfer, or the command's endpoint: play, seek_to...). The
+              // app stops trying other ways once two kinds were refused: the account is refused everything.
+              const kindOf = (url, body) => {
+                if (/connect\/transfer/.test(url)) return 'transfer';
+                try { const c = JSON.parse(body).command; return (c && c.endpoint) || 'command'; } catch (e) { return 'command'; }
+              };
+              const tell = (status, url, late, body) => {
                 if ((status === 402 || status === 403) && command.test(url) && window.MyspotiHost) {
-                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, late: !!late, path: url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
+                  try { window.MyspotiHost.postMessage(JSON.stringify({ type: 'refused', status, late: !!late, kind: kindOf(url, body), path: url.split('?')[0].replace(/^.*\/v1\//, '').replace(/\/from\/.*$/, '') })); } catch (e) { /* host gone */ }
                 }
               };
               const note = (value) => { try { window.MyspotiNet.postMessage(JSON.stringify(Object.assign({ type: 'direct' }, value))); } catch (e) { /* host gone */ } };
@@ -442,7 +562,7 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
               // it took. Kept only if something plays within 10 s: a command sent from the page can
               // be acknowledged and never delivered (X-Requested-With, see above).
               const plays = () => [...media].some(m => !m.paused && !m.ended && m.readyState > 2);
-              const trust = (url) => {
+              const trust = (url, body) => {
                 if (window.__mspDirect) return;
                 window.__mspDirect = true;
                 setTimeout(() => {
@@ -453,15 +573,16 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                   // started (reported after 2.0.1: "I can press play, the clock moves, nothing
                   // plays"). Told as a refusal, so the app's fallbacks run and, failing all of
                   // them, the user is told instead of left on a silent player.
-                  if (!kept) tell(402, url, true);
+                  if (!kept) tell(402, url, true, body);
                 }, 10000);
               };
-              const direct = (url, init) => original.call(window, url, init).then(r => { tell(r.status, url); return r; });
+              const direct = (url, init) => original.call(window, url, init).then(r => { tell(r.status, url, false, init && init.body); return r; });
               window.__mspNetDone = (id, status, headers, body) => {
                 const p = pending.get(id);
                 if (!p) return;
                 pending.delete(id);
                 if (!status) return p.reject(new TypeError('Failed to fetch'));
+                if (status >= 200 && status < 300 && p.method === 'POST' && registration.test(p.url)) registered = true;
                 const relayedAnswer = () => {
                   const noBody = status === 204 || status === 205 || status === 304;
                   return new Response(noBody ? null : body, { status, headers: JSON.parse(headers) });
@@ -469,25 +590,28 @@ internal class ControlRelay(private val view: WebView, private val fingerprint: 
                 if (status === 402 && command.test(p.url) && !window.__mspDirect) {
                   original.call(window, p.url, p.init).then(r => {
                     note({ status: r.status });
-                    if (r.ok) trust(p.url); else tell(r.status, p.url);
+                    const sentBody = p.init && p.init.body;
+                    if (r.ok) trust(p.url, sentBody); else tell(r.status, p.url, false, sentBody);
                     p.resolve(r);
-                  }, () => { tell(status, p.url); p.resolve(relayedAnswer()); });
+                  }, () => { tell(status, p.url, false, p.init && p.init.body); p.resolve(relayedAnswer()); });
                   return;
                 }
-                tell(status, p.url);
+                tell(status, p.url, false, p.init && p.init.body);
                 p.resolve(relayedAnswer());
               };
               window.fetch = function (input, init) {
                 const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : null);
                 const body = init && init.body;
-                if (!url || !relayed.test(url) || notRelayed.test(url) || (body != null && typeof body !== 'string')) return original.apply(this, arguments);
+                const report = registered && !!url && reports.test(url) && typeof body === 'string' &&
+                  ((init && init.method) || 'GET').toUpperCase() === 'POST';
+                if (!url || !(relayed.test(url) || report) || notRelayed.test(url) || (body != null && typeof body !== 'string')) return original.apply(this, arguments);
                 if (window.__mspDirect && command.test(url)) return direct(url, init);
                 const headers = {};
                 new Headers((init && init.headers) || {}).forEach((v, k) => { headers[k] = v; });
                 const method = ((init && init.method) || 'GET').toUpperCase();
                 return new Promise((resolve, reject) => {
                   const id = ++seq;
-                  pending.set(id, { resolve, reject, url, init });
+                  pending.set(id, { resolve, reject, url, init, method });
                   window.MyspotiNet.postMessage(JSON.stringify({ id, url, method, headers, body: body == null ? null : body }));
                 });
               };

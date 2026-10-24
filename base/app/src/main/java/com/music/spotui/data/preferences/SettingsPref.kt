@@ -112,6 +112,22 @@ object CrossfadePref {
     }
 }
 
+/**
+ * "Music videos": the video button in the player, the lookup behind it and a clip that starts
+ * by itself on the next song. On by default; off, the player is audio (and Canvas) only.
+ */
+object MusicVideoPref {
+    private const val KEY = "music_video_enabled"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, true))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+        if (!value) com.music.spotui.video.MusicVideoController.setOn(false)
+    }
+}
+
 fun getCrossfadeSeconds(c: Context): Int =
     prefs(c).getInt(KEY_CROSSFADE, 0).coerceIn(0, CrossfadePref.MAX)
 

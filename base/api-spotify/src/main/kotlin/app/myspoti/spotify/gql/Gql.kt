@@ -150,6 +150,48 @@ class SpotifyHttp(
         return result
     }
 
+    /** What [sendRaw] got back: the status, lower-case header names (values joined by ", "), the body text. */
+    data class RawResponse(val status: Int, val headers: Map<String, String>, val body: String)
+
+    /**
+     * Any method on a Spotify address, for the extensions' raw door. `*.spotify.com` gets the
+     * account's credentials as every other call here (web token, client token, the Web Player's
+     * headers); `*.spotifycdn.com` (public files) gets none. Other hosts, plain http, and caller
+     * headers that would replace the credentials are refused or dropped. No X-Requested-With.
+     */
+    suspend fun sendRaw(method: String, url: String, body: ByteArray?, headers: Map<String, String>): RawResponse {
+        val target = url.toHttpUrl()
+        val kind = rawTarget(target.scheme, target.host) ?: throw IllegalArgumentException("not a Spotify address: ${target.host}")
+        val m = method.uppercase()
+        require(m in RAW_METHODS) { "method $method" }
+        val extra = headers.filterKeys { it.lowercase() !in RAW_DROPPED }
+        val contentType = extra.entries.firstOrNull { it.key.equals("content-type", true) }?.value ?: JSON_TYPE
+        val builder = Request.Builder().url(target)
+        if (kind == RawTarget.ACCOUNT) {
+            val (w, c) = tokens()
+            builder.header("authorization", "Bearer ${w.access}")
+                .header("client-token", c.value)
+                .header("app-platform", "WebPlayer")
+                .header("spotify-app-version", w.appVersion)
+                .header("origin", "https://open.spotify.com")
+                .header("referer", "https://open.spotify.com/")
+        }
+        builder.header("accept", "application/json").header("accept-language", language)
+            .header("user-agent", browserUserAgent ?: USER_AGENT)
+        extra.forEach { (k, v) -> if (!k.equals("content-type", true)) builder.header(k, v) }
+        val payload = body?.toRequestBody(contentType.toMediaType())
+            ?: if (m == "GET" || m == "HEAD" || m == "DELETE") null else ByteArray(0).toRequestBody(null)
+        builder.method(m, payload)
+        val result = withContext(Dispatchers.IO) {
+            http.newCall(builder.build()).execute().use { r ->
+                RawResponse(r.code, r.headers.names().associate { n -> n.lowercase() to r.headers.values(n).joinToString(", ") },
+                    if (m == "HEAD") "" else r.body.string())
+            }
+        }
+        if (result.status == 401 && kind == RawTarget.ACCOUNT) lock.withLock { web = null }
+        return result
+    }
+
     suspend fun getJson(url: String): JsonElement? {
         val (code, text) = send("GET", url)
         return when (code) {
@@ -195,7 +237,28 @@ class SpotifyHttp(
         return ClientToken(granted["token"]!!.jsonPrimitive.content, System.currentTimeMillis() + seconds * 1000)
     }
 
+    /** Who a raw request may go to: the account's own hosts (with its credentials) or Spotify's public CDN. */
+    enum class RawTarget { ACCOUNT, PUBLIC }
+
     companion object {
+        private val RAW_METHODS = setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE")
+        /** The credentials and what the transport sets itself: never taken from an extension. */
+        private val RAW_DROPPED = setOf(
+            "authorization", "client-token", "cookie", "host", "content-length", "connection", "transfer-encoding",
+            "x-requested-with", "origin", "referer", "app-platform", "spotify-app-version",
+        )
+
+        /** [RawTarget] for https on `spotify.com` / `*.spotify.com` / `spotifycdn.com` / `*.spotifycdn.com`; null for anything else. */
+        fun rawTarget(scheme: String, host: String): RawTarget? {
+            if (scheme != "https") return null
+            val h = host.lowercase()
+            return when {
+                h == "spotify.com" || h.endsWith(".spotify.com") -> RawTarget.ACCOUNT
+                h == "spotifycdn.com" || h.endsWith(".spotifycdn.com") -> RawTarget.PUBLIC
+                else -> null
+            }
+        }
+
         /** How long a signed-in check answers from the token just fetched (see isSignedIn). */
         const val SIGNED_IN_FRESH_MS = 10_000L
         const val JSON_TYPE = "application/json;charset=UTF-8"

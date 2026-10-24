@@ -211,7 +211,7 @@ fun PlayerScreen(navController: NavController) {
 
     // Known cover (warmed by the mini player): the colour is there from the first frame.
     var coverColor by remember {
-        mutableStateOf(Palette.cachedSecond(songCoverUri) ?: Color(AppBackground.toArgb()))
+        mutableStateOf(Palette.cachedSecond(songCoverUri) ?: Color(0xFF121212))
     }
     LaunchedEffect(songCoverUri) {
         // Known: kept as it is (extracted again it could come out a shade off, and the background
@@ -342,17 +342,19 @@ fun PlayerScreen(navController: NavController) {
         onDispose { mv.detachPlayerScreen() }
     }
     LaunchedEffect(actualTrackId, songTitle, audioBuffering) {
-        if (!audioBuffering) mv.prepare(actualTrackId, songTitle, songSinger, SongPlayer.getDuration())
+        // Settings, "Music videos" off: no lookup, no button, no clip.
+        if (!audioBuffering && com.music.spotui.data.preferences.MusicVideoPref.on) mv.prepare(actualTrackId, songTitle, songSinger, SongPlayer.getDuration())
     }
     val remote = SongPlayer.activeDevice.value != null
     val readyVideo = mv.state.value as? com.music.spotui.video.MusicVideoController.State.Ready
     val videoMatchesTrack = displayedTrackId.isNotBlank() && actualTrackId == displayedTrackId && readyVideo?.trackId == actualTrackId
-    val videoReady = videoMatchesTrack && !remote && !audioBuffering && !com.music.spotui.data.DataSaver.active
+    val videoReady = videoMatchesTrack && !remote && !audioBuffering && !com.music.spotui.data.DataSaver.active &&
+            com.music.spotui.data.preferences.MusicVideoPref.on
     // Switching to mobile data with the data saver on stops a clip that is playing.
     LaunchedEffect(com.music.spotui.data.DataSaver.active) {
         if (com.music.spotui.data.DataSaver.active && mv.on.value) mv.setOn(false)
     }
-    val videoOn = mv.on.value && videoMatchesTrack && !remote
+    val videoOn = mv.on.value && videoMatchesTrack && !remote && com.music.spotui.data.preferences.MusicVideoPref.on
     // Canvas / clip players are built once the sheet has finished rising (then kept):
     // creating them in the first frame stalled it and the slide jumped.
     val settled by com.music.spotui.ui.navigation.LocalPageSettled.current
@@ -654,6 +656,9 @@ fun PlayerScreen(navController: NavController) {
                     onDevices = { showDevices = true },
                     onQueue = { showQueue = true },
                 )
+                // Buttons from extensions (player.buttons), under the player's own controls.
+                val extTrack = androidx.compose.runtime.remember(songTitle, songSinger) { com.music.spotui.extensions.Extensions.currentTrack() }
+                com.music.spotui.extensions.ExtensionPlayerButtons(extTrack)
                 // 8dp card margin + this = the official 37dp from the buttons' centre to the card.
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -1048,9 +1053,9 @@ fun PlayerInfo(
                 )
             }
         }
-        // No like for a local file (not in the Spotify library), and none during an ad break:
-        // the + would save the song from before the break.
-        if (!adPlaying && !com.music.spotui.di.LocalPlayer.active.value) {
+        // No like for a file of the device (not in the Spotify library; an extension's stream or a
+        // download is), and none during an ad break: the + would save the song from before the break.
+        if (!adPlaying && SongPlayer.canLike) {
             if (likeSong != null) AddButton(song = likeSong, liked = liked, onLike = onLikeClick)
             else LikeButton(liked = liked, onClick = onLikeClick)
         }
@@ -1339,16 +1344,31 @@ fun PlayerConnectRow(
                 modifier = Modifier.size(24.dp),
                 contentDescription = stringResource(R.string.mr_user_route_category_name),
             )
-            Text(
-                text = com.music.spotui.ui.components.activeDeviceLabel(),
-                color = com.music.spotui.ui.theme.AppAccent,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .padding(start = 6.dp)
-                    .widthIn(max = 200.dp),
-            )
+            Column(modifier = Modifier.padding(start = 6.dp).widthIn(max = 220.dp)) {
+                Text(
+                    text = com.music.spotui.ui.components.activeDeviceLabel(),
+                    color = com.music.spotui.ui.theme.AppAccent,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                // What the sound is when Myspoti's own player plays it (an extension's stream, a
+                // download); a tap opens what plays and its quality.
+                val source = com.music.spotui.ui.components.playingSourceLabel()
+                var quality by remember { mutableStateOf(false) }
+                if (quality) com.music.spotui.ui.components.QualitySheet { quality = false }
+                if (source.isNotBlank()) Text(
+                    text = source,
+                    color = com.music.spotui.ui.theme.AppMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { quality = true },
+                )
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             var shareMenu by remember { mutableStateOf(false) }

@@ -31,6 +31,11 @@ class MyspotiApplication : Application() {
                 AutoBrowser.children(context, parentId)
             override suspend fun search(query: String): List<MediaBrowserCompat.MediaItem> = AutoBrowser.search(query)
         }
+        // The report's header: the extensions installed, with their versions.
+        app.myspoti.host.android.Logbook.headerExtras = {
+            val all = com.music.spotui.extensions.Extensions.registry.value.extensions
+            listOf("extensions" to (all.joinToString { "${it.id} ${it.version}${if (it.enabled) "" else " (off)"}" }.ifEmpty { "none" }))
+        }
         prefetch()
     }
 

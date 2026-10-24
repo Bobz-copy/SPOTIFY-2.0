@@ -1,5 +1,8 @@
 package com.music.spotui
 
+import com.music.spotui.ui.theme.tone
+import com.music.spotui.ui.theme.AppText
+
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
@@ -51,6 +54,9 @@ fun App() {
             Routes.Album.route -> bottomBarState.value = false
         }
     }
+
+    // Debug and beta builds: `myspoti-cli nav <route>` (see CliReceiver).
+    LaunchedEffect(Unit) { com.music.spotui.cli.CliReceiver.nav.collect { r -> runCatching { navController.navigate(r) } } }
 
     UpdatePrompt()
     SupportPrompt()
@@ -157,6 +163,8 @@ private fun SupportPrompt() {
  */
 @Composable
 private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onSponsor: () -> Unit, onDecline: () -> Unit, onSupported: (com.music.spotui.data.api.SupportReminder.Level) -> Unit) {
+    // The owner's reminder: no extension draws, listens or acts over it.
+    com.music.spotui.extensions.ProtectedSurfaceEffect(app.myspoti.extensions.ProtectedSurface.SUPPORT)
     var choosing by androidx.compose.runtime.remember { mutableStateOf(false) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDecline) {
         androidx.compose.foundation.layout.Column(
@@ -164,25 +172,25 @@ private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onSponsor: 
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                .background(androidx.compose.ui.graphics.Color(0xFF242424))
+                .background(tone(0xFF242424))
                 .padding(horizontal = 24.dp, vertical = 28.dp),
         ) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(app.myspoti.engine.R.drawable.ic_launcher_foreground),
                 contentDescription = null,
                 modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                    .background(androidx.compose.ui.graphics.Color(0xFF181818)),
+                    .background(tone(0xFF181818)),
             )
             androidx.compose.material3.Text(
                 androidx.compose.ui.res.stringResource(if (supporter) app.myspoti.engine.R.string.supporter_thanks_title else app.myspoti.engine.R.string.support_title),
-                color = androidx.compose.ui.graphics.Color.White, fontFamily = com.music.spotui.ui.theme.AppSans,
+                color = AppText, fontFamily = com.music.spotui.ui.theme.AppSans,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 20.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(top = 18.dp),
             )
             androidx.compose.material3.Text(
                 androidx.compose.ui.res.stringResource(if (supporter) app.myspoti.engine.R.string.supporter_thanks_body else app.myspoti.engine.R.string.support_body),
-                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                color = AppText.copy(alpha = 0.8f),
                 fontFamily = com.music.spotui.ui.theme.AppSans, fontSize = 14.sp, lineHeight = 20.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(top = 12.dp),
@@ -206,7 +214,7 @@ private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onSponsor: 
             com.music.spotui.ui.components.GitHubSponsorButton(Modifier.padding(top = 10.dp), onClick = onSponsor)
             androidx.compose.material3.Text(
                 androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.support_decline),
-                color = androidx.compose.ui.graphics.Color.White, fontFamily = com.music.spotui.ui.theme.AppSans,
+                color = AppText, fontFamily = com.music.spotui.ui.theme.AppSans,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 15.sp,
                 modifier = Modifier.padding(top = 8.dp).pressable(0.96f, onClick = onDecline).padding(horizontal = 24.dp, vertical = 12.dp),
             )
@@ -217,7 +225,7 @@ private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onSponsor: 
                 ) { com.music.spotui.ui.components.SupportChoice(onChosen = onSupported) }
                 else androidx.compose.material3.Text(
                     androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.supporter_i_supported),
-                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f), fontFamily = com.music.spotui.ui.theme.AppSans,
+                    color = AppText.copy(alpha = 0.6f), fontFamily = com.music.spotui.ui.theme.AppSans,
                     fontSize = 13.sp,
                     modifier = Modifier.pressable(0.96f) { choosing = true }.padding(horizontal = 24.dp, vertical = 8.dp),
                 )
@@ -239,6 +247,7 @@ private fun UpdatePrompt() {
     }
     updateCardOpen.value = release != null
     val r = release ?: return
+    com.music.spotui.extensions.ProtectedSurfaceEffect(app.myspoti.extensions.ProtectedSurface.UPDATE)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val updater = com.music.spotui.data.api.AppUpdater
     val state by updater.state.collectAsState()
@@ -305,36 +314,36 @@ private fun UpdateDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                .background(androidx.compose.ui.graphics.Color(0xFF242424))
+                .background(tone(0xFF242424))
                 .padding(horizontal = 24.dp, vertical = 28.dp),
         ) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(app.myspoti.engine.R.drawable.ic_launcher_foreground),
                 contentDescription = null,
                 modifier = Modifier.size(72.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                    .background(androidx.compose.ui.graphics.Color(0xFF181818)),
+                    .background(tone(0xFF181818)),
             )
             androidx.compose.material3.Text(
                 androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.main_update_available),
-                color = androidx.compose.ui.graphics.Color.White, fontFamily = com.music.spotui.ui.theme.AppSans,
+                color = AppText, fontFamily = com.music.spotui.ui.theme.AppSans,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 20.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(top = 18.dp),
             )
             androidx.compose.material3.Text(
-                "Myspoti $version", color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
+                "Myspoti $version", color = AppText.copy(alpha = 0.7f),
                 fontFamily = com.music.spotui.ui.theme.AppSans, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp),
             )
             // What's new (the release's CHANGELOG section), scrollable if long.
             if (notes.isNotBlank()) androidx.compose.material3.Text(
-                notes, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                notes, color = AppText.copy(alpha = 0.8f),
                 fontFamily = com.music.spotui.ui.theme.AppSans, fontSize = 14.sp, lineHeight = 20.sp,
                 modifier = Modifier.padding(top = 16.dp).fillMaxWidth().heightIn(max = 240.dp)
                     .verticalScroll(androidx.compose.foundation.rememberScrollState()),
             )
             // The download and install, under the notes.
             if (status != null) androidx.compose.material3.Text(
-                status, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                status, color = AppText.copy(alpha = 0.8f),
                 fontFamily = com.music.spotui.ui.theme.AppSans, fontSize = 14.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
@@ -342,10 +351,10 @@ private fun UpdateDialog(
             if (progress != null) {
                 val bar = Modifier.padding(top = 10.dp).fillMaxWidth().height(4.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
                 if (progress < 0f) androidx.compose.material3.LinearProgressIndicator(
-                    modifier = bar, color = com.music.spotui.ui.theme.AppAccent, trackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.15f))
+                    modifier = bar, color = com.music.spotui.ui.theme.AppAccent, trackColor = AppText.copy(alpha = 0.15f))
                 else androidx.compose.material3.LinearProgressIndicator(
                     progress = { progress }, modifier = bar, color = com.music.spotui.ui.theme.AppAccent,
-                    trackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.15f), drawStopIndicator = {})
+                    trackColor = AppText.copy(alpha = 0.15f), drawStopIndicator = {})
             }
             androidx.compose.foundation.layout.Box(
                 contentAlignment = androidx.compose.ui.Alignment.Center,
@@ -365,7 +374,7 @@ private fun UpdateDialog(
             }
             androidx.compose.material3.Text(
                 androidx.compose.ui.res.stringResource(app.myspoti.engine.R.string.age_assurance_intro_cta_not_now),
-                color = androidx.compose.ui.graphics.Color.White, fontFamily = com.music.spotui.ui.theme.AppSans,
+                color = AppText, fontFamily = com.music.spotui.ui.theme.AppSans,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 15.sp,
                 modifier = Modifier.padding(top = 8.dp).pressable(0.96f, onClick = onLater).padding(horizontal = 24.dp, vertical = 12.dp),
             )

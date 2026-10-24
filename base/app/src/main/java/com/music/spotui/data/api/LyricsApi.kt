@@ -102,12 +102,29 @@ object LyricsApi {
         return job.await()
     }
 
-    private suspend fun resolve(track: Track): Lyrics? {
-        val result = if (wordSync) wordFirst(track) else fromSpotify(track) ?: lineFallbacks(track)
+    private suspend fun resolve(track: Track): Lyrics? = coroutineScope {
+        // Extensions that provide lyrics are asked at the same time as the app's own sources
+        // (each within its time limit); the better answer is kept (LyricsMerge), Spotify's own
+        // complete lyrics first at the same level, and then the extensions are not waited for.
+        val ext = if (extensionsAsked()) async {
+            runCatching {
+                com.music.spotui.extensions.Extensions.lyricsFor(track.trackId, track.title, track.artist, track.album, track.durationMs, track.coverUrl)
+            }.getOrNull()
+        } else null
+        val own = if (wordSync) wordFirst(track) else fromSpotify(track) ?: lineFallbacks(track)
+        val fromExt = when {
+            ext == null -> null
+            own != null && com.music.spotui.extensions.LyricsMerge.rank(own) == 3 && com.music.spotui.extensions.LyricsMerge.isSpotifyComplete(own) -> { ext.cancel(); null }
+            else -> ext.await()
+        }
+        val result = com.music.spotui.extensions.LyricsMerge.choose(own, fromExt)
         cache[track.key] = result ?: Miss()
         Log.d("LyricsApi", "${track.title}: ${result?.let { "${it.lines.size} lines from ${it.provider}, synced=${it.synced}, words=${it.wordSynced}" } ?: "none"}")
-        return result
+        result
     }
+
+    /** Whether lyrics extensions are installed and running (false in unit tests: no app). */
+    private fun extensionsAsked(): Boolean = runCatching { com.music.spotui.extensions.Extensions.hasLyrics() }.getOrDefault(false)
 
     /**
      * "Word by word" (the setting): the sources with each word's time come first — Spotify's own

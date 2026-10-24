@@ -189,3 +189,32 @@ object AdBlock {
         body.replace("\"$old\"", "\"$quoted\"")
     }.getOrDefault(body)
 }
+
+/**
+ * The media manifests Spotify sent the player: each song of a track-playback reply's state
+ * machines, its `manifest` (formats and file ids) as it came. Read by extensions
+ * (`spotify.media`), never changed; the last [MAX] songs are kept.
+ */
+object MediaManifests {
+    private const val MAX = 200
+    private val byUri = object : LinkedHashMap<String, JsonObject>(MAX, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, JsonObject>?) = size > MAX
+    }
+
+    /** Keeps the manifests of a track-playback reply's songs. */
+    fun record(body: String) {
+        if ("\"manifest\"" !in body) return
+        val root = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return
+        for (key in listOf("state_machine", "previous_state_machine")) {
+            val tracks = (root[key] as? JsonObject)?.get("tracks") as? JsonArray ?: continue
+            tracks.forEach { t ->
+                val track = t as? JsonObject ?: return@forEach
+                val uri = ((track["metadata"] as? JsonObject)?.get("uri") as? JsonPrimitive)?.contentOrNull ?: return@forEach
+                val manifest = track["manifest"] as? JsonObject ?: return@forEach
+                if (uri.startsWith("spotify:track:") && manifest.isNotEmpty()) synchronized(byUri) { byUri[uri] = manifest }
+            }
+        }
+    }
+
+    fun of(trackUri: String): JsonObject? = synchronized(byUri) { byUri[trackUri] }
+}

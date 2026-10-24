@@ -63,12 +63,6 @@ fun MyNavHost(
     val context = LocalContext.current
     val startDestination = Routes.Home.route
 
-    // A download asked for without a verified SpotiFLAC server opens the verification.
-    LaunchedEffect(navHostController) {
-        com.music.spotui.data.offline.SpotiflacGate.open.collect {
-            if (navHostController.currentDestination?.route != Routes.Spotiflac.route) navHostController.navigate(Routes.Spotiflac.route)
-        }
-    }
     com.music.spotui.ui.components.ArtistChooserHost(navHostController)
     NavHost(
         navController = navHostController,
@@ -131,15 +125,6 @@ fun MyNavHost(
                 bottomBarState.value = true
                 bottomBarPlayerState.value = playerState != ""
             }
-            // Not verified with SpotiFLAC (or it lapsed): the verification first, once per visit.
-            var askedVerify by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
-            val context = androidx.compose.ui.platform.LocalContext.current
-            LaunchedEffect(Unit) {
-                if (!askedVerify && !com.music.spotui.data.preferences.hasSpotiflacSession(context)) {
-                    askedVerify = true
-                    navHostController.navigate(Routes.Spotiflac.route)
-                }
-            }
             com.music.spotui.ui.screens.DownloadsScreen(navHostController)
         }
 
@@ -165,6 +150,14 @@ fun MyNavHost(
                 bottomBarPlayerState.value = playerState != ""
             }
             com.music.spotui.ui.screens.RecapScreen(navHostController)
+        }
+
+        page(Routes.Friends.route) {
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.FriendActivityScreen(navHostController)
         }
 
         // Spotify's own list for the account (every device), not this phone's counter.
@@ -193,13 +186,37 @@ fun MyNavHost(
             com.music.spotui.ui.screens.SettingsScreen(navHostController)
         }
 
-        // SpotiFLAC: the verification that gives the lossless downloads their best source.
-        page(Routes.Spotiflac.route){
-            com.music.spotui.ui.screens.SpotiflacScreen(onClose = {
-                navHostController.popBackStack()
-                com.music.spotui.data.offline.SpotiflacGate.resume()
-            })
+        // Extensions: the Store and Installed tabs; one installed extension's page; a repository's extension before install.
+        page(Routes.Extensions.route){
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.ExtensionsScreen(navHostController)
         }
+        page("${Routes.Extension.route}/{id}", arguments = listOf(navArgument("id") { defaultValue = "" })){ entry ->
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.ExtensionScreen(navHostController, entry.arguments?.getString("id").orEmpty())
+        }
+        page("${Routes.ExtensionEntry.route}/{id}", arguments = listOf(navArgument("id") { defaultValue = "" })){ entry ->
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.ExtensionEntryScreen(navHostController, entry.arguments?.getString("id").orEmpty())
+        }
+        // An extension's own page (webview.page), sandboxed.
+        page("extension-page/{id}", arguments = listOf(navArgument("id") { defaultValue = "" })){ entry ->
+            LaunchedEffect(playerState) {
+                bottomBarState.value = true
+                bottomBarPlayerState.value = playerState != ""
+            }
+            com.music.spotui.ui.screens.ExtensionPageScreen(navHostController, entry.arguments?.getString("id").orEmpty())
+        }
+
 
 
 

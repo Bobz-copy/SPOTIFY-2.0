@@ -151,7 +151,7 @@ fun PodcastPlayerScreen(navController: NavController) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(tint, AppBackground))),
+            .background(Brush.verticalGradient(listOf(tint, Color(0xFF121212)))),
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             // Top bar: down chevron, "playing from the podcast", the episode's own menu.

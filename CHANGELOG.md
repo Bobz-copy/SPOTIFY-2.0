@@ -2,6 +2,23 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.2-beta.4
+
+- 🧩 **Download sources are extensions now**: the app no longer carries any download source. Install a download-source extension (Settings, Extensions) and downloads work as before: checked, encrypted, kept in Myspoti. Without one, downloads say so.
+- 🔌 **For extension authors**: the `download-source` hook, `playback` events (start, progress, pause, resume, seek, skip, end) and `spotify.raw.request` (docs/extensions/API.md).
+- 📊 **Plays now count on Spotify**: once the device is registered, the play reports (melody) leave from the app itself.
+- 👥 **Collaborative playlists, owner side**: remove someone as a collaborator or from the playlist, or stop the collab (with a warning). Invitation links stay valid until they expire.
+- 💾 **No save button** on your own playlists.
+- ➕ **Add a playlist or album to another playlist**, with the choice of what to do about duplicates.
+- 🗂️ **Library filter chips**: playlists, artists, albums, songs.
+- 🌍 **Chinese, Russian and Polish**.
+- 📈 **Listening stats**: top artists and tracks (4 weeks, 6 months, year), minutes per week counted on the phone, a "your #N artist" badge, and **friend activity**.
+- 🎬 **Music videos**: a switch to turn them off, and **picture-in-picture** for clips.
+- 🎧 **Songs played by an audio-source extension**: the player shows which extension plays and the quality it announces, the song shows at once with its large cover, lyrics, Canvas and like button, and the queue works as with Spotify (Play next, Add to queue, the song's radio after the last song). A song no extension has plays on Spotify instead of being skipped, and the next one goes back to the extension.
+- ⚡ **Faster starts with extensions**: the next song is prepared during the current one, and a source that is slow or down is left sooner.
+- 🩺 **Extensions say whether their source answers**: one that does not is shown inactive and skipped until it answers again. The extensions screens are simpler.
+- 📴 **Likes and additions made offline** are sent when the network is back.
+
 ## 2.0.2-beta.3
 
 - 👋 **Leave a collaborative playlist** you joined, from the playlist's menu, like on the web player.

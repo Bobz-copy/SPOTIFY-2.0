@@ -21,7 +21,7 @@ object Logbook {
      * Only the tail is kept: a report is read from the end, and an unbounded buffer would
      * grow for the whole life of the process (the page can run for hours).
      */
-    private const val MAX_LINES = 1500
+    private const val MAX_LINES = 6000
 
     /** Guarded by its own monitor: [log] is called from the main thread, OkHttp threads and coroutines. */
     private val lines = ArrayDeque<String>(MAX_LINES)
@@ -40,6 +40,17 @@ object Logbook {
         }
     }
 
+    /**
+     * What the report's header says of this session, kept apart from the log (which may have cut
+     * the line long ago): the account, the network, the devices, the registration... Set from
+     * where it is known, the latest value wins.
+     */
+    private val facts = java.util.concurrent.ConcurrentHashMap<String, String>()
+    fun fact(key: String, value: String) { facts[key] = value }
+
+    /** More header lines the app knows of (its extensions), asked when the report is written. */
+    @Volatile var headerExtras: (() -> List<Pair<String, String>>)? = null
+
     /** The buffered lines, oldest first. */
     fun recent(): String = synchronized(lines) { lines.joinToString("\n") }
 
@@ -57,6 +68,8 @@ object Logbook {
         return file
     }
 
+    private val FACT_ORDER = listOf("account", "network", "registration", "devices", "relay route")
+
     private fun report(context: Context): String {
         val info = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
         val versionName = info?.versionName ?: "?"
@@ -64,17 +77,30 @@ object Logbook {
         // The player's page URL tells which Spotify screen the app was on; read only when the
         // runtime started, or the not-yet-initialized host would crash the export.
         val pageUrl = if (MyspotiRuntime.isStarted) runCatching { MyspotiRuntime.host.url.value }.getOrNull() else null
-        val tail = recent()
+        val tail = synchronized(lines) { lines.toList() }
+        val webView = runCatching { android.webkit.WebView.getCurrentWebViewPackage() }.getOrNull()
+        val widevine = if (MyspotiRuntime.isStarted) runCatching {
+            if (MyspotiRuntime.spotify.player.drmMissing.value) "missing (nothing Spotify streams can play)" else null
+        }.getOrNull() else null
+        val header = buildList {
+            add("app" to "$versionName ($versionCode)")
+            add("android" to "${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
+            add("device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            add("webview" to (webView?.let { "${it.packageName} ${it.versionName}" } ?: "?"))
+            add("locale" to Locale.getDefault().toLanguageTag())
+            if (!pageUrl.isNullOrEmpty()) add("page" to pageUrl)
+            for (key in FACT_ORDER) facts[key]?.let { add(key to it) }
+            facts.keys.filter { it !in FACT_ORDER }.sorted().forEach { add(it to facts.getValue(it)) }
+            add("widevine" to (widevine ?: facts["widevine"] ?: "not reported missing"))
+            runCatching { headerExtras?.invoke() }.getOrNull()?.let { addAll(it) }
+        }
+        // Masked and cut down (DiagnosticDigest): small enough to paste, nothing that opens an account.
         return buildString {
             appendLine("Myspoti diagnostic report")
-            appendLine("app     : $versionName ($versionCode)")
-            appendLine("android : ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
-            appendLine("device  : ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-            appendLine("locale  : ${Locale.getDefault().toLanguageTag()}")
-            if (!pageUrl.isNullOrEmpty()) appendLine("page    : $pageUrl")
+            header.forEach { (k, v) -> appendLine("${k.padEnd(12)}: ${app.myspoti.spotify.report.DiagnosticDigest.mask(v)}") }
             appendLine()
             appendLine("--- log ---")
-            appendLine(tail)
+            append(app.myspoti.spotify.report.DiagnosticDigest.digest(tail))
         }
     }
 }

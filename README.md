@@ -168,4 +168,7 @@ Full notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## License
 
-GPL-3.0.
+GPL-3.0. If you reuse this code, you must credit Myspoti, keep the license notices and
+publish your complete source under GPL-3.0. Closed-source or uncredited copies are
+violations and will be reported to the hosting platform (DMCA takedown). See also
+[`AGENTS.md`](AGENTS.md).

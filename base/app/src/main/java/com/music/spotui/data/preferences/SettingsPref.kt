@@ -143,3 +143,20 @@ fun getLyricTranslateLang(c: Context): String =
 
 fun setLyricTranslateLang(c: Context, code: String) =
     prefs(c).edit().putString(KEY_LYRIC_TRANSLATE_LANG, code.trim()).apply()
+
+/**
+ * Liquid Glass in the Immersive look (Settings > Display, under Look): the floating bars refract
+ * the page through a lens instead of only frosting it. On by default; it only takes effect on
+ * Android 12+ and when the phone does not ask for less blur or motion (see
+ * [com.music.spotui.ui.immersive.shell.rememberLiquidGlassActive]).
+ */
+object LiquidGlassPref {
+    private const val KEY = "immersive_liquid_glass"
+    var on by androidx.compose.runtime.mutableStateOf(prefs(com.music.spotui.di.Graph.app).getBoolean(KEY, true))
+        private set
+
+    fun set(c: Context, value: Boolean) {
+        on = value
+        prefs(c).edit().putBoolean(KEY, value).apply()
+    }
+}

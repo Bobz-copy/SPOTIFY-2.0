@@ -185,6 +185,25 @@ fun SettingsScreen(navController: NavController) {
                 onChecked = { com.music.spotui.data.preferences.SolidNavBar.set(ctx, it) },
             )
             AccentRow()
+            LookRow()
+            // The Immersive look's glass; nothing to switch in Classic.
+            if (com.music.spotui.data.preferences.LookPref.look == com.music.spotui.data.preferences.Look.IMMERSIVE) {
+                val glass = com.music.spotui.ui.immersive.shell.liquidGlassAvailability()
+                OptionRow(
+                    label = stringResource(R.string.settings_liquid_glass_title),
+                    detail = stringResource(
+                        when (glass) {
+                            com.music.spotui.ui.immersive.shell.LiquidGlassAvailability.UNSUPPORTED -> R.string.settings_liquid_glass_unsupported
+                            com.music.spotui.ui.immersive.shell.LiquidGlassAvailability.REDUCED -> R.string.settings_liquid_glass_reduced
+                            com.music.spotui.ui.immersive.shell.LiquidGlassAvailability.AVAILABLE -> R.string.settings_liquid_glass_detail
+                        },
+                    ),
+                    checked = com.music.spotui.data.preferences.LiquidGlassPref.on &&
+                        glass != com.music.spotui.ui.immersive.shell.LiquidGlassAvailability.UNSUPPORTED,
+                    enabled = glass != com.music.spotui.ui.immersive.shell.LiquidGlassAvailability.UNSUPPORTED,
+                    onChecked = { com.music.spotui.data.preferences.LiquidGlassPref.set(ctx, it) },
+                )
+            }
             OrientationRow()
             LanguageRow()
             Divider()
@@ -272,6 +291,32 @@ private fun Section(title: Int) {
 
 @Composable
 private fun Divider() = HorizontalDivider(color = tone(0xFF2A2A2A), modifier = Modifier.padding(top = 8.dp))
+
+/** Classic or Immersive: the choice made in the onboarding, changeable here. */
+@Composable
+private fun LookRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val current = com.music.spotui.data.preferences.LookPref.look
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Text(stringResource(R.string.settings_look_title), color = AppText, fontSize = 16.sp)
+        for (l in com.music.spotui.data.preferences.Look.entries) {
+            val classic = l == com.music.spotui.data.preferences.Look.CLASSIC
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+                    .semantics { role = Role.RadioButton }
+                    .clickable { com.music.spotui.data.preferences.LookPref.set(ctx, l) }
+                    .padding(vertical = 8.dp),
+            ) {
+                androidx.compose.material3.RadioButton(selected = current == l, onClick = null)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(stringResource(if (classic) R.string.look_classic else R.string.look_immersive), color = AppText, fontSize = 15.sp)
+                    Text(stringResource(if (classic) R.string.look_classic_detail else R.string.look_immersive_detail), color = AppMuted, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
 
 /** The app's accent colour, for everyone (the same palette the supporter sheet uses). */
 @Composable
@@ -497,7 +542,7 @@ private fun CheckUpdateRow() {
  * if the provider refuses the path (external storage absent), the report's own path is shared
  * instead, so the tester still has something to send.
  */
-private fun shareDiagnosticReport(context: android.content.Context, file: java.io.File) {
+internal fun shareDiagnosticReport(context: android.content.Context, file: java.io.File) {
     val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(android.content.Intent.EXTRA_SUBJECT, "Myspoti diagnostic report")

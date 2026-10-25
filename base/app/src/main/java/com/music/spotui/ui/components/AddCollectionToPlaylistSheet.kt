@@ -91,7 +91,7 @@ fun AddCollectionToPlaylistSheet(sourceUri: String, title: String, onDismiss: ()
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = tone(0xFF1A1A1A)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = tone(0xFF1A1A1A)) {
         Column(modifier = Modifier.navigationBarsPadding().imePadding()) {
             Text(
                 title, color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -149,7 +149,7 @@ fun AddCollectionToPlaylistSheet(sourceUri: String, title: String, onDismiss: ()
 fun AlbumOptionsSheet(albumUri: String, name: String, onDismiss: () -> Unit) {
     var adding by remember { mutableStateOf(false) }
     if (adding) { AddCollectionToPlaylistSheet(albumUri, name, onDismiss); return }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             Text(name, color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp))

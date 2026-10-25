@@ -77,8 +77,9 @@ import com.music.spotui.ui.theme.AppBackground
  */
 object Setup {
     private const val KEY = "SetupDone"
-    /** The permissions step, or the sound quality one (new in 2.0: shown once after the update too). */
-    fun needed(context: Context) = !permissionsDone(context) || !com.music.spotui.data.preferences.isQualityChosen(context)
+    /** The permissions step, the sound quality one or the look one (each new step is shown once after the update too). */
+    fun needed(context: Context) = !permissionsDone(context) || !com.music.spotui.data.preferences.isQualityChosen(context) ||
+        !com.music.spotui.data.preferences.LookPref.isChosen(context)
     fun permissionsDone(context: Context) = context.getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE).getBoolean(KEY, false)
     fun done(context: Context) = context.getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE).edit().putBoolean(KEY, true).apply()
 }
@@ -89,28 +90,40 @@ private fun granted(context: Context, permission: String) =
 @Composable
 fun SetupScreen(onDone: () -> Unit) {
     val context = LocalContext.current
-    // First the sound quality, then the permissions (skipped when done before an update).
-    var qualityStep by remember { mutableStateOf(!com.music.spotui.data.preferences.isQualityChosen(context)) }
-    // Two steps to go through: dots say where the user is.
-    val steps = remember { if (qualityStep && !Setup.permissionsDone(context)) 2 else 1 }
+    // First the sound quality, then the look, then the permissions (each skipped when done before an update).
+    val needQuality = remember { !com.music.spotui.data.preferences.isQualityChosen(context) }
+    val needLook = remember { !com.music.spotui.data.preferences.LookPref.isChosen(context) }
+    val needPerms = remember { !Setup.permissionsDone(context) }
+    val order = remember { listOfNotNull(0.takeIf { needQuality }, 1.takeIf { needLook }, 2.takeIf { needPerms }).ifEmpty { listOf(2) } }
+    var index by remember { mutableIntStateOf(0) }
+    val steps = order.size
+    fun next() { if (index + 1 < order.size) index++ else onDone() }
     Box(Modifier.fillMaxSize().background(AppBackground)) {
         Glow(Modifier.fillMaxSize(), alpha = 0.16f)
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            if (steps == 2) StepDots(current = if (qualityStep) 0 else 1, Modifier.padding(start = 20.dp, top = 16.dp))
+            // Several steps to go through: dots say where the user is.
+            if (steps > 1) StepDots(count = steps, current = index, Modifier.padding(start = 20.dp, top = 16.dp))
             // One step slides away to the left as the next comes in from the right.
             AnimatedContent(
-                targetState = qualityStep,
+                targetState = index,
                 transitionSpec = {
                     (slideInHorizontally(tween(420, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(420))) togetherWith
                         (slideOutHorizontally(tween(420, easing = FastOutSlowInEasing)) { -it / 3 } + fadeOut(tween(250)))
                 },
                 label = "setupStep",
                 modifier = Modifier.weight(1f),
-            ) { quality ->
-                if (quality) QualityStep(onNext = {
-                    com.music.spotui.data.preferences.setQualityChosen(context)
-                    if (Setup.permissionsDone(context)) onDone() else qualityStep = false
-                }) else PermissionsStep(onDone)
+            ) { i ->
+                when (order[i]) {
+                    0 -> QualityStep(onNext = {
+                        com.music.spotui.data.preferences.setQualityChosen(context)
+                        next()
+                    })
+                    1 -> com.music.spotui.ui.look.LookStep(onNext = {
+                        com.music.spotui.data.preferences.LookPref.setChosen(context)
+                        next()
+                    })
+                    else -> PermissionsStep(onDone)
+                }
             }
         }
     }
@@ -118,9 +131,9 @@ fun SetupScreen(onDone: () -> Unit) {
 
 /** Where the user is in the steps: the current one a longer green dash. */
 @Composable
-private fun StepDots(current: Int, modifier: Modifier = Modifier) {
+private fun StepDots(count: Int, current: Int, modifier: Modifier = Modifier) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
-        for (i in 0..1) {
+        for (i in 0 until count) {
             val w by animateDpAsState(if (i == current) 22.dp else 8.dp, tween(350), label = "dot")
             val c by animateColorAsState(if (i == current) Color(0xFF1DB954) else AppText.copy(alpha = 0.25f), tween(350), label = "dotColor")
             Box(Modifier.height(6.dp).width(w).clip(RoundedCornerShape(50)).background(c))

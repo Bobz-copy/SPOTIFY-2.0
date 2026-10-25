@@ -550,7 +550,7 @@ fun PlayerScreen(navController: NavController) {
                                 val grow = 1f + (1f - coverAlpha) * 0.06f
                                 scaleX = grow; scaleY = grow
                             },
-                        model = cover,
+                        model = app.myspoti.host.android.Covers.large(cover),
                         contentScale = ContentScale.Crop,
                         contentDescription = "")
                 }

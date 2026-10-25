@@ -232,6 +232,22 @@
     <string name="quality_download_hires_detail">24-bit when it exists, files about three times bigger</string>
     <string name="setup_quality_title">Sound quality</string>
     <string name="setup_quality_subtitle">Choose how Myspoti plays and saves your music. You can change it later in Settings.</string>
+    <string name="setup_look_title">Choose your look</string>
+    <string name="setup_look_subtitle">Watch the preview, then pick the one you like.</string>
+    <string name="look_classic">Classic</string>
+    <string name="look_classic_detail">Dark player tinted by the cover, round play button</string>
+    <string name="look_immersive">Immersive</string>
+    <string name="look_immersive_detail">Big artwork, album colours, animated lyrics</string>
+    <string name="setup_look_preview">Preview of the %1$s look</string>
+    <string name="setup_look_tap_hint">Tap the preview to pause it, swipe to switch</string>
+    <string name="setup_look_still_hint">Animations are off on this phone: three still frames</string>
+    <string name="setup_look_still_player">Player</string>
+    <string name="setup_look_still_paused">Paused</string>
+    <string name="setup_look_still_lyrics">Lyrics</string>
+    <string name="look_demo_all">All</string>
+    <string name="look_demo_music">Music</string>
+    <string name="look_demo_podcasts">Podcasts</string>
+    <string name="look_demo_section">Made for you</string>
     <string name="downloads_off_toast">Downloads are off. Turn them on in Settings.</string>
     <string name="quality_streaming_high_detail">160 kbit/s, the best sound</string>
     <string name="quality_download_small">Smallest</string>
@@ -490,4 +506,9 @@
     <string name="profile_blocked">You blocked this user</string>
     <string name="profile_block_failed">Couldn’t change the block, try again</string>
     <string name="profile_more_options">More options</string>
+    <string name="settings_look_title">Look</string>
+    <string name="look_offer_title">New look available</string>
+    <string name="look_offer_try">Try Immersive</string>
+    <string name="look_offer_keep">Keep Classic</string>
+    <string name="look_offer_note">You can change it later in Settings > Display and language.</string>
 </resources>

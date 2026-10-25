@@ -171,7 +171,7 @@ fun DevicesSheet(onDismiss: () -> Unit) {
     val route = rememberAudioRoute()
     val headphones = remote == null && route.kind != AudioRoute.Kind.SPEAKER
     if (quality) QualitySheet(onDismiss = { quality = false })
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 stringResource(R.string.listen_on),
@@ -296,7 +296,7 @@ fun QualitySheet(onDismiss: () -> Unit) {
             if (bitrate <= 0) "" else "${codecName(mime)} · ${bitrate / 1000} kbit/s"
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(stringResource(R.string.quality_sheet_title), color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
@@ -416,7 +416,7 @@ private object JamLinks {
 @Composable
 fun SleepTimerSheet(onDismiss: () -> Unit) {
     val active = SongPlayer.sleepEndsAt.value != null
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = SheetColor) {
         Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 stringResource(R.string.context_menu_sleep_timer),
@@ -476,7 +476,7 @@ fun QueueSheet(contextName: String, onDismiss: () -> Unit) {
     // through this state.
     val listState = rememberLazyListState()
 
-    ModalBottomSheet(
+    com.music.spotui.ui.components.LookSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = SheetColor,

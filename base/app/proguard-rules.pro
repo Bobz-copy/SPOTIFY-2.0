@@ -82,3 +82,9 @@
 # (SpotifyDispatcher reads them by reflection), and the sandbox loads prelude.js from its jar.
 -keepclassmembers class app.myspoti.api.** { <fields>; }
 -keep class app.myspoti.extensions.** { *; }
+
+# The relay's Cronet (before Android 14): CronetProvider finds the Play services provider by its
+# class name, and zstd's decoder is reached from its native library by JNI.
+-keep class com.google.android.gms.net.PlayServicesCronetProvider { *; }
+-keep class com.google.android.gms.net.GmsCoreCronetProvider { *; }
+-keep class com.squareup.zstd.** { *; }

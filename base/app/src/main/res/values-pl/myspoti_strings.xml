@@ -462,4 +462,8 @@
     <string name="profile_blocked">Zablokowano tego użytkownika</string>
     <string name="profile_block_failed">Nie udało się zmienić blokady, spróbuj ponownie</string>
     <string name="profile_more_options">Więcej opcji</string>
+    <string name="look_offer_title">Dostępny nowy wygląd</string>
+    <string name="look_offer_try">Wypróbuj Immersyjny</string>
+    <string name="look_offer_keep">Zostaw Klasyczny</string>
+    <string name="look_offer_note">Możesz to zmienić później w Ustawienia > Wyświetlanie i język.</string>
 </resources>

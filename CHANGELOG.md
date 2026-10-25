@@ -2,6 +2,16 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.2-beta.5
+
+- ✨ **New Immersive look** (optional, Apple-Music-like): glass tab bar and mini player that fold away when you scroll, animated player and lyrics, grouped Settings, glass sheets (Spotify Connect, queue, quality…). Offered at the first open after the update; switch any time in Settings, Display. Classic stays the default.
+- 🎤 **Lyrics** (Immersive): the new line loses its blur the moment it becomes current.
+- 🖼️ **Sharp covers** in the player: the large image instead of a stretched thumbnail.
+- 🎧 **Background playback**: the player keeps running when you switch apps or turn the screen off.
+- 🚫 **"Spotify refused to play this" (402)**: commands sent like the browser's, a Chromium network retry after a refusal, and no more ghost copy of this phone among your devices. Still refused? Please send a diagnostic report from this version: it now opens with a short summary of the cause.
+- ⏭️ **No more songs skipping on their own** when Spotify limits audio licences: the app waits instead of asking again.
+- 🧹 **Lighter diagnostic reports**: a third shorter, without the repeated lines.
+
 ## 2.0.2-beta.4
 
 - 🧩 **Download sources are extensions now**: the app no longer carries any download source. Install a download-source extension (Settings, Extensions) and downloads work as before: checked, encrypted, kept in Myspoti. Without one, downloads say so.

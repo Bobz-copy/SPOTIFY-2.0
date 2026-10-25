@@ -453,4 +453,8 @@
     <string name="profile_blocked">你已屏蔽此用户</string>
     <string name="profile_block_failed">无法更改屏蔽状态，请重试</string>
     <string name="profile_more_options">更多选项</string>
+    <string name="look_offer_title">全新外观上线</string>
+    <string name="look_offer_try">试用沉浸式</string>
+    <string name="look_offer_keep">保持经典</string>
+    <string name="look_offer_note">之后可在“设置 > 显示和语言”中更改。</string>
 </resources>

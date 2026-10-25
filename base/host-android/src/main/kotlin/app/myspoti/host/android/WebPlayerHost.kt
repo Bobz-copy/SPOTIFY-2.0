@@ -53,6 +53,8 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
      * (reload, replay) asked again. A storm of them ends playback here for a while (growing on
      * repeats) instead of feeding it; [licenseLimitedUntil] tells the app and the player.
      */
+    @Volatile private var heldLicenses = 0
+    @Volatile private var licenseAnswersLogged = 0
     private val license429 = ArrayDeque<Long>()
     private var limitStreak = 0
     private var lastLimitAt = 0L
@@ -72,6 +74,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         limitStreak++
         license429.clear()
         Logbook.log("Spotify is limiting audio licences (429 x$LIMIT_COUNT in ${LIMIT_WINDOW_MS / 1000} s): playback held ${hold / 1000} s")
+        heldLicenses = 0
         _licenseLimitedUntil.value = now + hold
     }
 
@@ -169,8 +172,12 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(message: android.webkit.ConsoleMessage): Boolean {
                 if (message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ||
-                    message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING)
-                    Logbook.log("console ${message.messageLevel()}: ${message.message().take(300)}")
+                    message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING) {
+                    // The page's steady console noise (font preloads, storage access refused on
+                    // every load) never helped a report: left out.
+                    if (CONSOLE_NOISE.none { it.containsMatchIn(message.message()) })
+                        Logbook.log("console ${message.messageLevel()}: ${message.message().take(300)}")
+                }
                 return true
             }
 
@@ -188,6 +195,16 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                     Logbook.log("blocked ad request ${url.take(120)}")
                     // Refused like a blocked request: the player reports a failed ad and moves on.
                     return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                }
+                // Spotify is limiting audio licences (429) and the app holds playback: the page still
+                // skips on by itself through every song it gets no licence for (measured in the 25/10
+                // logs: 20 to 25 more licence requests in the 4 s after the hold began, ~4 a second,
+                // every one answered 429). Those are not sent: the page gets the same 429 from here
+                // and Spotify sees no more of them while the hold lasts.
+                if (request.method == "POST" && licenseLimited() && url.contains(LICENSE_PATH)) {
+                    if (heldLicenses++ == 0) Logbook.log("audio licence requests answered here while Spotify is limiting")
+                    app.myspoti.spotify.report.Refusal402.licenceHeld()
+                    return WebResourceResponse("application/octet-stream", "utf-8", 429, "Too Many Requests", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                 }
                 // The sign-in flow lives on accounts.spotify.com: logging its steps is what turns
                 // "the login is stuck" into the exact request that failed (with the status from
@@ -219,7 +236,7 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
                 pageStarts++
                 _url.value = url
                 _loginRequired.value = isLoginPage(url)
-                if (url.startsWith(PLAYER_URL)) { drmAsked = false; onPageStarting?.invoke(); relay.injectNow() }
+                if (url.startsWith(PLAYER_URL)) { drmAsked = false; licenseAnswersLogged = 0; onPageStarting?.invoke(); relay.injectNow() }
                 if (PLAYER_ROOT.matches(url) && url != roots.getString(ROOT_KEY, null)) roots.edit().putString(ROOT_KEY, url).apply()
             }
 
@@ -232,11 +249,26 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
             }
 
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
-                if (request.url.host?.contains("spotify") == true)
-                    Logbook.log("http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
+                // Licence answers are counted in the 402 summary and their first ones logged below
+                // with their headers; the same 429 three times per song was the bulk of some reports.
+                if (request.url.host?.contains("spotify") == true && request.url.path?.contains("widevine-license") != true)
+                    Logbook.logEvery("http ${response.statusCode} ${request.url.host}${request.url.path}", 60_000,
+                        "http ${response.statusCode} ${request.method} ${request.url.toString().substringBefore('?').take(120)}")
                 if (request.isForMainFrame && request.url.host == PLAYER_HOST && (response.statusCode >= 500 || response.statusCode == 429))
                     playerPageFailed("http ${response.statusCode}")
-                if (response.statusCode == 429 && request.url.path?.contains("widevine-license") == true) onLicenseLimited()
+                if (request.url.path?.contains("widevine-license") == true) {
+                    if (response.statusCode == 429) onLicenseLimited()
+                    response.responseHeaders.entries.firstOrNull { it.key.equals("retry-after", true) }
+                        ?.let { app.myspoti.spotify.report.Refusal402.licenceRetryAfter(it.value) }
+                    // A refused licence (403 seen on a new sign-in, 429 on others) says why in its
+                    // headers at best; nothing else of the answer reaches the app. A few per page.
+                    if (response.statusCode >= 400 && licenseAnswersLogged++ < LICENSE_ANSWERS_LOGGED) {
+                        val h = response.responseHeaders.entries
+                            .filter { (k, _) -> k.lowercase() in LICENSE_HEADERS }
+                            .joinToString(", ") { (k, v) -> "${k.lowercase()}=${v.take(60)}" }
+                        Logbook.log("licence answer ${response.statusCode}: $h")
+                    }
+                }
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -525,6 +557,10 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         private const val DRM_WATCH_MS = 10_000L
         private const val DRM_REBUILDS_MAX = 2
         private const val DRM_REBUILD_WINDOW_MS = 600_000L
+        private const val LICENSE_PATH = "/widevine-license/v1/audio/license"
+        private const val LICENSE_ANSWERS_LOGGED = 6
+        private val CONSOLE_NOISE = listOf(Regex("^The resource .* was preloaded"), Regex("^requestStorageAccess: Permission denied"))
+        private val LICENSE_HEADERS = setOf("retry-after", "content-type", "server", "via", "x-ratelimit-remaining", "x-ratelimit-reset", "cf-ray", "x-envoy-upstream-service-time")
         private const val LIMIT_COUNT = 6
         private const val LIMIT_WINDOW_MS = 10_000L
         private const val LIMIT_HOLD_MS = 60_000L

@@ -846,7 +846,7 @@ private fun AccountSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
-    ModalBottomSheet(
+    com.music.spotui.ui.components.LookSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = tone(0xFF1A1A1A),
@@ -919,7 +919,7 @@ private fun sortLabel(sort: LibraryOrder.Sort) = when (sort) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LibrarySortSheet(onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(stringResource(R.string.filter_and_sort_sort_section_title), color = AppText, fontSize = 18.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))

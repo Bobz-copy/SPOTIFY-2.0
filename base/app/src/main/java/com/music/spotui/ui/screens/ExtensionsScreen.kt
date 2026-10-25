@@ -214,6 +214,15 @@ fun ExtensionsScreen(navController: NavController) {
 /** "Store" and "Installed", the latter with the number of updates waiting. */
 @Composable
 private fun Tabs(selected: Int, updates: Int, onSelect: (Int) -> Unit) {
+    if (com.music.spotui.ui.navigation.isImmersive()) {
+        val installed = stringResource(R.string.extensions_installed)
+        com.music.spotui.ui.immersive.pages.ImmersiveSegmentedControl(
+            options = listOf(stringResource(R.string.extensions_tab_store), if (updates > 0) "$installed ($updates)" else installed),
+            selectedIndex = selected, onSelect = onSelect,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+        return
+    }
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         listOf(R.string.extensions_tab_store, R.string.extensions_installed).forEachIndexed { i, label ->
             Column(
@@ -238,6 +247,14 @@ private fun Tabs(selected: Int, updates: Int, onSelect: (Int) -> Unit) {
 
 @Composable
 private fun SearchField(query: String, onChange: (String) -> Unit) {
+    if (com.music.spotui.ui.navigation.isImmersive()) {
+        com.music.spotui.ui.immersive.components.ImmersiveSearchField(
+            query = query, onQueryChange = onChange, onSubmit = {},
+            placeholder = stringResource(R.string.extensions_search),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+        return
+    }
     OutlinedTextField(
         value = query, onValueChange = onChange, singleLine = true,
         placeholder = { Text(stringResource(R.string.extensions_search), color = AppMuted) },
@@ -256,11 +273,14 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
 @Composable
 private fun CategoryChips(categories: List<Category>, selected: Category?, onSelect: (Category?) -> Unit) {
     if (categories.isEmpty()) return
+    val immersive = com.music.spotui.ui.navigation.isImmersive()
+    val chipOn = if (immersive) com.music.spotui.ui.immersive.Immersive.Accent else AppAccent
+    val chipOff = if (immersive) com.music.spotui.ui.immersive.Immersive.Raised else tone(0xFF2A2A2A)
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         (listOf<Category?>(null) + categories).forEach { c ->
             val on = c == selected
-            Text(stringResource(categoryLabel(c)), color = if (on) Color.Black else AppText, fontSize = 13.sp, maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) AppAccent else tone(0xFF2A2A2A))
+            Text(stringResource(categoryLabel(c)), color = if (on) (if (immersive) Color.White else Color.Black) else AppText, fontSize = 13.sp, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) chipOn else chipOff)
                     .clickable { onSelect(if (on) null else c) }.padding(horizontal = 14.dp, vertical = 7.dp))
         }
     }
@@ -460,6 +480,14 @@ private fun InstalledRow(e: InstalledExtension, error: String?, status: app.mysp
 
 @Composable
 private fun InstallButtons(onRepo: (() -> Unit)?, onFile: () -> Unit, onUrl: () -> Unit) {
+    if (com.music.spotui.ui.navigation.isImmersive()) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            onRepo?.let { com.music.spotui.ui.immersive.components.ImmersiveButton(stringResource(R.string.extensions_repository_add), it) }
+            com.music.spotui.ui.immersive.components.ImmersiveButton(stringResource(R.string.extensions_install_file), onFile)
+            com.music.spotui.ui.immersive.components.ImmersiveButton(stringResource(R.string.extensions_install_url), onUrl)
+        }
+        return
+    }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         val border = BorderStroke(1.dp, AppMuted.copy(alpha = 0.5f))
         onRepo?.let { OutlinedButton(onClick = it, border = border) { Text(stringResource(R.string.extensions_repository_add), color = AppText, fontSize = 13.sp) } }

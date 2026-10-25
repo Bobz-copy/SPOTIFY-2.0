@@ -27,6 +27,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -346,7 +347,13 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         /** What the page player itself is set to; null when the page did not say. */
         val playerVolume: Double?,
         val active: Boolean?,
-    )
+        /** HTMLMediaElement readyState / networkState and its error, for the log only (a stall's "why"). */
+        val readyState: Int = -1,
+        val networkState: Int = -1,
+        val error: String? = null,
+    ) {
+        fun describe() = "paused=$paused muted=$muted volume=$level own=$own t=${"%.1f".format(time)} ready=$readyState net=$networkState error=${error ?: "none"} active=$active"
+    }
 
     private suspend fun readMedia(): Media? {
         val o = bridge.call("media.state", timeoutMs = MEDIA_TIMEOUT_MS, quiet = true) as? JsonObject ?: return null
@@ -361,6 +368,9 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             // The device list is read at most every few seconds in the page: what it did not
             // answer this time is what it answered last time.
             active = p("active")?.booleanOrNull ?: lastMedia?.active,
+            readyState = p("readyState")?.intOrNull ?: -1,
+            networkState = p("networkState")?.intOrNull ?: -1,
+            error = p("error")?.contentOrNull?.takeIf { it != "null" },
         )
     }
 
@@ -525,7 +535,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             since = now
             attempts++
             silentSince = 0L
-            bridge.logger?.invoke("player stalled ($reason) on ${s.item?.name}, attempt $attempts")
+            bridge.logger?.invoke("player stalled ($reason) on ${s.item?.name}, attempt $attempts; media element: ${media?.describe() ?: "none"}")
             // A song stuck at its end moves on; one stuck in its middle goes on where it was.
             val onward = reason == "past the end" || reason == "paused at the end"
             // A frozen page answers nothing: straight to the reload.
@@ -886,6 +896,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
                 adSince = System.currentTimeMillis()
                 adMuteTries = 0
                 bridge.logger?.invoke("ad break started")
+                app.myspoti.spotify.report.Refusal402.adBreak()
                 // A song picked a moment ago and not playing yet: the ad came in its place.
                 val p = lastPlay
                 val came = p?.takeIf {

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -460,6 +461,14 @@ internal fun Dot(color: Color, size: Dp = 10.dp) =
 
 @Composable
 internal fun Page(titleRes: Int?, navController: NavController, title: String? = null, top: @Composable () -> Unit = {}, content: @Composable () -> Unit) {
+    // Immersive look: the shared page scaffold (large title into the glass bar) around the same content.
+    if (com.music.spotui.ui.navigation.isImmersive()) {
+        com.music.spotui.ui.immersive.pages.ImmersivePage(title = title ?: stringResource(titleRes!!), onBack = { navController.popBackStack() }) {
+            item(key = "ext:top") { top() }
+            item(key = "ext:content") { Column(Modifier.fillMaxWidth()) { content() } }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(4.dp)) {
             IconButton(onClick = { navController.popBackStack() }) {
@@ -477,15 +486,30 @@ internal fun ExtSection(title: Int) = ExtSection(stringResource(title))
 
 @Composable
 internal fun ExtSection(title: String) {
+    if (com.music.spotui.ui.navigation.isImmersive()) {
+        Text(title.uppercase(), style = com.music.spotui.ui.immersive.Immersive.Caption,
+            modifier = Modifier.padding(start = 36.dp, end = 20.dp, top = 18.dp, bottom = 6.dp))
+        return
+    }
     Text(title.uppercase(), color = AppAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         letterSpacing = 1.sp, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp))
 }
 
 @Composable
-internal fun ExtDivider() = HorizontalDivider(color = tone(0xFF2A2A2A), modifier = Modifier.padding(top = 8.dp))
+internal fun ExtDivider() {
+    if (com.music.spotui.ui.navigation.isImmersive()) Spacer(Modifier.height(8.dp))
+    else HorizontalDivider(color = tone(0xFF2A2A2A), modifier = Modifier.padding(top = 8.dp))
+}
 
 @Composable
 internal fun SwitchRow(label: String, detail: String, checked: Boolean, detailColor: Color = AppMuted, onChecked: (Boolean) -> Unit) {
+    if (com.music.spotui.ui.navigation.isImmersive()) {
+        Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp).clip(com.music.spotui.ui.immersive.Immersive.Card)
+            .background(com.music.spotui.ui.immersive.Immersive.Raised)) {
+            com.music.spotui.ui.immersive.pages.ImmersiveSwitchRow(label, checked, onChecked, detail = detail, detailColor = detailColor)
+        }
+        return
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)

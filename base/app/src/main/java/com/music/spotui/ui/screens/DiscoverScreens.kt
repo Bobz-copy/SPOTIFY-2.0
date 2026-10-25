@@ -90,7 +90,7 @@ private fun Loading() = com.music.spotui.ui.components.SkeletonList(count = 7)
 private fun SectionTitle(text: String) =
     Text(text, color = AppText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp, 18.dp, 16.dp, 8.dp))
 
-private data class ReleaseTile(val id: String, val name: String, val artists: String, val cover: String, val detail: String)
+internal data class ReleaseTile(val id: String, val name: String, val artists: String, val cover: String, val detail: String)
 
 /** "New releases": what the followed artists just released, then the latest albums Spotify features. */
 @OptIn(ExperimentalGlideComposeApi::class)

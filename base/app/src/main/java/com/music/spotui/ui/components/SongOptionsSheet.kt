@@ -371,7 +371,7 @@ private fun MenuRow(
 /** The track's credits (performers, writers, producers), as Spotify lists them. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun CreditsSheet(song: SongsModel, onDismiss: () -> Unit) {
+internal fun CreditsSheet(song: SongsModel, onDismiss: () -> Unit) {
     val credits by androidx.compose.runtime.produceState<app.myspoti.api.Credits?>(null, song.spotifyTrackId) {
         value = runCatching { app.myspoti.host.android.MyspotiRuntime.api.extras.credits("spotify:track:${song.spotifyTrackId}") }
             .getOrDefault(app.myspoti.api.Credits(emptyList()))
@@ -406,7 +406,7 @@ private fun CreditsSheet(song: SongsModel, onDismiss: () -> Unit) {
 /** Podcast playback speed (Spotify refuses speed changes on music). */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun SpeedSheet(onDismiss: () -> Unit) {
+internal fun SpeedSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Text(stringResource(R.string.playback_speed), color = AppText, fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,

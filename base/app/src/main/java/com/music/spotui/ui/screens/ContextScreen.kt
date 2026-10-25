@@ -1136,7 +1136,7 @@ private fun RecommendedRow(song: SongsModel, isCurrent: Boolean, onPlay: () -> U
 /** The people of a collaborative playlist: owner first, then collaborators; a tap opens a profile. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun MembersSheet(
+internal fun MembersSheet(
     members: List<app.myspoti.api.PlaylistMember>,
     navController: NavController,
     ownPlaylist: Boolean,
@@ -1147,7 +1147,7 @@ private fun MembersSheet(
     onLeave: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             Text(stringResource(R.string.playlist_members_title), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 12.dp))

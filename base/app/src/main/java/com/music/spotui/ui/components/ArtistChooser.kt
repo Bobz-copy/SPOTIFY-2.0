@@ -98,7 +98,7 @@ fun ArtistChooserHost(navController: NavHostController) {
     val artists = ArtistChooser.artists
     if (artists.isEmpty()) return
     val dismiss = { ArtistChooser.artists = emptyList() }
-    ModalBottomSheet(onDismissRequest = dismiss, containerColor = tone(0xFF282828)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = dismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             Text(stringResource(R.string.choose_artist), color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 12.dp))

@@ -152,7 +152,7 @@ fun SpotifyCodeSheet(target: ShareTarget, onDismiss: () -> Unit) {
     }
     val bars = SpotifyCode.barsOn(background)
     val text = if (bars == "black") Color.Black else AppText
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = tone(0xFF121212)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = tone(0xFF121212)) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             // The card: cover, name, and the code under them, all on the cover's colour.
             Column(

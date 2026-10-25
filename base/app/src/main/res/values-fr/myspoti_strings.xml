@@ -232,6 +232,22 @@
     <string name="quality_download_hires_detail">24 bits quand il existe, fichiers environ trois fois plus lourds</string>
     <string name="setup_quality_title">Qualité du son</string>
     <string name="setup_quality_subtitle">Choisissez comment Myspoti lit et enregistre votre musique. Vous pourrez le changer plus tard dans les Réglages.</string>
+    <string name="setup_look_title">Choisissez votre style</string>
+    <string name="setup_look_subtitle">Regardez l\'aperçu, puis choisissez celui qui vous plaît.</string>
+    <string name="look_classic">Classique</string>
+    <string name="look_classic_detail">Lecteur sombre teinté par la pochette, bouton lecture rond</string>
+    <string name="look_immersive">Immersif</string>
+    <string name="look_immersive_detail">Pochette en grand, couleurs de l\'album, paroles animées</string>
+    <string name="setup_look_preview">Aperçu du style %1$s</string>
+    <string name="setup_look_tap_hint">Touchez l\'aperçu pour le mettre en pause, balayez pour changer</string>
+    <string name="setup_look_still_hint">Les animations sont désactivées sur ce téléphone : trois images fixes</string>
+    <string name="setup_look_still_player">Lecteur</string>
+    <string name="setup_look_still_paused">En pause</string>
+    <string name="setup_look_still_lyrics">Paroles</string>
+    <string name="look_demo_all">Tout</string>
+    <string name="look_demo_music">Musique</string>
+    <string name="look_demo_podcasts">Podcasts</string>
+    <string name="look_demo_section">Pour vous</string>
     <string name="downloads_off_toast">Les téléchargements sont désactivés. Activez-les dans les Réglages.</string>
     <string name="quality_streaming_high_detail">160 kbit/s, le meilleur son</string>
     <string name="quality_download_small">La plus légère</string>
@@ -489,4 +505,9 @@
     <string name="profile_blocked">Vous avez bloqué cet utilisateur</string>
     <string name="profile_block_failed">Impossible de modifier le blocage, réessayez</string>
     <string name="profile_more_options">Plus d’options</string>
+    <string name="settings_look_title">Style</string>
+    <string name="look_offer_title">Nouveau style disponible</string>
+    <string name="look_offer_try">Essayer Immersif</string>
+    <string name="look_offer_keep">Garder Classique</string>
+    <string name="look_offer_note">Vous pourrez le changer plus tard dans Réglages > Affichage et langue.</string>
 </resources>

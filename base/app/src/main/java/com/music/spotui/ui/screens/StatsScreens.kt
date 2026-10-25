@@ -77,7 +77,7 @@ import kotlinx.coroutines.withContext
 
 private val StatsSubtle: Color get() = AppMuted
 
-private val rangeLabels = listOf(
+internal val rangeLabels = listOf(
     TimeRange.SHORT_TERM to R.string.stats_range_short,
     TimeRange.MEDIUM_TERM to R.string.stats_range_medium,
     TimeRange.LONG_TERM to R.string.stats_range_long,

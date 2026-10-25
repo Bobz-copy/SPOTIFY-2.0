@@ -147,7 +147,7 @@ fun PlaylistOptionsSheet(
         com.music.spotui.data.api.SpotifySync.setPlaylistPublished(page.uri, on) { ok -> if (!ok) restore() }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
+    com.music.spotui.ui.components.LookSheet(onDismissRequest = onDismiss, containerColor = tone(0xFF282828)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             // As the official app: the playlist itself on top (cover, name, owner), then one action a row.
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(20.dp, 0.dp, 20.dp, 12.dp)) {

@@ -32,7 +32,8 @@ fun AlbumByIdScreen(navController: NavController, name: String, artist: String, 
     }
     val albumId = resolved
     when {
-        albumId != null -> ContextScreen(navController, type = "album", id = albumId)
+        albumId != null -> if (com.music.spotui.ui.navigation.isImmersive()) com.music.spotui.ui.immersive.screens.ImmersiveContextScreen(navController, type = "album", id = albumId)
+            else ContextScreen(navController, type = "album", id = albumId)
         failed -> Text(stringResource(R.string.album_not_found), color = AppText)
         else -> Loader(SkeletonKind.Header)
     }

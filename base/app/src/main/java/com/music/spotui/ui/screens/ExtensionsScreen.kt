@@ -452,6 +452,8 @@ private fun InstalledRow(e: InstalledExtension, error: String?, status: app.mysp
     val pkg = remember(e.id, e.sha256) { Extensions.pkg(e.id) }
     val m = pkg?.manifest
     val state = stateLine(e, error, status)
+    var askUninstall by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 10.dp),
@@ -475,8 +477,23 @@ private fun InstalledRow(e: InstalledExtension, error: String?, status: app.mysp
             m?.let { ActionIcons(it.asks().filter { a -> a.key in e.granted }) }
             extra()
         }
+        IconButton(onClick = { askUninstall = true }) {
+            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.extension_uninstall), tint = AppMuted)
+        }
         Switch(checked = e.enabled, onCheckedChange = { enable(e.id, it) })
     }
+    if (askUninstall) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { askUninstall = false },
+        containerColor = tone(0xFF282828),
+        text = { Text(stringResource(R.string.extension_uninstall_confirm, e.name), color = AppText) },
+        confirmButton = {
+            TextButton(onClick = {
+                askUninstall = false
+                scope.launch { Extensions.uninstall(e.id) }
+            }) { Text(stringResource(R.string.extension_uninstall), color = Warning) }
+        },
+        dismissButton = { TextButton(onClick = { askUninstall = false }) { Text(stringResource(R.string.extensions_cancel), color = AppText) } },
+    )
 }
 
 @Composable

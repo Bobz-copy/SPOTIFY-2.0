@@ -291,6 +291,9 @@ object Extensions {
         update { it.remove(id) }
         packages.remove(id); stores.remove(id); settings.remove(id); logs.remove(id)
         clearError(id)
+        runningSha.remove(id)
+        ExtensionAudio.forgetAll()
+        ExtensionAuth.forget(id)
         File(dir, id).deleteRecursively()
         Logbook.log("ext $id: uninstalled")
     }

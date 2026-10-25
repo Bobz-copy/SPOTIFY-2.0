@@ -6,7 +6,7 @@ Each release on GitHub shows its section below. The app shows it too when it off
 
 - 🔔 **Update popup fixed**: it shows as soon as the app knows about the update, a stray tap no longer closes it, and after "Later" the update stays in Settings, About.
 - 🗂️ **Settings in tabs** (classic look): Playback, Downloads, Appearance, Extensions, About. About shows your version and the update when there is one.
-- 🧩 **Extensions**: Refresh really refreshes now (no stale cache, real errors, update check of installed extensions). Extensions are also found and installed from **GitLab** and **Codeberg** (topic `myspoti-extension`).
+- 🧩 **Extensions**: Refresh really refreshes now (no stale cache, real errors, update check of installed extensions). Extensions are also found and installed from **GitLab** and **Codeberg** (topic `myspoti-extension`). Uninstall an extension right from the list (trash icon), which now also clears its sign-in and cache.
 - 🚗 **Android Auto**: playback started from the car no longer stops after a few seconds, and the car's buttons keep working.
 - 🔀 **Real crossfade** for songs played from extensions, downloads and device files (Settings, Playback). Spotify streams keep their fade out and in.
 - 🖼️ **Sharp covers everywhere**: notification, lock screen, Android Auto, share card. Fixes a crash at playback start (#77).

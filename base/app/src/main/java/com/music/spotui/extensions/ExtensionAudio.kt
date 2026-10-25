@@ -31,6 +31,9 @@ object ExtensionAudio {
     }
     private val known = ConcurrentHashMap<String, Known>()
 
+    /** Drops every remembered answer (an extension was removed: none of them may keep playing from it). */
+    fun forgetAll() = known.clear()
+
     fun uri(s: SongsModel): Uri = Uri.Builder().scheme(SCHEME).authority("track").appendPath(s.spotifyTrackId)
         .appendQueryParameter("title", s.title).appendQueryParameter("artist", s.singer)
         .appendQueryParameter("album", s.album).appendQueryParameter("duration", s.durationMs.toString())

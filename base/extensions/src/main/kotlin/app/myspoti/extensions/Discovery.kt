@@ -4,10 +4,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * The store's discovery on GitHub: every public repository with the topic [TOPIC] is offered,
- * along with the repositories' indexes. One search call per store visit, cached 6 hours (the
- * API allows 10 searches a minute without an account); the manifests and packages then come
- * from raw.githubusercontent.com and codeload.github.com, which have no such limit.
+ * The store's discovery on GitHub, GitLab and Codeberg: every public repository with the topic
+ * [TOPIC] is offered, along with the repositories' indexes. One search call per host and store
+ * visit, cached 6 hours (GitHub's API allows 10 searches a minute without an account); the
+ * manifests and packages then come from the hosts' file addresses, which have no such limit.
+ * Ratings (issues' reactions) and download counts exist on GitHub only.
  */
 object Discovery {
     const val TOPIC = "myspoti-extension"
@@ -22,6 +23,19 @@ object Discovery {
 
     /** Up to 100 repositories with the topic, the most recently pushed first. */
     const val SEARCH_URL = "https://api.github.com/search/repositories?q=topic:$TOPIC+fork:true+archived:false&sort=updated&order=desc&per_page=100"
+
+    /** Up to 100 public GitLab projects with the topic, the most recently active first. */
+    const val GITLAB_SEARCH_URL = "https://gitlab.com/api/v4/projects?topic=$TOPIC&visibility=public&archived=false&order_by=last_activity_at&sort=desc&per_page=100"
+
+    /** Up to 50 Codeberg repositories with the topic (`topic=true`: the query is matched against topics), the most recently updated first. */
+    const val CODEBERG_SEARCH_URL = "https://codeberg.org/api/v1/repos/search?q=$TOPIC&topic=true&archived=false&sort=updated&order=desc&limit=50"
+
+    /** The search address of [host]. */
+    fun searchUrl(host: CodeHost) = when (host) {
+        CodeHost.GITHUB -> SEARCH_URL
+        CodeHost.GITLAB -> GITLAB_SEARCH_URL
+        CodeHost.CODEBERG -> CODEBERG_SEARCH_URL
+    }
 
     /** Every open ratings issue (one search for all the store, filtered to the discovered repositories' owners). */
     const val RATINGS_URL = "https://api.github.com/search/issues?q=label:$RATINGS_LABEL+is:issue+is:open&per_page=100"
@@ -45,8 +59,9 @@ object Discovery {
         @SerialName("stargazers_count") val stars: Int = 0,
         val archived: Boolean = false,
         val topics: List<String> = emptyList(),
+        @kotlinx.serialization.Transient val host: CodeHost = CodeHost.GITHUB,
     ) {
-        val repo: GitHubRepo? get() = GitHubRepo.parse(fullName)
+        val repo: GitHubRepo? get() = GitHubRepo.of(host, fullName)
 
         /** Where its manifest is read, on the default branch. */
         fun manifestUrl(): String? = repo?.raw(defaultBranch, "manifest.json")
@@ -56,6 +71,59 @@ object Discovery {
     private data class SearchAnswer(val items: List<Found> = emptyList())
 
     fun parseSearch(text: String): List<Found> = ExtJson.decodeFromString(SearchAnswer.serializer(), text).items.filter { !it.archived && it.repo != null }
+
+    @Serializable
+    private data class GitLabProject(
+        @SerialName("path_with_namespace") val path: String,
+        val description: String? = null,
+        @SerialName("web_url") val webUrl: String = "",
+        @SerialName("default_branch") val defaultBranch: String? = null,
+        @SerialName("last_activity_at") val lastActivityAt: String? = null,
+        @SerialName("star_count") val stars: Int = 0,
+        val archived: Boolean = false,
+        val topics: List<String> = emptyList(),
+    )
+
+    /** GitLab's `/api/v4/projects` answer (a JSON array). */
+    fun parseGitLab(text: String): List<Found> =
+        ExtJson.decodeFromString(kotlinx.serialization.builtins.ListSerializer(GitLabProject.serializer()), text).map {
+            Found(it.path, Owner(it.path.substringBeforeLast('/')), it.description, it.webUrl, it.defaultBranch ?: GitHubRepo.HEAD,
+                it.lastActivityAt, it.lastActivityAt, it.stars, it.archived, it.topics, CodeHost.GITLAB)
+        }.filter { !it.archived && it.repo != null }
+
+    @Serializable
+    private data class ForgejoRepo(
+        @SerialName("full_name") val fullName: String,
+        val description: String? = null,
+        @SerialName("html_url") val htmlUrl: String = "",
+        @SerialName("default_branch") val defaultBranch: String? = null,
+        @SerialName("updated_at") val updatedAt: String? = null,
+        @SerialName("stars_count") val stars: Int = 0,
+        val archived: Boolean = false,
+        val empty: Boolean = false,
+    )
+
+    @Serializable
+    private data class ForgejoAnswer(val data: List<ForgejoRepo> = emptyList())
+
+    /** Codeberg's (Forgejo/Gitea) `/api/v1/repos/search` answer. */
+    fun parseCodeberg(text: String): List<Found> =
+        ExtJson.decodeFromString(ForgejoAnswer.serializer(), text).data.filter { !it.empty }.map {
+            Found(it.fullName, Owner(it.fullName.substringBefore('/')), it.description, it.htmlUrl, it.defaultBranch ?: GitHubRepo.HEAD,
+                it.updatedAt, it.updatedAt, it.stars, it.archived, emptyList(), CodeHost.CODEBERG)
+        }.filter { !it.archived && it.repo != null }
+
+    /** [parseSearch], [parseGitLab] or [parseCodeberg] by [host]. */
+    fun parse(host: CodeHost, text: String): List<Found> = when (host) {
+        CodeHost.GITHUB -> parseSearch(text)
+        CodeHost.GITLAB -> parseGitLab(text)
+        CodeHost.CODEBERG -> parseCodeberg(text)
+    }
+
+    /** The default branch name out of Codeberg's repository API answer (null if absent). */
+    fun parseDefaultBranch(text: String): String? = runCatching {
+        (ExtJson.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject)["default_branch"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+    }.getOrNull()?.takeIf { it.isNotBlank() }
 
     /**
      * The store entry of a discovered repository, from its [manifest]: installed from GitHub

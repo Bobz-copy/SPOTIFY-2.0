@@ -830,8 +830,10 @@ object Extensions {
     fun removeRepository(url: String) = update { r -> r.copy(repositories = r.repositories - url) }
 
     /** Reads a repository's index, and turns off what it blocks. */
-    suspend fun catalog(url: String): Catalog = withContext(Dispatchers.IO) {
-        val c = Catalog.parse(download(url, MAX_INDEX).decodeToString())
+    suspend fun catalog(url: String, fresh: Boolean = false): Catalog = withContext(Dispatchers.IO) {
+        // Refresh: a throwaway query makes the CDN in front of raw.githubusercontent.com (cached for minutes) answer anew.
+        val at = if (fresh) url + (if ('?' in url) "&" else "?") + "t=" + System.currentTimeMillis() else url
+        val c = Catalog.parse(download(at, MAX_INDEX).decodeToString())
         _registry.value.extensions.forEach { e ->
             c.blocks(e.id, e.sha256)?.let { b -> if (e.enabled) disable(e.id, "blocked by ${c.name}: ${b.reason.ifBlank { "no reason given" }}") }
         }
@@ -873,6 +875,7 @@ object Extensions {
         val c = uri.toURL().openConnection() as HttpURLConnection
         c.connectTimeout = 15_000; c.readTimeout = 20_000; c.useCaches = false
         c.setRequestProperty("User-Agent", "Myspoti-Extensions/1")
+        c.setRequestProperty("Cache-Control", "no-cache"); c.setRequestProperty("Pragma", "no-cache")
         try {
             if (c.responseCode !in 200..299) throw ExtensionException("the server answered ${c.responseCode}")
             val out = java.io.ByteArrayOutputStream()

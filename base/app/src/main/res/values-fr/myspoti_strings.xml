@@ -212,6 +212,11 @@
     <string name="settings_section_downloads">Téléchargements</string>
     <string name="settings_section_data">Données et batterie</string>
     <string name="settings_section_display">Affichage et langue</string>
+    <string name="settings_tab_appearance">Apparence</string>
+    <string name="settings_tab_about">À propos</string>
+    <string name="settings_about_version">Version %1$s</string>
+    <string name="settings_update_available">Version %1$s disponible</string>
+    <string name="settings_update_available_detail">Touchez pour la télécharger et l\'installer</string>
     <string name="settings_section_app">Application</string>
     <string name="quality_streaming_title">Qualité du streaming</string>
     <string name="quality_streaming_detail">Ce que le lecteur diffuse depuis Internet.</string>
@@ -345,8 +350,8 @@
     <string name="share_as_image">Partager en image</string>
     <string name="settings_autoplay_title">Lecture automatique</string>
     <string name="settings_autoplay_detail">Quand votre musique se termine, continuer avec des titres similaires</string>
-    <string name="settings_crossfade_title">Fondu enchaîné (sans chevauchement)</string>
-    <string name="settings_crossfade_detail">Un morceau s\'efface sur ses dernières secondes, le suivant remonte. Les deux ne jouent jamais en même temps : un seul lecteur, un seul flux audio.</string>
+    <string name="settings_crossfade_title">Fondu enchaîné</string>
+    <string name="settings_crossfade_detail">Les morceaux issus d\'extensions, de téléchargements et de fichiers locaux se chevauchent : la fin de l\'un s\'efface pendant que le suivant monte. Les flux Spotify ne peuvent pas se chevaucher (un seul flux audio) : ils s\'effacent puis remontent seulement.</string>
     <string name="settings_crossfade_off">Désactivé</string>
     <string name="settings_crossfade_seconds">%1$d s</string>
     <string name="settings_rotation_title">Rotation de l\'écran</string>

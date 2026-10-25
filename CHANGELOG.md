@@ -2,6 +2,16 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.2-beta.6
+
+- 🔔 **Update popup fixed**: it shows as soon as the app knows about the update, a stray tap no longer closes it, and after "Later" the update stays in Settings, About.
+- 🗂️ **Settings in tabs** (classic look): Playback, Downloads, Appearance, Extensions, About. About shows your version and the update when there is one.
+- 🧩 **Extensions**: Refresh really refreshes now (no stale cache, real errors, update check of installed extensions). Extensions are also found and installed from **GitLab** and **Codeberg** (topic `myspoti-extension`).
+- 🚗 **Android Auto**: playback started from the car no longer stops after a few seconds, and the car's buttons keep working.
+- 🔀 **Real crossfade** for songs played from extensions, downloads and device files (Settings, Playback). Spotify streams keep their fade out and in.
+- 🖼️ **Sharp covers everywhere**: notification, lock screen, Android Auto, share card. Fixes a crash at playback start (#77).
+- ✨ **Immersive look**: drag songs to reorder the queue, and the "playing from" source line is no longer cut off.
+
 ## 2.0.2-beta.5
 
 - ✨ **New Immersive look** (optional, Apple-Music-like): glass tab bar and mini player that fold away when you scroll, animated player and lyrics, grouped Settings, glass sheets (Spotify Connect, queue, quality…). Offered at the first open after the update; switch any time in Settings, Display. Classic stays the default.

@@ -22,12 +22,16 @@ object UpdateChecker {
     private const val INTERVAL_MS = 3 * 3_600_000L
     private val http by lazy { OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).addInterceptor(com.music.spotui.data.DataSaver.interceptor).build() }
 
-    suspend fun check(context: Context): Release? = withContext(Dispatchers.IO) {
+    /**
+     * [manual]: asked from Settings. A release dismissed with "Later" is then offered again
+     * (the launch check stays quiet about it).
+     */
+    suspend fun check(context: Context, manual: Boolean = false): Release? = withContext(Dispatchers.IO) {
         val repo = BuildConfig.UPDATE_REPO
         if (repo.isBlank()) return@withContext null
         val prefs = context.getSharedPreferences("updates", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        if (now - prefs.getLong("checked_at", 0L) < INTERVAL_MS) return@withContext pending(prefs)
+        if (now - prefs.getLong("checked_at", 0L) < INTERVAL_MS) return@withContext pending(prefs, manual)
         val release = runCatching {
             // Stable builds follow "latest", which never includes pre-releases. A beta build
             // also takes the newer betas, then the release they lead to.
@@ -46,14 +50,18 @@ object UpdateChecker {
         prefs.edit().putLong("checked_at", now)
             .putString("version", release?.version).putString("url", release?.pageUrl)
             .putString("notes", release?.notes).putString("apk", release?.apkUrl).apply()
-        pending(prefs)
+        pending(prefs, manual)
     }
 
-    /** The latest release known, if newer than this build and not dismissed. */
-    private fun pending(prefs: android.content.SharedPreferences): Release? {
+    /** The newer release last seen, dismissed or not (no request): what Settings > About shows. */
+    fun known(context: Context): Release? =
+        pending(context.getSharedPreferences("updates", Context.MODE_PRIVATE), true)
+
+    /** The latest release known, if newer than this build and (unless [manual]) not dismissed. */
+    private fun pending(prefs: android.content.SharedPreferences, manual: Boolean = false): Release? {
         val version = prefs.getString("version", null) ?: return null
         val url = prefs.getString("url", null) ?: return null
-        if (prefs.getString("dismissed", null) == version) return null
+        if (!manual && prefs.getString("dismissed", null) == version) return null
         return Release(version, url, prefs.getString("notes", null).orEmpty(), prefs.getString("apk", null).orEmpty()).takeIf { isNewer(version, BuildConfig.VERSION_NAME) }
     }
 

@@ -158,7 +158,7 @@
     <string name="ext_welcome_ok">Got it</string>
 
     <!-- GitHub: discovery, ratings, reports -->
-    <string name="extensions_github_title">On GitHub</string>
+    <string name="extensions_github_title">On GitHub, GitLab and Codeberg</string>
     <string name="extensions_github_note">Published by the community, not reviewed by Myspoti. Each author is responsible for their extension.</string>
     <string name="extensions_show_all">Show all (%1$d hidden)</string>
     <string name="extensions_show_less">Hide blocked, reported, low-rated and abandoned ones</string>

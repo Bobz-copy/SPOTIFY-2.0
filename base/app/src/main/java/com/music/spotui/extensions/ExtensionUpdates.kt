@@ -6,6 +6,7 @@ import app.myspoti.extensions.Catalog
 import app.myspoti.extensions.ExtensionException
 import app.myspoti.extensions.ExtensionPackage
 import app.myspoti.extensions.GitHub
+import app.myspoti.extensions.Discovery
 import app.myspoti.extensions.GitHubRepo
 import app.myspoti.extensions.Manifest
 import app.myspoti.extensions.Origin
@@ -65,6 +66,7 @@ object ExtensionUpdates {
         c.instanceFollowRedirects = follow
         c.requestMethod = method
         c.setRequestProperty("User-Agent", "Myspoti-Extensions/1")
+        c.setRequestProperty("Cache-Control", "no-cache"); c.setRequestProperty("Pragma", "no-cache")
         accept?.let { c.setRequestProperty("Accept", it) }
         token?.let { c.setRequestProperty("Authorization", "Bearer $it") }
         try {
@@ -102,6 +104,13 @@ object ExtensionUpdates {
         return GitHub.tagFromLocation(a.location) to GitHub.repoOf(a.location)
     }
 
+    /** [ref], with `HEAD` turned into the default branch's name where the host's file addresses need one (Codeberg). */
+    private fun concrete(repo: GitHubRepo, ref: String): String {
+        if (ref != GitHubRepo.HEAD) return ref
+        val api = repo.defaultBranchApi ?: return ref
+        return runCatching { get(api, MAX_TEXT).body?.decodeToString()?.let(Discovery::parseDefaultBranch) }.getOrNull() ?: "main"
+    }
+
     private class SourceGone : ExtensionException("its GitHub repository is gone")
 
     /**
@@ -118,15 +127,15 @@ object ExtensionUpdates {
         var asset = false
         var answer: Answer? = null
         if (isTag && at != null) {
-            answer = get(repo.releaseAsset(at!!), GitHub.MAX_ARCHIVE).takeIf { it.status in 200..299 }
+            answer = repo.releaseAsset(at!!)?.let { get(it, GitHub.MAX_ARCHIVE) }?.takeIf { it.status in 200..299 }
             asset = answer != null
         }
         if (answer == null) {
-            answer = get(repo.archive(at ?: GitHubRepo.HEAD, isTag), GitHub.MAX_ARCHIVE)
+            answer = get(repo.archive(at ?: concrete(repo, GitHubRepo.HEAD), isTag), GitHub.MAX_ARCHIVE)
             if (answer.status == 404) throw SourceGone()
-            if (answer.status !in 200..299) throw ExtensionException("GitHub answered ${answer.status}")
+            if (answer.status !in 200..299) throw ExtensionException("${repo.host.label} answered ${answer.status}")
         }
-        val raw = answer.body ?: throw ExtensionException("GitHub sent nothing")
+        val raw = answer.body ?: throw ExtensionException("${repo.host.label} sent nothing")
         val zip = Archive.toPackage(raw)
         if (expectSha != null && ExtensionPackage.sha256(raw) != expectSha.lowercase() && ExtensionPackage.sha256(zip) != expectSha.lowercase())
             throw ExtensionException("the package is not the one the store lists (sha256 differs)")
@@ -186,7 +195,7 @@ object ExtensionUpdates {
         // Where to look: the newest release when it came from one (or one appeared), else its branch.
         val (tag, movedTo) = latestTag(repo)
         val ref = tag ?: if (origin.tag) GitHubRepo.HEAD else origin.ref
-        val manifestAnswer = get(repo.raw(ref, "manifest.json"), MAX_TEXT)
+        val manifestAnswer = get(repo.raw(concrete(repo, ref), "manifest.json"), MAX_TEXT)
         if (manifestAnswer.status == 404 && tag == null) throw SourceGone()
         val listed = manifestAnswer.body?.let { runCatching { Manifest.parse(it.decodeToString()) }.getOrNull() }
         if (e.sourceGone) Extensions.update { r -> r.find(id)?.let { r.put(it.copy(sourceGone = false)) } ?: r }
@@ -307,14 +316,23 @@ object ExtensionUpdates {
 
     // ── A small cache of GitHub answers (the store's search, manifests, ratings) ──
 
-    /** [url]'s body, from the cache when younger than [maxAgeMs], else fetched and kept; null on 404. */
-    internal fun cached(url: String, maxAgeMs: Long, max: Int = MAX_TEXT): String? {
+    /**
+     * [url]'s body, from the cache when younger than [maxAgeMs], else fetched and kept; null on 404.
+     * [force] (Refresh) skips the cache and reports a failure instead of falling back to the old copy.
+     */
+    internal fun cached(url: String, maxAgeMs: Long, max: Int = MAX_TEXT, force: Boolean = false): String? {
         val f = File(Extensions.dir, "cache/" + ExtensionPackage.sha256(url.toByteArray()).take(24))
-        if (f.isFile && System.currentTimeMillis() - f.lastModified() < maxAgeMs) return f.readText().ifEmpty { null }
+        if (!force && f.isFile && System.currentTimeMillis() - f.lastModified() < maxAgeMs) return f.readText().ifEmpty { null }
         val a = runCatching { get(url, max, accept = if (url.startsWith("https://api.github.com/")) "application/vnd.github+json" else null) }
-            .getOrElse { if (f.isFile) return f.readText().ifEmpty { null } else throw it }
+            .getOrElse { if (f.isFile && !force) return f.readText().ifEmpty { null } else throw it }
         if (a.status == 404) { writeAtomically(f, ""); return null }
-        if (a.status !in 200..299) { if (f.isFile) return f.readText().ifEmpty { null }; throw ExtensionException("GitHub answered ${a.status}") }
+        if (a.status !in 200..299) {
+            // A rate limit (403 / 429) keeps the old copy even on Refresh: hosts allow few searches a minute without an account.
+            val limited = a.status == 403 || a.status == 429
+            if (f.isFile && (!force || limited)) return f.readText().ifEmpty { null }
+            val host = runCatching { java.net.URI(url).host }.getOrNull() ?: "the host"
+            throw ExtensionException("$host answered ${a.status}" + if (limited) " (too many requests: try again in a few minutes)" else "")
+        }
         val text = a.body?.decodeToString().orEmpty()
         writeAtomically(f, text)
         return text

@@ -324,6 +324,11 @@ fun ImmersivePlayer(
                             .dragToClose(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // The header is a fixed HEADER_HEIGHT: with a source line the three lines are
+                        // set tighter, so none is clipped at the bottom.
+                        val sourceLabel = com.music.spotui.ui.components.playingSourceLabel()
+                        val hasSource = sourceLabel.isNotBlank() && !state.adPlaying
+                        val lineH = if (hasSource) 22.sp else 24.sp
                         Column(
                             Modifier
                                 .weight(1f)
@@ -338,7 +343,7 @@ fun ImmersivePlayer(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = if (state.adPlaying) stringResource(R.string.immersive_player_ad) else state.title,
-                                    style = Immersive.Title.copy(fontSize = 20.sp, lineHeight = 24.sp),
+                                    style = Immersive.Title.copy(fontSize = 20.sp, lineHeight = lineH),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier
@@ -363,7 +368,7 @@ fun ImmersivePlayer(
                             if (!state.adPlaying) {
                                 Text(
                                     text = state.artist,
-                                    style = Immersive.Title.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.W500),
+                                    style = Immersive.Title.copy(fontSize = 20.sp, lineHeight = lineH, fontWeight = FontWeight.W500),
                                     color = tint.copy(alpha = 0.55f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -374,15 +379,13 @@ fun ImmersivePlayer(
                             }
                             // What the sound is when Myspoti's own player plays it (an extension's stream, a
                             // download); a tap opens what plays and its quality. Same state as the Classic player.
-                            val source = com.music.spotui.ui.components.playingSourceLabel()
-                            if (source.isNotBlank() && !state.adPlaying) Text(
-                                text = source,
-                                style = Immersive.Caption,
+                            if (hasSource) Text(
+                                text = sourceLabel,
+                                style = Immersive.Caption.copy(lineHeight = 14.sp),
                                 color = tint.copy(alpha = 0.45f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier
-                                    .padding(top = 2.dp)
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { showQuality = true },
                             )
                         }

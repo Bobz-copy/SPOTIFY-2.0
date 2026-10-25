@@ -6,6 +6,7 @@
     <string name="immersive_queue_now_playing">Now playing</string>
     <string name="immersive_queue_empty">Nothing is queued</string>
     <string name="immersive_queue_remove">Remove from queue</string>
+    <string name="immersive_queue_reorder">Move in queue</string>
     <string name="immersive_queue_shuffle">Shuffle</string>
     <string name="immersive_queue_repeat">Repeat</string>
 </resources>

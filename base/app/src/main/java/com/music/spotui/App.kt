@@ -274,7 +274,10 @@ private fun SupportDialog(supporter: Boolean, onSupport: () -> Unit, onSponsor: 
     }
 }
 
-/** "New version" dialog: checked a few seconds after launch (not on the startup path). */
+/**
+ * "New version" dialog: checked at launch (off the UI thread), shown as soon as the answer is
+ * known. "Later" hides it; Settings > About offers the update again.
+ */
 @Composable
 private fun UpdatePrompt() {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -282,7 +285,7 @@ private fun UpdatePrompt() {
     androidx.compose.runtime.LaunchedEffect(Unit) {
         // Turned off in Settings: no check at launch. The manual check there still asks.
         if (!com.music.spotui.data.preferences.AutoUpdateCheckPref.on) return@LaunchedEffect
-        kotlinx.coroutines.delay(5_000)
+        // At once: the request runs on the IO dispatcher, nothing waits for it.
         release = com.music.spotui.data.api.UpdateChecker.check(context)
     }
     updateCardOpen.value = release != null
@@ -348,7 +351,11 @@ private fun UpdateDialog(
     version: String, notes: String, status: String?, progress: Float?, button: String,
     onUpdate: () -> Unit, onLater: () -> Unit,
 ) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onLater) {
+    // Only the buttons close it: a touch outside must not (the back gesture still means "Later").
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onLater,
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
+    ) {
         androidx.compose.foundation.layout.Column(
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             modifier = Modifier

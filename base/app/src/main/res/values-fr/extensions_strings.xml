@@ -158,7 +158,7 @@
     <string name="ext_welcome_ok">Compris</string>
 
     <!-- GitHub : découverte, notes, signalements -->
-    <string name="extensions_github_title">Sur GitHub</string>
+    <string name="extensions_github_title">Sur GitHub, GitLab et Codeberg</string>
     <string name="extensions_github_note">Publiées par la communauté, non vérifiées par Myspoti. Chaque auteur est responsable de son extension.</string>
     <string name="extensions_show_all">Tout afficher (%1$d masquées)</string>
     <string name="extensions_show_less">Masquer les bloquées, signalées, mal notées et abandonnées</string>

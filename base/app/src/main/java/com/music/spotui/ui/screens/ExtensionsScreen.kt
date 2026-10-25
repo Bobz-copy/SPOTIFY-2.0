@@ -193,12 +193,13 @@ fun ExtensionsScreen(navController: NavController) {
         downloading = true
         scope.launch {
             // A GitHub repository's address: its newest release (or default branch), kept on the phone and updated from there.
-            val gitHub = app.myspoti.extensions.GitHubRepo.parse(url)?.takeIf { !url.endsWith(".zip") && (url.contains("github.com/") || !url.contains("://")) }
+            // (GitHub, GitLab or Codeberg; `gitlab:group/name` and `codeberg:owner/name` work too.)
+            val gitHub = app.myspoti.extensions.GitHubRepo.parse(url)?.takeIf { !url.endsWith(".zip") }
             runCatching {
                 if (gitHub != null) com.music.spotui.extensions.ExtensionUpdates.fromGitHub(gitHub)
                 else Extensions.downloadPackage(url).let { (zip, p) -> com.music.spotui.extensions.ExtensionUpdates.Fetched(zip, p, null) }
             }
-                .onSuccess { f -> offer(ctx, f.zip, f.origin?.let { "https://github.com/${it.repo}" } ?: url, f.origin) }
+                .onSuccess { f -> offer(ctx, f.zip, f.origin?.page() ?: url, f.origin) }
                 .onFailure { toastError(ctx, it) }
             downloading = false
         }

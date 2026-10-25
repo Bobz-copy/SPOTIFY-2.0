@@ -212,6 +212,11 @@
     <string name="settings_section_downloads">Downloads</string>
     <string name="settings_section_data">Data and battery</string>
     <string name="settings_section_display">Display and language</string>
+    <string name="settings_tab_appearance">Appearance</string>
+    <string name="settings_tab_about">About</string>
+    <string name="settings_about_version">Version %1$s</string>
+    <string name="settings_update_available">Version %1$s available</string>
+    <string name="settings_update_available_detail">Tap to download and install it</string>
     <string name="settings_section_app">App</string>
     <string name="quality_streaming_title">Streaming quality</string>
     <string name="quality_streaming_detail">What the player streams over the network.</string>
@@ -345,8 +350,8 @@
     <string name="share_as_image">Share as image</string>
     <string name="settings_autoplay_title">Autoplay</string>
     <string name="settings_autoplay_detail">When your music ends, keep playing similar songs</string>
-    <string name="settings_crossfade_title">Crossfade (tracks fade, they do not overlap)</string>
-    <string name="settings_crossfade_detail">A track fades out over its last seconds, the next one fades in. They never play at once: one player, one audio stream.</string>
+    <string name="settings_crossfade_title">Crossfade</string>
+    <string name="settings_crossfade_detail">Songs from extensions, downloads and local files overlap: the end of one fades out while the next fades in. Spotify streams cannot overlap (one audio stream): they only fade out and in.</string>
     <string name="settings_crossfade_off">Off</string>
     <string name="settings_crossfade_seconds">%1$ds</string>
     <string name="settings_rotation_title">Screen rotation</string>

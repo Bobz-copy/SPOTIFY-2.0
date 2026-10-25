@@ -169,30 +169,62 @@ class PlaybackService : MediaBrowserServiceCompat() {
     /** A Spotify Connect device plays (the session's volume is that device's). */
     private var playingRemote = false
 
+    /**
+     * The car (Android Auto, Bluetooth) binds to this service without ever starting it. A bound-only
+     * service cannot always promote itself to the foreground from the background (Android 12+), and
+     * the app is then just a cached process the system freezes a few seconds into a song: playback
+     * paused by itself and the car's buttons went dead. Every command that makes sound starts the
+     * service for real (the media session's callback is allowed to, and [onStartCommand] goes
+     * foreground at once), so it also outlives the car's binding.
+     */
+    private fun ensureStarted() {
+        if (foreground) return
+        runCatching { androidx.core.content.ContextCompat.startForegroundService(this, Intent(this, PlaybackService::class.java)) }
+            .onFailure { android.util.Log.w("Myspoti", "service not started from a car command: ${it.message}") }
+    }
+
+    /** Runs a system command on the app's player; a command with nobody to take it is logged, not lost silently. */
+    private inline fun command(name: String, wake: Boolean = true, run: PlaybackControls.() -> Unit) {
+        Logbook.log("media session: $name")
+        if (wake) ensureStarted()
+        val c = controls
+        if (c == null) android.util.Log.w("Myspoti", "media session: $name dropped, the player is not attached yet") else c.run()
+    }
+
     private val callback = object : MediaSessionCompat.Callback() {
-        override fun onPlay() { controls?.play() }
-        override fun onPause() { controls?.pause() }
-        override fun onSkipToNext() { controls?.next() }
-        override fun onSkipToPrevious() { controls?.previous() }
-        override fun onSeekTo(pos: Long) { controls?.seekTo(pos) }
-        override fun onStop() { controls?.pause() }
-        override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) { controls?.playFromMediaId(mediaId) }
-        override fun onPlayFromSearch(query: String, extras: Bundle?) { controls?.playFromSearch(query) }
+        override fun onPlay() = command("play") { play() }
+        override fun onPrepare() { Logbook.log("media session: prepare") }
+        override fun onPause() = command("pause", wake = false) { pause() }
+        override fun onSkipToNext() = command("next") { next() }
+        override fun onSkipToPrevious() = command("previous") { previous() }
+        override fun onSeekTo(pos: Long) = command("seek", wake = false) { seekTo(pos) }
+        override fun onStop() = command("stop", wake = false) { pause() }
+        override fun onPlayFromMediaId(mediaId: String, extras: Bundle?) = command("play $mediaId") { playFromMediaId(mediaId) }
+        override fun onPlayFromSearch(query: String, extras: Bundle?) = command("play from search") {
+            // "Play music" with no words (Assistant, the car's voice button) is a plain play, not a search.
+            if (query.isBlank()) play() else playFromSearch(query)
+        }
         override fun onCustomAction(action: String, extras: Bundle?) {
             when (action) {
-                ACTION_LIKE -> controls?.setLiked(!(current?.liked ?: false))
-                ACTION_SHUFFLE -> controls?.setShuffle(!(current?.shuffle ?: false))
+                ACTION_LIKE -> command("like", wake = false) { setLiked(!(current?.liked ?: false)) }
+                ACTION_SHUFFLE -> command("shuffle", wake = false) { setShuffle(!(current?.shuffle ?: false)) }
             }
         }
     }
 
-    private fun apply(info: NowPlayingInfo) {
+    private fun apply(raw: NowPlayingInfo) {
+        // Every surface fed from here (notification, lock screen, car, Bluetooth) is large: the queue and
+        // the lists hand over the 64/300 px id, whatever the caller did; also the key of the cover cache.
+        val info = raw.coverUrl?.let { raw.copy(coverUrl = Covers.large(it)) } ?: raw
+        // A bitmap recycled behind our back (issue #77: "cannot use a recycled source in createBitmap"
+        // thrown by MediaMetadata.Builder.build) is dropped and fetched again, never handed to the session.
+        if (cover?.isRecycled == true) { cover = null; lastCoverUrl = null }
         // Before the metadata: a cached cover is in it at once. A cover that failed (offline, Doze with the screen off, a 5xx) is asked again on the next
         // real state change: it used to stay bare until the next song.
         if (info.coverUrl != lastCoverUrl || (cover == null && !info.coverUrl.isNullOrBlank() && coverJob?.isActive != true)) {
             loadCover(info.coverUrl)
         }
-        session.setMetadata(MediaMetadataCompat.Builder()
+        val metadata = fun(withArt: Boolean) = (MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, info.id)
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, info.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, info.artist)
@@ -201,11 +233,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, info.durationMs)
             .apply {
                 // Both keys: the lock screen, the shade, Bluetooth and the car do not read the same one.
-                val art = cover.takeIf { info.coverUrl == lastCoverUrl }
+                val art = cover.takeIf { withArt && info.coverUrl == lastCoverUrl && it?.isRecycled == false }
                 putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art)
                 putBitmap(MediaMetadataCompat.METADATA_KEY_ART, art)
             }
             .build())
+        runCatching { session.setMetadata(metadata(true)) }.onFailure {
+            android.util.Log.w("Myspoti", "session art rejected, metadata without it: $it")
+            session.setMetadata(metadata(false))
+        }
         val state = when {
             info.buffering && info.playing -> PlaybackStateCompat.STATE_BUFFERING
             info.playing -> PlaybackStateCompat.STATE_PLAYING
@@ -226,7 +262,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private fun loadCover(url: String?) {
         coverJob?.cancel()
         lastCoverUrl = url
-        cover = url?.let { covers.get(it) }
+        cover = url?.let { covers.get(it) }?.takeIf { !it.isRecycled }
         if (url.isNullOrBlank() || cover != null) return
         coverJob = scope.launch {
             // Retried with a growing pause: a failed load used to be forgotten.
@@ -427,7 +463,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
             android.util.Log.w("Myspoti", "media browser: empty root for $clientPackageName")
             return BrowserRoot(EMPTY_ROOT_ID, null)
         }
-        return BrowserRoot(ROOT_ID, Bundle().apply { putBoolean("android.media.browse.SEARCH_SUPPORTED", true) })
+        return BrowserRoot(ROOT_ID, Bundle().apply {
+            putBoolean("android.media.browse.SEARCH_SUPPORTED", true)
+            // Without this the car ignores the list / grid hints of the folders (AutoBrowser).
+            putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+            putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
+            putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1)
+        })
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
@@ -557,6 +599,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
             ) return
             svc.apply(info)
             svc.show(info)
+            // Sound with no foreground service (bound by the car only, promotion refused): start it.
+            if ((info.playing || info.buffering) && !svc.foreground) svc.ensureStarted()
         }
 
         /** Signed out: the notification and the media session go, nothing of the account stays. */

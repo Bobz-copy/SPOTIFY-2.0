@@ -10,6 +10,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.music.spotui.data.local.LocalTrack
+import com.music.spotui.data.preferences.CrossfadePref
 
 /**
  * Plays the device's own audio files (Local Files). While it plays, the Spotify engine is
@@ -44,13 +45,18 @@ object LocalPlayer {
     private var exo: ExoPlayer? = null
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-    private fun player(): ExoPlayer = exo ?: ExoPlayer.Builder(Graph.app)
-        .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
-        .setHandleAudioBecomingNoisy(true)
+    private fun build(main: Boolean): ExoPlayer = ExoPlayer.Builder(Graph.app)
+        // The fading-out copy of a crossfade owns neither the audio focus nor the noisy-audio pause:
+        // the main player has them and the fade follows its play state.
+        .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), main)
+        .setHandleAudioBecomingNoisy(main)
         // Downloaded songs are encrypted files: the player reads them through the decrypting source.
         .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
             com.music.spotui.data.offline.OfflineCrypto.Factory(Graph.app)).setLoadErrorHandlingPolicy(NoAudioNotRetried))
-        .build().also { p ->
+        .build()
+
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun player(): ExoPlayer = exo ?: build(true).also { p ->
             p.addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) = publish()
 
@@ -59,17 +65,26 @@ object LocalPlayer {
                     log("state ${stateName(state)} at ${p.currentPosition} ms, item ${p.currentMediaItemIndex + 1}/${p.mediaItemCount}")
                     if (state == Player.STATE_ENDED) atEnd(p)
                 }
-                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) =
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                     log("playWhenReady $playWhenReady (${PLAY_WHEN_READY_REASONS.getOrElse(reason - 1) { "reason $reason" }})")
-                override fun onIsPlayingChanged(isPlaying: Boolean) =
+                    // A pause (or a lost focus) during a fade stops the fading-out song too.
+                    outgoing?.playWhenReady = playWhenReady
+                }
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
                     log("isPlaying $isPlaying at ${p.currentPosition} ms")
+                    if (isPlaying) tick.run()
+                }
                 override fun onPlaybackSuppressionReasonChanged(reason: Int) =
                     log("suppressed: ${if (reason == Player.PLAYBACK_SUPPRESSION_REASON_NONE) "no" else "reason $reason"}")
 
                 // The next song an extension streams is asked for as soon as this one starts: it then
                 // starts at once instead of waiting for the extension when this one ends.
                 // The last one starting asks what goes on after it (see continueIfLast).
-                override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { prefetchNext(p); continueIfLast(p) }
+                override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                    // Anything but the transition the fade itself makes (a skip, a tap in the queue) ends the fade.
+                    if (!startingFade) endFade()
+                    prefetchNext(p); continueIfLast(p)
+                }
 
                 // A song whose audio an extension did not give or that would not play (audio-source
                 // hook) is never skipped silently: Spotify plays it, where it was, and goes on.
@@ -152,6 +167,7 @@ object LocalPlayer {
         listName = context ?: Graph.app.getString(app.myspoti.engine.R.string.local_files_title)
         listUri = contextUri
         active.value = true
+        endFade()
         val p = player()
         p.shuffleModeEnabled = false
         p.setMediaItems(list.map(::item), index.coerceIn(0, list.lastIndex), startMs.coerceAtLeast(0L))
@@ -164,12 +180,95 @@ object LocalPlayer {
     /** Back to Spotify: stop and forget the local queue. */
     fun stop() {
         if (!active.value) return
+        endFade()
         active.value = false
         forgetRadio(); continues = false
         exo?.let { it.stop(); it.clearMediaItems() }
         tracks.clear(); unshuffled = null
         queued.clear(); playingQueued = null; radioSongs.clear()
         SongPlayer.restoreEngineQueue()
+    }
+
+
+    // ── Crossfade (real overlap: every song of this player is a local-player one) ──
+    // Near the end of a song, a second player takes over its last seconds (fading out) while the
+    // main player moves on to the next item at once (fading in). The main player thus sees an
+    // ordinary track change: session, notification, queue and play counting are untouched.
+    private var outgoing: ExoPlayer? = null
+    private var fadeMs = 0L
+    private var startingFade = false
+    private var preparingFade = false
+    /** The item index whose end must not fade (the user sought into its tail, or the fade failed). */
+    private var noFadeFor = -1
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private val tick: Runnable = object : Runnable {
+        override fun run() {
+            handler.removeCallbacks(this)
+            val p = exo ?: return
+            if (outgoing != null) {
+                val t = CrossfadeRamp.progress(p.currentPosition, fadeMs)
+                p.volume = CrossfadeRamp.incomingGain(t)
+                outgoing?.volume = CrossfadeRamp.outgoingGain(t)
+                if (t >= 1f) endFade() else handler.postDelayed(this, 40)
+                return
+            }
+            if (!p.isPlaying) return
+            if (!preparingFade && p.currentMediaItemIndex != noFadeFor && canFade(p) &&
+                CrossfadeRamp.shouldStart(CrossfadePref.seconds, p.duration.takeIf { it > 0 } ?: 0L, p.currentPosition)) beginFade(p)
+            handler.postDelayed(this, 200)
+        }
+    }
+
+    private fun canFade(p: ExoPlayer): Boolean =
+        CrossfadePref.seconds > 0 && p.repeatMode != Player.REPEAT_MODE_ONE && p.nextMediaItemIndex != C.INDEX_UNSET &&
+            p.currentMediaItem != null && p.playWhenReady
+
+    private fun beginFade(p: ExoPlayer) {
+        val item = p.currentMediaItem ?: return
+        val index = p.currentMediaItemIndex
+        val remaining = (p.duration - p.currentPosition).coerceAtLeast(0)
+        val fade = minOf(CrossfadeRamp.fadeMs(CrossfadePref.seconds, p.duration), remaining)
+        if (fade < 500) return
+        preparingFade = true
+        val out = build(false)
+        out.volume = 1f
+        // The copy starts a little ahead of the main player: it is heard once it is ready.
+        out.setMediaItem(item, p.currentPosition + 300)
+        out.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state != Player.STATE_READY || exo == null) return
+                out.removeListener(this)
+                preparingFade = false
+                val main = exo ?: return out.release()
+                if (!active.value || main.currentMediaItemIndex != index || !main.playWhenReady || !canFade(main)) return out.release()
+                outgoing = out; fadeMs = fade
+                out.play()
+                startingFade = true
+                main.volume = 0f
+                main.seekToNextMediaItem()
+                startingFade = false
+                log("crossfade $fade ms")
+                tick.run()
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // Could not start the copy: this song ends as usual.
+                preparingFade = false; noFadeFor = index; out.release()
+            }
+        })
+        out.prepare()
+        // Not ready in time: no fade for this song.
+        handler.postDelayed({
+            if (preparingFade && outgoing == null) { preparingFade = false; noFadeFor = index; out.release() }
+        }, 1500)
+    }
+
+    /** Ends a fade (done, or interrupted by a skip/seek/stop): the copy goes, the main player is at full volume. */
+    private fun endFade() {
+        handler.removeCallbacks(tick)
+        outgoing?.let { it.stop(); it.release() }
+        outgoing = null
+        exo?.let { it.volume = 1f; if (it.isPlaying) handler.postDelayed(tick, 200) }
     }
 
     /** A player stopped by an error (idle) is prepared again first: a play alone does nothing there. */
@@ -180,18 +279,27 @@ object LocalPlayer {
     }
     fun pause() { exo?.pause() }
     fun next() {
+        endFade()
         exo?.let {
             if (it.hasNextMediaItem()) { com.music.spotui.extensions.Extensions.skipAsked("forward"); it.seekToNextMediaItem() }
             else if (atEnd(it)) com.music.spotui.extensions.Extensions.skipAsked("forward")
         }
     }
     fun previous() {
+        endFade()
         exo?.let {
             if (it.currentPosition > 3000 || !it.hasPreviousMediaItem()) it.seekTo(0)
             else { com.music.spotui.extensions.Extensions.skipAsked("backward"); it.seekToPreviousMediaItem() }
         }
     }
-    fun seekTo(ms: Long) { exo?.seekTo(ms) }
+    fun seekTo(ms: Long) {
+        endFade()
+        exo?.let { p ->
+            // A seek into the tail of a song is the user's choice: that song then ends as usual.
+            if (CrossfadeRamp.shouldStart(CrossfadePref.seconds, duration(), ms)) noFadeFor = p.currentMediaItemIndex
+            p.seekTo(ms)
+        }
+    }
     /**
      * Shuffle reorders the songs after the current one (and off puts the list's order back),
      * so the queue shown is the order that really plays and can be edited like any list.
@@ -228,6 +336,7 @@ object LocalPlayer {
     fun skipTo(index: Int) {
         val p = exo ?: return
         if (index !in tracks.indices) return
+        endFade()
         val (order, at) = LocalQueueOrder.skip(tracks.toList(), p.currentMediaItemIndex, index, isQueued)
         if (order != tracks) arrange(order)
         p.seekTo(at, 0L); p.play()

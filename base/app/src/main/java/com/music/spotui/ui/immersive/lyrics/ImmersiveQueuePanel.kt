@@ -6,7 +6,8 @@
  * Changes: the sections (now playing, next in queue, next from the context), placement-only
  * item motion and the fading edges, over Myspoti's SongPlayer.engineQueue. A row is removed
  * by swiping it away, and shuffle and repeat sit in the header as in the queue sheet.
- * Drag-to-reorder, history and the autoplay heading are left out for now.
+ * A handle on each upcoming row drags it within its section (SongPlayer.reorder); history and
+ * the autoplay heading are left out for now.
  */
 package com.music.spotui.ui.immersive.lyrics
 
@@ -15,6 +16,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
@@ -60,7 +63,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -118,8 +130,12 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
     // Rows swiped away, hidden at once: the queue takes a moment to report the removal.
     val removed = remember { mutableStateListOf<String>() }
     LaunchedEffect(queue) { removed.clear() }
-    val queued = queue.queued.dedupedKeys("q").filter { it.first !in removed }
-    val nextUp = queue.nextUp.dedupedKeys("n").filter { it.first !in removed }
+    // Rows just dragged, shown in their new order until the queue reports it.
+    val reordered = remember { mutableStateMapOf<String, List<String>>() }
+    LaunchedEffect(queue) { reordered.clear() }
+    val queued = queue.queued.dedupedKeys("q").filter { it.first !in removed }.inOrder(reordered["q"])
+    val nextUp = queue.nextUp.dedupedKeys("n").filter { it.first !in removed }.inOrder(reordered["n"])
+    val drag = remember { QueueDrag() }
 
     val listState = rememberLazyListState()
     val keepScroll = remember(listState) { keepScrollInList(listState) }
@@ -186,7 +202,7 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
                     )
                 }
             }
-            queueSection(queued, removed)
+            queueSection("q", queued, removed, reordered, drag)
         }
         if (nextUp.isNotEmpty()) {
             item(key = "heading-next") {
@@ -199,7 +215,7 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
                     modifier = Modifier.padding(top = 16.dp, bottom = 6.dp).then(queueMotion()),
                 )
             }
-            queueSection(nextUp, removed)
+            queueSection("n", nextUp, removed, reordered, drag)
         }
         if (!hasCurrent && queued.isEmpty() && nextUp.isEmpty()) {
             item(key = "empty") {
@@ -226,14 +242,42 @@ private fun List<SongPlayer.QueueItem>.dedupedKeys(prefix: String): List<Pair<St
     }
 }
 
-/** One section's rows, each swiped away to remove it. */
+private fun List<Pair<String, SongPlayer.QueueItem>>.inOrder(
+    keys: List<String>?,
+): List<Pair<String, SongPlayer.QueueItem>> {
+    if (keys == null || keys.size != size) return this
+    val byKey = associateBy { it.first }
+    return keys.mapNotNull { byKey[it] }.takeIf { it.size == size } ?: this
+}
+
+/** The row being dragged by its handle: which one, and how far it is from its slot. */
+private class QueueDrag {
+    var key by mutableStateOf<String?>(null)
+    var offset by mutableFloatStateOf(0f)
+}
+
+/** One section's rows, each swiped away to remove it or dragged by its handle to move it. */
 @OptIn(ExperimentalMaterial3Api::class)
 private fun LazyListScope.queueSection(
+    section: String,
     rows: List<Pair<String, SongPlayer.QueueItem>>,
     removed: SnapshotStateList<String>,
+    reordered: SnapshotStateMap<String, List<String>>,
+    drag: QueueDrag,
 ) {
     items(rows.size, key = { rows[it].first }) { index ->
         val (key, item) = rows[index]
+        val rowPx = with(LocalDensity.current) { Immersive.RowHeight.toPx() }
+        val from = rows.indexOfFirst { it.first == drag.key }
+        val slot = if (from < 0) -1 else (from + (drag.offset / rowPx).roundToInt()).coerceIn(0, rows.lastIndex)
+        // Rows the dragged one passes step aside by one slot.
+        val shift = when {
+            from < 0 || key == drag.key -> 0f
+            index in (from + 1)..slot -> -rowPx
+            index in slot until from -> rowPx
+            else -> 0f
+        }
+        val dragged = key == drag.key
         val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) {
                 removed += key
@@ -246,7 +290,9 @@ private fun LazyListScope.queueSection(
         SwipeToDismissBox(
             state = dismiss,
             enableDismissFromStartToEnd = false,
-            modifier = queueMotion(),
+            modifier = (if (dragged) Modifier else queueMotion())
+                .zIndex(if (dragged) 1f else 0f)
+                .graphicsLayer { translationY = if (dragged) drag.offset else shift },
             backgroundContent = {
                 Box(
                     Modifier.fillMaxSize().padding(end = 4.dp),
@@ -268,6 +314,36 @@ private fun LazyListScope.queueSection(
                 isCurrent = false,
                 explicit = item.song.explicit,
                 onClick = { SongPlayer.skipTo(item) },
+                handle = {
+                    Icon(
+                        Icons.Rounded.DragHandle,
+                        contentDescription = stringResource(R.string.immersive_queue_reorder),
+                        tint = Immersive.TextSecondary,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .padding(8.dp)
+                            .pointerInput(key) {
+                                detectDragGestures(
+                                    onDragStart = { drag.key = key; drag.offset = 0f },
+                                    onDragEnd = {
+                                        val start = rows.indexOfFirst { it.first == key }
+                                        val to = (start + (drag.offset / rowPx).roundToInt()).coerceIn(0, rows.lastIndex)
+                                        drag.key = null
+                                        drag.offset = 0f
+                                        if (start >= 0 && to != start) {
+                                            reordered[section] = rows.map { it.first }.toMutableList().apply { add(to, removeAt(start)) }
+                                            SongPlayer.reorder(item, rows[to].second, after = to > start)
+                                        }
+                                    },
+                                    onDragCancel = { drag.key = null; drag.offset = 0f },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        drag.offset += amount.y
+                                    },
+                                )
+                            },
+                    )
+                },
             )
         }
     }
@@ -339,6 +415,7 @@ private fun QueueRow(
     explicit: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    handle: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -384,6 +461,7 @@ private fun QueueRow(
                 )
             }
         }
+        if (handle != null) handle()
         if (isCurrent) {
             Spacer(Modifier.width(10.dp))
             Icon(

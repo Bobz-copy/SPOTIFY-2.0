@@ -105,42 +105,6 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
 
     private lateinit var relay: ControlRelay
 
-    // Spotify's HTML5 video player hands fullscreen presentation to WebChromeClient.
-    // Keep that surface in the activity root instead of letting it disappear behind Compose.
-    private var fullscreenView: View? = null
-    private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
-
-    private fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
-        main.post {
-            val parent = container
-            if (parent == null) {
-                callback.onCustomViewHidden()
-                return@post
-            }
-            hideFullscreen()
-            fullscreenView = view
-            fullscreenCallback = callback
-            (view.parent as? ViewGroup)?.removeView(view)
-            parent.addView(view, ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-            view.bringToFront()
-            this.view.visibility = View.INVISIBLE
-            view.requestFocus()
-        }
-    }
-
-    private fun hideFullscreen() {
-        val shown = fullscreenView ?: return
-        (shown.parent as? ViewGroup)?.removeView(shown)
-        fullscreenView = null
-        val callback = fullscreenCallback
-        fullscreenCallback = null
-        if (lastVisible) view.visibility = View.VISIBLE
-        callback?.onCustomViewHidden()
-    }
-
     /** Fetches the audio files itself: the last request the WebView would stamp with its package. */
     private val media = MediaProxy(MediaProxy.client()) { relay.identityPair() }
 
@@ -206,14 +170,6 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         }
         exposeToPlayer("MyspotiHost") { json -> _messages.tryEmit(json) }
         webChromeClient = object : WebChromeClient() {
-            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-                showFullscreen(view, callback)
-            }
-
-            override fun onHideCustomView() {
-                hideFullscreen()
-            }
-
             override fun onConsoleMessage(message: android.webkit.ConsoleMessage): Boolean {
                 if (message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ||
                     message.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING) {

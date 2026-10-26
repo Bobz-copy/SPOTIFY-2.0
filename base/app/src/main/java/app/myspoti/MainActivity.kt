@@ -254,6 +254,8 @@ class MainActivity : AppCompatActivity() {
         ).apply { setMargins(dp(16), dp(48), dp(8), dp(8)) })
         originalEpisodeBackButton = back
         originalEpisodeBackCallback.isEnabled = true
+        // attach() posts its WebView reordering to the main queue; keep this control above it.
+        root.post { originalEpisodeBackButton?.bringToFront() }
     }
 
     private fun returnFromOriginalEpisodePage() {

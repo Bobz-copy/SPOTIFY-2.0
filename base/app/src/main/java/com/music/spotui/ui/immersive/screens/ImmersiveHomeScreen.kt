@@ -6,6 +6,13 @@
 package com.music.spotui.ui.immersive.screens
 
 import com.music.spotui.ui.immersive.shell.immersiveHazeSource
+import java.util.Calendar
+import com.bumptech.glide.integration.compose.GlideImage
+import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -135,6 +142,9 @@ fun ImmersiveHomeScreen(navController: NavController) {
             contentPadding = PaddingValues(top = immersiveHeaderContentPadding(), bottom = Immersive.BottomChrome),
             modifier = Modifier.fillMaxSize().immersiveHazeSource().immersiveChromeScroll(),
         ) {
+            item(key = "home:travel-hero") {
+                HomeTravelHero()
+            }
             item(key = "home:facets") {
                 ImmersiveChipRow {
                     ImmersiveChip(stringResource(R.string.filter_chip_all_label), selected = facet.isEmpty()) {
@@ -198,6 +208,78 @@ fun ImmersiveHomeScreen(navController: NavController) {
 private fun visibleSections(feed: HomeFeedModel): List<HomeSection> =
     if (Features.PODCASTS) feed.sections
     else feed.sections.map { s -> s.copy(items = s.items.filterNot { it is HomeItem.Show }) }.filter { it.items.isNotEmpty() }
+
+/**
+ * A quiet, time-aware travel photograph above the real Spotify feed. The chosen image is stable
+ * for the current time block, so this is a hero, not an autoplaying slideshow. The dark gradient
+ * remains a usable fallback if a photograph cannot load.
+ */
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun HomeTravelHero() {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    val (photo, place) = when (hour) {
+        in 5..9 -> "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1800&q=85" to "KYOTO, JAPAN"
+        in 10..14 -> "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=1800&q=85" to "THE GREAT WALL, CHINA"
+        in 15..17 -> "https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=1800&q=85" to "VIETNAM"
+        in 18..21 -> "https://images.unsplash.com/photo-1536599018102-9f803c140fc1?auto=format&fit=crop&w=1800&q=85" to "HONG KONG"
+        else -> "https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=1800&q=85" to "ASIA AFTER DARK"
+    }
+    val (japanese, english) = when (hour) {
+        in 5..10 -> "おはようございます。" to "Good morning"
+        in 11..16 -> "こんにちは。" to "Good afternoon"
+        else -> "こんばんは。" to "Good evening"
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Immersive.Gutter)
+            .padding(top = 8.dp, bottom = 20.dp)
+            .height(228.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(Immersive.Raised),
+    ) {
+        GlideImage(
+            model = photo,
+            contentDescription = place,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0.08f),
+                    0.38f to Color.Black.copy(alpha = 0.12f),
+                    1f to Color.Black.copy(alpha = 0.78f),
+                ),
+            ),
+        )
+        Column(
+            modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 22.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                text = place,
+                style = Immersive.Caption.copy(
+                    color = Color.White.copy(alpha = 0.78f),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.8.sp,
+                ),
+            )
+            Text(
+                text = japanese,
+                style = Immersive.Title.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = english,
+                style = Immersive.Subhead.copy(color = Color.White.copy(alpha = 0.84f)),
+            )
+        }
+    }
+}
 
 /** Albums and playlists start loading under the finger. */
 private fun prefetchHomeItem(item: HomeItem) {

@@ -11,6 +11,10 @@ import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.TextView
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -64,6 +68,14 @@ class MainActivity : AppCompatActivity() {
     private var showLook by mutableStateOf(false)
     /** The "new look" popup was already shown (or the onboarding look step covered it). */
     private var lookOffered by mutableStateOf(true)
+
+    private var originalEpisodeBackButton: TextView? = null
+    private lateinit var originalEpisodeBackCallback: OnBackPressedCallback
+
+    companion object {
+        /** Set by the active activity; episode screens use it to open Spotify's real web page. */
+        var openOriginalEpisodePage: ((String) -> Unit)? = null
+    }
 
     private val prefs get() = getSharedPreferences("myspoti_prefs", Context.MODE_PRIVATE)
 
@@ -139,6 +151,11 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(compose, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
+        openOriginalEpisodePage = { episodeId -> showOriginalEpisodePage(episodeId) }
+        originalEpisodeBackCallback = object : OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() = returnFromOriginalEpisodePage()
+        }
+        onBackPressedDispatcher.addCallback(this, originalEpisodeBackCallback)
         // Haptics (buttons, likes, the debug icon) go through this window.
         com.music.spotui.di.Haptics.attach(compose)
         // Debug builds: `am start ... --ez showPlayer true` shows the Web Player page full screen.
@@ -205,9 +222,51 @@ class MainActivity : AppCompatActivity() {
         // The process-wide WebView lives in this activity's root while attached:
         // detach it, or view.parent -> root keeps the destroyed activity (and its
         // whole view tree) alive for the rest of the playback session.
+        if (openOriginalEpisodePage != null) openOriginalEpisodePage = null
+        originalEpisodeBackButton?.let { root.removeView(it) }
+        originalEpisodeBackButton = null
         MyspotiRuntime.host.detach()
         super.onDestroy()
     }
+
+    private fun showOriginalEpisodePage(episodeId: String) {
+        if (!signedIn || !episodeId.matches(Regex("[A-Za-z0-9]{22}"))) return
+        originalEpisodeBackButton?.let { root.removeView(it) }
+        MyspotiRuntime.host.openEpisodePage(episodeId)
+        MyspotiRuntime.host.attach(root, visible = true)
+        val back = TextView(this).apply {
+            text = "‹  Back to Myspoti"
+            textSize = 14f
+            setTextColor(android.graphics.Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(dp(18), dp(10), dp(18), dp(10))
+            background = GradientDrawable().apply {
+                setColor(android.graphics.Color.rgb(28, 28, 28))
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), android.graphics.Color.rgb(95, 95, 95))
+            }
+            contentDescription = "Return to Myspoti"
+            elevation = dp(8).toFloat()
+            setOnClickListener { returnFromOriginalEpisodePage() }
+        }
+        root.addView(back, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(48), Gravity.TOP or Gravity.START,
+        ).apply { setMargins(dp(16), dp(48), dp(8), dp(8)) })
+        originalEpisodeBackButton = back
+        originalEpisodeBackCallback.isEnabled = true
+        // attach() posts its WebView reordering to the main queue; keep this control above it.
+        root.post { originalEpisodeBackButton?.bringToFront() }
+    }
+
+    private fun returnFromOriginalEpisodePage() {
+        originalEpisodeBackButton?.let { root.removeView(it) }
+        originalEpisodeBackButton = null
+        originalEpisodeBackCallback.isEnabled = false
+        MyspotiRuntime.host.attach(root, visible = false)
+        MyspotiRuntime.host.returnToPlayerPage()
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     /** Spotify's login page, full screen, until the Web Player comes back signed in. */
     private fun showLogin() {

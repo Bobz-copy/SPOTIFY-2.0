@@ -458,6 +458,17 @@ class WebPlayerHost(private val context: Context) : BridgeHost {
         main.postDelayed(retryPlayerPage, wait)
     }
 
+    /** Opens Spotify's own episode page in the existing WebView. */
+    fun openEpisodePage(episodeId: String) = main.post {
+        if (episodeId.matches(Regex("[A-Za-z0-9]{22}"))) {
+            view.alpha = 1f
+            view.loadUrl("https://open.spotify.com/episode/$episodeId")
+        }
+    }
+
+    /** Returns the WebView to Spotify's main player page after an original episode page. */
+    fun returnToPlayerPage() = load()
+
     fun openLogin() = main.post { view.alpha = 1f; view.loadUrl(LOGIN_URL) }
 
     /** Signs out of Spotify in this WebView, then shows the login page. */

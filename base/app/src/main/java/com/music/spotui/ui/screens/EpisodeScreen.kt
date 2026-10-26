@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import app.myspoti.MainActivity
 import app.myspoti.engine.R
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.CrossFade
@@ -236,6 +237,25 @@ fun EpisodeScreen(navController: NavController, episodeId: String, fallbackName:
                             }
                         }
                     }
+                }
+            }
+            if (episode != null) item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .clickable { MainActivity.openOriginalEpisodePage?.invoke(episodeId) }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                ) {
+                    Text(
+                        text = "Try Spotify's original player",
+                        color = AppText,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
             if (vm.loading.value) item { Loader() }

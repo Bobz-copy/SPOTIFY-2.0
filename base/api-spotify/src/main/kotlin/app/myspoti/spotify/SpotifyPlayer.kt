@@ -443,6 +443,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             val s = _state.value
             preloadNextSong(s, media)
             tickCrossfade(s, media, now)
+            if (localMuted && s?.item?.uri != hushedUri) { hushedUri = s?.item?.uri; applyHush() }
             if (tick % VOLUME_CHECK_TICKS == 0) guardVolume(s, media)
             if (_adPlaying.value) {
                 val ad = adState
@@ -580,7 +581,8 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
             runCatching { setVolume(wanted) }
         }
         // A fade that never came back: the element back to the page player's own volume.
-        if (media != null && media.active != false && media.own > 0.001 && media.level < media.own * 0.5) {
+        // (Not while the song is hushed on purpose.)
+        if (!clipHushed && !localMuted && media != null && media.active != false && media.own > 0.001 && media.level < media.own * 0.5) {
             bridge.logger?.invoke("page player silent during a song: level ${media.level} back to ${media.own}")
             runCatching { restoreLevel() }
         }
@@ -875,6 +877,36 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         }
     }
 
+    private val skipChain = TrackChanges.Chain()
+    private val _skipChained = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /**
+     * The page moved on by itself through several songs after a few seconds each (it cannot play
+     * them: licences refused, a stream failing): it was paused, the UI says so.
+     */
+    val skipChained: kotlinx.coroutines.flow.SharedFlow<Unit> = _skipChained
+
+    /**
+     * One Logbook line for each change of song with the reason (a command, an ad, the song's end,
+     * or the page on its own), so a report of songs skipping says which. The page moving on by
+     * itself again and again is stopped instead of chained through the list.
+     */
+    private fun noteTrackChange(old: PlayerState?, s: PlayerState?, adJustEnded: Boolean) {
+        val from = old?.item ?: return
+        val to = s?.item ?: return
+        if (from.uri == to.uri || from.kind == ItemKind.AD || remoteActive) return
+        val now = System.currentTimeMillis()
+        val played = old.positionAt(now)
+        val sinceCommand = now - maxOf(userMoveAt, lastPlay?.third ?: 0L)
+        val cause = TrackChanges.cause(played, from.durationMs, sinceCommand, adJustEnded, crossfadeArmed)
+        bridge.logger?.invoke("track change: ${from.name} -> ${to.name} (${cause.text}, left at ${TrackChanges.clock(played)} of ${TrackChanges.clock(from.durationMs)}${if (playbackHeld()) ", playback held" else ""})")
+        if (playbackHeld()) { skipChain.reset(); return }
+        if (skipChain.record(cause, played, now)) {
+            bridge.logger?.invoke("skip chain: the page moved on by itself three times in a row after a few seconds each (now on ${to.name}): paused")
+            _skipChained.tryEmit(Unit)
+            scope.launch { runCatching { pause() } }
+        }
+    }
+
     private fun onState(s: PlayerState?) {
         stateSeq++
         // Another song than the one a crossfade is fading out: the ramp up, at once (the
@@ -957,6 +989,7 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
         refusalStep = 0
         if (s?.item != null) lastSong = s
         else if (lastTrackState?.item != null) lastSongUntil = System.currentTimeMillis()
+        noteTrackChange(lastTrackState, s, adJustEnded)
         lastTrackState = s
         _state.value = s
         // Reported (2.0.2-beta.3, log seen): Spotify refusing the audio licences (429), the page
@@ -1062,8 +1095,29 @@ class SpotifyPlayer(private val bridge: Bridge, private val scope: CoroutineScop
      * The song unheard on this phone while it keeps playing (the music video's own sound is heard
      * instead, see the app's clip sound). Sent again on each new song: the element can change.
      */
-    suspend fun setHushed(on: Boolean): Int =
-        runCatching { bridge.call("media.hush", buildJsonObject { put("on", on) }).toString().trim('"').toIntOrNull() ?: 0 }.getOrDefault(0)
+    suspend fun setHushed(on: Boolean): Int {
+        clipHushed = on
+        return applyHush()
+    }
+
+    /**
+     * An extension plays the song itself and only mirrors it here (to count the listen): the page
+     * keeps playing, unheard. Sent again on a new song, whose element can change.
+     */
+    override suspend fun setLocalMute(on: Boolean) {
+        localMuted = on
+        hushedUri = if (on) _state.value?.item?.uri else null
+        applyHush()
+    }
+
+    override val localMute: Boolean get() = localMuted
+
+    @Volatile private var clipHushed = false
+    @Volatile private var localMuted = false
+    @Volatile private var hushedUri: String? = null
+
+    private suspend fun applyHush(): Int =
+        runCatching { bridge.call("media.hush", buildJsonObject { put("on", clipHushed || localMuted) }).toString().trim('"').toIntOrNull() ?: 0 }.getOrDefault(0)
 
     private suspend fun muteForAd() = runCatching {
         adMuted = true

@@ -90,13 +90,19 @@ private class LayerBackdropNode(
         drawLayer(backdrop.graphicsLayer)
     }
 
+    private var own: LayoutCoordinates? = null
+
     override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
         if (coordinates.isAttached) {
+            own = coordinates
             backdrop.layerCoordinates = coordinates
         }
     }
 
     override fun onDetach() {
-        backdrop.layerCoordinates = null
+        // Vendored change: two pages record into one backdrop while a page transition runs; the
+        // one leaving must not blank the coordinates the one staying has just reported.
+        if (backdrop.layerCoordinates === own) backdrop.layerCoordinates = null
+        own = null
     }
 }

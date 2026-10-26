@@ -78,10 +78,14 @@ private val BackdropEffectScope.cornerRadii: FloatArray?
         is AbsoluteRoundedCornerShape -> {
             val size = size
             val maxRadius = size.minDimension / 2f
-            val topLeft = shape.topStart.toPx(size, this)
-            val topRight = shape.topEnd.toPx(size, this)
-            val bottomRight = shape.bottomEnd.toPx(size, this)
-            val bottomLeft = shape.bottomStart.toPx(size, this)
+            // Vendored fix: the shape is measured against the surface, the effect runs on the
+            // scaled-down layer; a radius in dp must follow the scale (a percent one already does).
+            val full = size / contentScale
+            val k = contentScale
+            val topLeft = shape.topStart.toPx(full, this) * k
+            val topRight = shape.topEnd.toPx(full, this) * k
+            val bottomRight = shape.bottomEnd.toPx(full, this) * k
+            val bottomLeft = shape.bottomStart.toPx(full, this) * k
             floatArrayOf(
                 topLeft.fastCoerceAtMost(maxRadius),
                 topRight.fastCoerceAtMost(maxRadius),
@@ -94,18 +98,21 @@ private val BackdropEffectScope.cornerRadii: FloatArray?
             val size = size
             val maxRadius = size.minDimension / 2f
             val isLtr = layoutDirection == LayoutDirection.Ltr
+            // Vendored fix: see the absolute branch above.
+            val full = size / contentScale
+            val k = contentScale
             val topLeft =
-                if (isLtr) shape.topStart.toPx(size, this)
-                else shape.topEnd.toPx(size, this)
+                (if (isLtr) shape.topStart.toPx(full, this)
+                else shape.topEnd.toPx(full, this)) * k
             val topRight =
-                if (isLtr) shape.topEnd.toPx(size, this)
-                else shape.topStart.toPx(size, this)
+                (if (isLtr) shape.topEnd.toPx(full, this)
+                else shape.topStart.toPx(full, this)) * k
             val bottomRight =
-                if (isLtr) shape.bottomEnd.toPx(size, this)
-                else shape.bottomStart.toPx(size, this)
+                (if (isLtr) shape.bottomEnd.toPx(full, this)
+                else shape.bottomStart.toPx(full, this)) * k
             val bottomLeft =
-                if (isLtr) shape.bottomStart.toPx(size, this)
-                else shape.bottomEnd.toPx(size, this)
+                (if (isLtr) shape.bottomStart.toPx(full, this)
+                else shape.bottomEnd.toPx(full, this)) * k
             floatArrayOf(
                 topLeft.fastCoerceAtMost(maxRadius),
                 topRight.fastCoerceAtMost(maxRadius),

@@ -240,12 +240,13 @@ fun ImmersiveBottomChrome(
 @Composable
 private fun MinimizedTabPill(selectedTab: String, onClick: () -> Unit) {
     val item = TabItems.firstOrNull { it.route == selectedTab } ?: Routes.Home
+    val source = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .size(PILL_SIZE)
-            .immersiveGlassSurface(CircleShape)
+            .immersiveGlassSurface(CircleShape, interactionSource = source)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = source,
                 indication = null,
                 role = Role.Button,
                 onClickLabel = stringResource(R.string.immersive_expand_tab_bar),

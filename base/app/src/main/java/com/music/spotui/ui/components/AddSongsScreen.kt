@@ -145,8 +145,7 @@ fun AddSongsScreen(page: ContextPageModel, onClose: (added: Boolean) -> Unit) {
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     )
                 }
-                if (query.isNotEmpty()) Icon(Icons.Default.Close, contentDescription = null, tint = AppText,
-                    modifier = Modifier.size(20.dp).clickable { query = "" })
+                if (query.isNotEmpty()) SearchClearButton(focus, AppText) { query = "" }
             }
             val searching = query.isNotBlank()
             val list = if (searching) results else suggestions

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -47,6 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -71,6 +72,7 @@ import app.myspoti.extensions.StoreAction
 import com.music.spotui.extensions.ExtensionStore
 import com.music.spotui.extensions.Extensions
 import com.music.spotui.extensions.InstalledExtension
+import com.music.spotui.ui.components.SearchClearButton
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.theme.AppAccent
 import com.music.spotui.ui.theme.AppMuted
@@ -248,6 +250,7 @@ private fun Tabs(selected: Int, updates: Int, onSelect: (Int) -> Unit) {
 
 @Composable
 private fun SearchField(query: String, onChange: (String) -> Unit) {
+    val focus = remember { FocusRequester() }
     if (com.music.spotui.ui.navigation.isImmersive()) {
         com.music.spotui.ui.immersive.components.ImmersiveSearchField(
             query = query, onQueryChange = onChange, onSubmit = {},
@@ -260,13 +263,13 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
         value = query, onValueChange = onChange, singleLine = true,
         placeholder = { Text(stringResource(R.string.extensions_search), color = AppMuted) },
         leadingIcon = { Icon(Icons.Default.Search, null, tint = AppMuted) },
-        trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Default.Clear, stringResource(R.string.extensions_cancel), tint = AppMuted) } },
+        trailingIcon = if (query.isEmpty()) null else { { SearchClearButton(focus, AppMuted) { onChange("") } } },
         shape = RoundedCornerShape(24.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = AppText, unfocusedTextColor = AppText, focusedBorderColor = AppAccent, unfocusedBorderColor = tone(0xFF3E3E3E),
             focusedContainerColor = tone(0xFF1E1E1E), unfocusedContainerColor = tone(0xFF1E1E1E), cursorColor = AppAccent,
         ),
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp).heightIn(min = 48.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp).heightIn(min = 48.dp).focusRequester(focus),
     )
 }
 

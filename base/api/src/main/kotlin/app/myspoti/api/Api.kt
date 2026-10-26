@@ -58,6 +58,12 @@ interface Player {
     suspend fun setVolume(level: Double)
     /** Playback speed (podcasts): 0.5 to 3.5. */
     suspend fun setSpeed(speed: Double)
+    /**
+     * Unheard on this phone while it keeps playing: an extension plays the song itself and only
+     * mirrors it here. The app then ignores this player's state ([localMute]).
+     */
+    suspend fun setLocalMute(on: Boolean) {}
+    val localMute: Boolean get() = false
 }
 
 interface Search {

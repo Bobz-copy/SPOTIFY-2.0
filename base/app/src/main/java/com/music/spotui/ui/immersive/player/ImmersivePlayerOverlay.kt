@@ -32,6 +32,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.navigation.LocalPageSettled
@@ -50,11 +51,9 @@ private const val SLIDE_SETTLED_PX = 0.5f
 /** A release faster than this (px/s) decides the sheet on its own, either way. */
 private const val FLING_VELOCITY = 1_000f
 
-private fun slideSpec() = spring<Float>(
-    dampingRatio = Spring.DampingRatioNoBouncy,
-    stiffness = SLIDE_STIFFNESS,
-    visibilityThreshold = SLIDE_SETTLED_PX,
-)
+private val PlayerCardShape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+private fun slideSpec(reduce: Boolean) = com.music.spotui.ui.immersive.motion.ImmersiveMotion.slideSpring(reduce)
 
 /**
  * The Immersive look's player over the pages, a drop-in for [com.music.spotui.ui.navigation.PlayerOverlay]:
@@ -70,6 +69,7 @@ fun ImmersivePlayerOverlay(navController: NavController) {
     }
     val open = PlayerSheet.open.value
     val scope = rememberCoroutineScope()
+    val reduce = com.music.spotui.ui.look.rememberReduceMotion()
     var heightPx by remember { mutableIntStateOf(0) }
     // How far down the sheet is (px): 0 open, the window's height away.
     val offset = remember { Animatable(0f) }
@@ -91,19 +91,27 @@ fun ImmersivePlayerOverlay(navController: NavController) {
                 offset.snapTo(heightPx.toFloat())
                 primed = true
             }
-            offset.animateTo(0f, slideSpec())
+            offset.animateTo(0f, slideSpec(reduce))
             settled.value = true
         } else if (shown) {
             settled.value = false
             val velocity = closeVelocity.coerceAtLeast(0f)
             closeVelocity = 0f
-            offset.animateTo(heightPx.toFloat(), slideSpec(), initialVelocity = velocity)
+            offset.animateTo(heightPx.toFloat(), slideSpec(reduce), initialVelocity = velocity)
             shown = false
             primed = false
         }
     }
     if (!shown) return
     BackHandler(enabled = open) { PlayerSheet.close() }
+    // Compose's clickable asks the view for the system "click" sound on every tap; the Classic player
+    // is silent, so the window's sound effects are off while this player is up (haptics are separate).
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(view) {
+        val was = view.isSoundEffectsEnabled
+        view.isSoundEffectsEnabled = false
+        onDispose { view.isSoundEffectsEnabled = was }
+    }
 
     val sheetDrag = remember {
         object : PlayerSheetDrag {
@@ -129,7 +137,7 @@ fun ImmersivePlayerOverlay(navController: NavController) {
                         closeVelocity = velocity
                         PlayerSheet.close()
                     } else {
-                        offset.animateTo(0f, slideSpec(), initialVelocity = velocity)
+                        offset.animateTo(0f, slideSpec(reduce), initialVelocity = velocity)
                     }
                 }
             }
@@ -141,7 +149,13 @@ fun ImmersivePlayerOverlay(navController: NavController) {
             .fillMaxSize()
             .onSizeChanged { heightPx = it.height }
             .graphicsLayer {
-                translationY = if (held.isNaN()) offset.value else held
+                val y = if (held.isNaN()) offset.value else held
+                translationY = y
+                // The player rises as a card with rounded top corners, square once it is home.
+                if (y > 0.5f) {
+                    clip = true
+                    shape = PlayerCardShape
+                }
                 alpha = if (primed) 1f else 0f
             }
             // Nothing under the player may take a touch the player leaves alone.

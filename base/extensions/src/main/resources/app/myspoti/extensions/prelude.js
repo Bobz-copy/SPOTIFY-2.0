@@ -122,9 +122,9 @@
 
     /**
      * What this app understands beyond the first API, for an extension to adapt to: "audio.manifest",
-     * "audio.expires", "audio.quality", "audio.source", "audio.ahead", "http.all", "status", "raw.base64".
+     * "audio.expires", "audio.quality", "audio.source", "audio.ahead", "http.all", "status", "raw.base64", "player.localMute".
      */
-    features: Object.freeze(['audio.manifest', 'audio.expires', 'audio.quality', 'audio.source', 'audio.ahead', 'http.all', 'status', 'raw.base64']),
+    features: Object.freeze(['audio.manifest', 'audio.expires', 'audio.quality', 'audio.source', 'audio.ahead', 'http.all', 'status', 'raw.base64', 'player.localMute']),
 
     /**
      * A sign-in page (webview.auth): open({ url, callback, hidden }) shows url in a web view of its

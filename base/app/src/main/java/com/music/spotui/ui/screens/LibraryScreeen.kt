@@ -6,6 +6,7 @@ import com.music.spotui.ui.theme.AppMuted
 
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
+import com.music.spotui.ui.components.SearchClearButton
 import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
 
@@ -42,7 +43,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -71,6 +71,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -254,6 +256,7 @@ fun LibraryScreen(navController: NavController) {
                     .padding(horizontal = 12.dp),
             ) {
                 Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF888888), modifier = Modifier.size(18.dp))
+                val searchFocus = remember { FocusRequester() }
                 BasicTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -261,7 +264,8 @@ fun LibraryScreen(navController: NavController) {
                     textStyle = TextStyle(color = AppText, fontSize = 15.sp),
                     modifier = Modifier
                         .weight(1f)
-                        .padding(8.dp, 10.dp),
+                        .padding(8.dp, 10.dp)
+                        .focusRequester(searchFocus),
                     decorationBox = { inner ->
                         Box {
                             if (searchQuery.isEmpty()) Text(stringResource(R.string.navigationbar_musicappitems_search_title), color = Color(0xFF888888), fontSize = 15.sp)
@@ -269,16 +273,7 @@ fun LibraryScreen(navController: NavController) {
                         }
                     },
                 )
-                if (searchQuery.isNotEmpty()) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.chat_content_picker_clear_recent_searches),
-                        tint = Color(0xFF888888),
-                        modifier = Modifier.pressable(0.96f) { searchQuery = "" }
-                            .size(18.dp)
-                            ,
-                    )
-                }
+                if (searchQuery.isNotEmpty()) SearchClearButton(searchFocus, Color(0xFF888888)) { searchQuery = "" }
             }
         }
 

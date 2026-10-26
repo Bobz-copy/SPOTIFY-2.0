@@ -6,7 +6,7 @@
  * Changes: the sections (now playing, next in queue, next from the context), placement-only
  * item motion and the fading edges, over Myspoti's SongPlayer.engineQueue. A row is removed
  * by swiping it away, and shuffle and repeat sit in the header as in the queue sheet.
- * A handle on each upcoming row drags it within its section (SongPlayer.reorder); history and
+ * A handle on each upcoming row drags it within its section or between them (SongPlayer.reorder, moveIntoQueue); history and
  * the autoplay heading are left out for now.
  */
 package com.music.spotui.ui.immersive.lyrics
@@ -17,6 +17,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
@@ -69,10 +71,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.delay
 import androidx.compose.ui.zIndex
-import kotlin.math.roundToInt
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -130,11 +133,21 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
     // Rows swiped away, hidden at once: the queue takes a moment to report the removal.
     val removed = remember { mutableStateListOf<String>() }
     LaunchedEffect(queue) { removed.clear() }
-    // Rows just dragged, shown in their new order until the queue reports it.
-    val reordered = remember { mutableStateMapOf<String, List<String>>() }
-    LaunchedEffect(queue) { reordered.clear() }
-    val queued = queue.queued.dedupedKeys("q").filter { it.first !in removed }.inOrder(reordered["q"])
-    val nextUp = queue.nextUp.dedupedKeys("n").filter { it.first !in removed }.inOrder(reordered["n"])
+    // Rows just dragged, shown in their new order until the queue reports exactly that order (or
+    // PENDING_ORDER_MS passes): the reports in between are of the queue before the move.
+    var pending by remember { mutableStateOf<QueueDragMath.Pending<QRow>?>(null) }
+    LaunchedEffect(queue, pending) {
+        val p = pending ?: return@LaunchedEffect
+        if (p.over(queue.queued.map { it.uri }, queue.nextUp.map { it.uri }, queue.current?.url)) pending = null
+    }
+    LaunchedEffect(pending) {
+        val p = pending ?: return@LaunchedEffect
+        delay(PENDING_ORDER_MS)
+        if (pending === p) pending = null
+    }
+    val rows = shownRows(queue, pending, removed)
+    val queued = rows.filter { it.queued }
+    val nextUp = rows.filter { !it.queued }
     val drag = remember { QueueDrag() }
 
     val listState = rememberLazyListState()
@@ -142,6 +155,33 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
     val direction = LocalLayoutDirection.current
     val current = queue.current
     val hasCurrent = song.title.value.isNotBlank() || current != null
+
+    val rowsNow by rememberUpdatedState(rows)
+    val hover by remember { derivedStateOf { hoverOf(listState, rowsNow, drag) } }
+    val hoverNow by rememberUpdatedState(hover)
+    val onDrop: (QRow) -> Unit = drop@{ row ->
+        val (queuedNew, nextNew, call) = dropPlan(rowsNow, row, hoverNow) ?: return@drop
+        pending = QueueDragMath.Pending(
+            queuedNew, nextNew, queuedNew.map { it.item.uri }, nextNew.map { it.item.uri }, queue.current?.url,
+        )
+        call()
+    }
+
+    // The finger near the top or bottom edge scrolls the list, the row staying under it.
+    val edge = with(LocalDensity.current) { 88.dp.toPx() }
+    val maxStep = with(LocalDensity.current) { 14.dp.toPx() }
+    val dragging = drag.key != null
+    LaunchedEffect(dragging) {
+        if (!dragging) return@LaunchedEffect
+        while (true) {
+            withFrameNanos { }
+            val info = listState.layoutInfo
+            val row = info.visibleItemsInfo.firstOrNull { it.key == drag.key } ?: continue
+            val y = row.offset + row.size / 2f + drag.offset
+            val step = QueueDragMath.edgeStep(y, info.viewportSize.height.toFloat(), edge, maxStep)
+            if (step != 0f) drag.offset += listState.scrollBy(step)
+        }
+    }
 
     LazyColumn(
         state = listState,
@@ -202,10 +242,10 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
                     )
                 }
             }
-            queueSection("q", queued, removed, reordered, drag)
+            queueSection(queued, rowsNow, removed, drag, { hoverNow }, onDrop)
         }
         if (nextUp.isNotEmpty()) {
-            item(key = "heading-next") {
+            item(key = HEADING_NEXT) {
                 QueueHeading(
                     title = if (contextName.isNotBlank()) {
                         stringResource(R.string.next_from, contextName)
@@ -215,7 +255,7 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
                     modifier = Modifier.padding(top = 16.dp, bottom = 6.dp).then(queueMotion()),
                 )
             }
-            queueSection("n", nextUp, removed, reordered, drag)
+            queueSection(nextUp, rowsNow, removed, drag, { hoverNow }, onDrop)
         }
         if (!hasCurrent && queued.isEmpty() && nextUp.isEmpty()) {
             item(key = "empty") {
@@ -230,24 +270,28 @@ fun ImmersiveQueuePanel(modifier: Modifier = Modifier, contentPadding: PaddingVa
     }
 }
 
-/** Keys each item by its own id, with a suffix where two rows share one: a lazy list throws on a repeat. */
-private fun List<SongPlayer.QueueItem>.dedupedKeys(prefix: String): List<Pair<String, SongPlayer.QueueItem>> {
-    val used = HashSet<String>()
-    return map { item ->
-        val base = "$prefix:${item.uid}|${item.uri}"
-        var key = base
-        var repeat = 1
-        while (!used.add(key)) key = base + "~" + repeat++
-        key to item
-    }
-}
+/** One queue row: [index] in the flat list (queued rows, then the context's), [key] stable across moves. */
+private data class QRow(val key: String, val item: SongPlayer.QueueItem, val queued: Boolean, val index: Int)
 
-private fun List<Pair<String, SongPlayer.QueueItem>>.inOrder(
-    keys: List<String>?,
-): List<Pair<String, SongPlayer.QueueItem>> {
-    if (keys == null || keys.size != size) return this
-    val byKey = associateBy { it.first }
-    return keys.mapNotNull { byKey[it] }.takeIf { it.size == size } ?: this
+private const val PENDING_ORDER_MS = 3_000L
+
+/**
+ * The rows to draw: the order just dropped while the engine has not reported it (its reports in
+ * between show the queue as it was, or a song out of one part and not yet in the other), else the
+ * queue as reported. Keyed by song and occurrence, not by the row id Spotify gives: that changes
+ * with a move, and a changed key makes the row vanish and reappear.
+ */
+private fun shownRows(queue: SongPlayer.EngineQueue, pending: QueueDragMath.Pending<QRow>?, removed: List<String>): List<QRow> {
+    if (pending != null) {
+        return (pending.queued + pending.next).filter { it.key !in removed }.mapIndexed { i, r -> r.copy(index = i) }
+    }
+    val seen = HashMap<String, Int>()
+    fun key(item: SongPlayer.QueueItem): String {
+        val count = seen.merge(item.uri, 1, Int::plus)!!
+        return if (count == 1) item.uri else "${item.uri}~$count"
+    }
+    val all = queue.queued.map { Triple(key(it), it, true) } + queue.nextUp.map { Triple(key(it), it, false) }
+    return all.filter { it.first !in removed }.mapIndexed { i, (k, item, queued) -> QRow(k, item, queued, i) }
 }
 
 /** The row being dragged by its handle: which one, and how far it is from its slot. */
@@ -256,28 +300,78 @@ private class QueueDrag {
     var offset by mutableFloatStateOf(0f)
 }
 
+/** Where the dragged row hovers: its flat index, the gap among the other rows, and which side of the context heading. */
+private data class Hover(val from: Int, val slot: Int, val aboveBoundary: Boolean)
+
+private const val HEADING_NEXT = "heading-next"
+
+private fun hoverOf(listState: LazyListState, rows: List<QRow>, drag: QueueDrag): Hover? {
+    val key = drag.key ?: return null
+    val from = rows.indexOfFirst { it.key == key }
+    if (from < 0) return null
+    val visible = listState.layoutInfo.visibleItemsInfo.associateBy { it.key }
+    val me = visible[key] ?: return null
+    val center = me.offset + me.size / 2f + drag.offset
+    // A row out of sight is above the dragged one's centre if it comes before it in the list.
+    val mids = rows.filter { it.index != from }.map { r ->
+        visible[r.key]?.let { it.offset + it.size / 2f } ?: if (r.index < from) Float.NEGATIVE_INFINITY else Float.POSITIVE_INFINITY
+    }
+    val heading = visible[HEADING_NEXT]
+    val firstNext = rows.firstOrNull { !it.queued }
+    val queuedOthers = rows.count { it.queued && it.index != from }
+    // With no queued row the heading is the queue's drop target: anywhere down to its foot counts.
+    val boundary = heading?.let { if (queuedOthers == 0) (it.offset + it.size).toFloat() else it.offset + it.size / 2f }
+        ?: firstNext?.let { visible[it.key]?.offset?.toFloat() }
+    var slot = QueueDragMath.slot(center, mids)
+    val above = boundary == null || center < boundary
+    val dragged = rows[from]
+    // A Spotify queued song cannot go back into "next from": it stays at the end of the queue.
+    if (dragged.queued && dragged.item.provider != SongPlayer.LOCAL) slot = minOf(slot, queuedOthers)
+    return Hover(from, slot, above || (dragged.queued && dragged.item.provider != SongPlayer.LOCAL))
+}
+
+/** What dropping [row] at [hover] does: the new queued and next rows, and the engine call that makes it so. */
+private fun dropPlan(rows: List<QRow>, row: QRow, hover: Hover?): Triple<List<QRow>, List<QRow>, () -> Unit>? {
+    hover ?: return null
+    val oq = rows.filter { it.queued && it.key != row.key }
+    val on = rows.filter { !it.queued && it.key != row.key }
+    val local = row.item.provider == SongPlayer.LOCAL
+    val place = QueueDragMath.held(QueueDragMath.place(hover.slot, oq.size, hover.aboveBoundary), oq.size, local, row.queued)
+    val (q, n) = QueueDragMath.apply(oq, on, row.copy(queued = place.toQueue), place)
+    if (q.map { it.key } == rows.filter { it.queued }.map { it.key } && n.map { it.key } == rows.filter { !it.queued }.map { it.key }) return null
+    val into = if (place.toQueue) oq else on
+    val (ti, after) = QueueDragMath.target(into.size, place.index) ?: (null to false)
+    val target = ti?.let { into[it].item }
+    val item = row.item
+    val call: () -> Unit = when {
+        place.toQueue && !row.queued ->
+            if (target == null) ({ SongPlayer.moveToQueueFront(item) }) else ({ SongPlayer.moveIntoQueue(item, target, after) })
+        target == null -> return null
+        else -> ({ SongPlayer.reorder(item, target, after) })
+    }
+    return Triple(q, n, call)
+}
+
 /** One section's rows, each swiped away to remove it or dragged by its handle to move it. */
 @OptIn(ExperimentalMaterial3Api::class)
 private fun LazyListScope.queueSection(
-    section: String,
-    rows: List<Pair<String, SongPlayer.QueueItem>>,
+    section: List<QRow>,
+    all: List<QRow>,
     removed: SnapshotStateList<String>,
-    reordered: SnapshotStateMap<String, List<String>>,
     drag: QueueDrag,
+    hover: () -> Hover?,
+    onDrop: (QRow) -> Unit,
 ) {
-    items(rows.size, key = { rows[it].first }) { index ->
-        val (key, item) = rows[index]
+    items(section.size, key = { section[it].key }) { i ->
+        val row = section[i]
+        val key = row.key
+        val item = row.item
         val rowPx = with(LocalDensity.current) { Immersive.RowHeight.toPx() }
-        val from = rows.indexOfFirst { it.first == drag.key }
-        val slot = if (from < 0) -1 else (from + (drag.offset / rowPx).roundToInt()).coerceIn(0, rows.lastIndex)
-        // Rows the dragged one passes step aside by one slot.
-        val shift = when {
-            from < 0 || key == drag.key -> 0f
-            index in (from + 1)..slot -> -rowPx
-            index in slot until from -> rowPx
-            else -> 0f
-        }
         val dragged = key == drag.key
+        // Rows the dragged one passes step aside by one slot.
+        val shift = hover()?.let { h -> if (dragged) 0 else QueueDragMath.step(row.index, h.from, h.slot) } ?: 0
+        val dropNow by rememberUpdatedState(onDrop)
+        val rowNow by rememberUpdatedState(row)
         val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) {
                 removed += key
@@ -292,18 +386,22 @@ private fun LazyListScope.queueSection(
             enableDismissFromStartToEnd = false,
             modifier = (if (dragged) Modifier else queueMotion())
                 .zIndex(if (dragged) 1f else 0f)
-                .graphicsLayer { translationY = if (dragged) drag.offset else shift },
+                .graphicsLayer { translationY = if (dragged) drag.offset else shift * rowPx },
             backgroundContent = {
-                Box(
-                    Modifier.fillMaxSize().padding(end = 4.dp),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = stringResource(R.string.immersive_queue_remove),
-                        tint = Immersive.TextSecondary,
-                        modifier = Modifier.size(22.dp),
-                    )
+                // Drawn only while swiping: the row is transparent, so at rest this × showed
+                // through behind the drag handle.
+                if (dismiss.dismissDirection != SwipeToDismissBoxValue.Settled) {
+                    Box(
+                        Modifier.fillMaxSize().padding(end = 4.dp),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.immersive_queue_remove),
+                            tint = Immersive.TextSecondary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             },
         ) {
@@ -326,14 +424,10 @@ private fun LazyListScope.queueSection(
                                 detectDragGestures(
                                     onDragStart = { drag.key = key; drag.offset = 0f },
                                     onDragEnd = {
-                                        val start = rows.indexOfFirst { it.first == key }
-                                        val to = (start + (drag.offset / rowPx).roundToInt()).coerceIn(0, rows.lastIndex)
+                                        // Worked out while the row is still where it was dropped.
+                                        if (drag.key == key) dropNow(rowNow)
                                         drag.key = null
                                         drag.offset = 0f
-                                        if (start >= 0 && to != start) {
-                                            reordered[section] = rows.map { it.first }.toMutableList().apply { add(to, removeAt(start)) }
-                                            SongPlayer.reorder(item, rows[to].second, after = to > start)
-                                        }
                                     },
                                     onDragCancel = { drag.key = null; drag.offset = 0f },
                                     onDrag = { change, amount ->

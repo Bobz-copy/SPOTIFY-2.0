@@ -48,6 +48,9 @@ object SupportReminder {
     /** The accent chosen (applied only for supporters). */
     var accent by mutableStateOf(Accent.GREEN)
         private set
+    /** A colour was picked (green is also the default): the Immersive look has its own default accent until then. */
+    var accentChosen by mutableStateOf(false)
+        private set
     var icon by mutableStateOf(Accent.GREEN)
         private set
 
@@ -67,6 +70,7 @@ object SupportReminder {
         val p = prefs(context)
         storedLevel = runCatching { Level.valueOf(p.getString("level", "NONE")!!) }.getOrDefault(Level.NONE)
         accent = Accent.entries.firstOrNull { it.key == p.getString("accent", "green") } ?: Accent.GREEN
+        accentChosen = p.contains("accent")
         icon = Accent.entries.firstOrNull { it.key == p.getString("icon", "green") } ?: Accent.GREEN
     }
 
@@ -87,6 +91,7 @@ object SupportReminder {
 
     fun setAccent(context: Context, value: Accent) {
         accent = value
+        accentChosen = true
         prefs(context).edit().putString("accent", value.key).apply()
     }
 

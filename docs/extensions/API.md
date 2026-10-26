@@ -854,6 +854,7 @@ type means optional/nullable. Returns of "—" mean `null`.
 | `skipTo(item: {uri,uid?})` | — | write |  |
 | `moveInQueue(item: {uri,uid?}, target: {uri,uid?}, after = false)` | — | write |  |
 | `setVolume(level: number)` | — | write |  |
+| `setLocalMute(on: boolean)` | — | write | Keeps the Web Player playing but unheard (`myspoti.features` has `player.localMute`). While on, the app ignores the Web Player's state, so an extension playing a file itself can mirror the same track there without being replaced. Cleared when the local player stops. |
 | `setSpeed(speed: number)` | — | write |  |
 
 `media(trackUri)` (also `myspoti.spotify.media(trackUri)`) returns the media manifest Spotify sent the

@@ -275,7 +275,7 @@ internal fun ImmersiveChoiceRow(
     val reduce = rememberReduceMotion()
     val color by animateColorAsState(
         if (selected) Immersive.Accent else Color.Transparent,
-        animationSpec = if (reduce) snap() else spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = if (reduce) snap() else com.music.spotui.ui.immersive.motion.ImmersiveMotion.placementSpring(),
         label = "choice check",
     )
     ImmersiveGroupRow(

@@ -27,8 +27,9 @@ object Immersive {
     val Text = Color.White
     val TextSecondary = Color.White.copy(alpha = 0.60f)
     val TextTertiary = Color.White.copy(alpha = 0.38f)
-    /** Myspoti's own accent in this look (links, the selected tab, toggles). */
-    val Accent = Color(0xFFFF4F7B)
+    /** The look's own pink until an accent colour is chosen in Settings, then that colour (links, the selected tab, toggles). */
+    val Accent: Color get() =
+        if (com.music.spotui.data.api.SupportReminder.accentChosen) com.music.spotui.ui.theme.AppAccent else Color(0xFFFF4F7B)
     val GlassFill = Color(0xFF2C2C34).copy(alpha = 0.88f)
     val GlassEdge = Color.White.copy(alpha = 0.12f)
 

@@ -106,13 +106,13 @@ fun ImmersiveSettingsScreen(navController: NavController) {
         targetState = page,
         transitionSpec = {
             when {
-                reduce -> fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                reduce -> fadeIn(tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.FADE_MS)) togetherWith fadeOut(tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.FADE_MS))
                 !pushing ->
-                    (slideInHorizontally(tween(320)) { -it / 3 } + fadeIn(tween(320))) togetherWith
-                        (slideOutHorizontally(tween(320)) { it } + fadeOut(tween(160)))
+                    (slideInHorizontally(tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.MEDIUM_MS)) { -it / 3 } + fadeIn(tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.MEDIUM_MS))) togetherWith
+                        (slideOutHorizontally(tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.MEDIUM_MS)) { it } + fadeOut(tween(160)))
                 else ->
                     (slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1))) { it } + fadeIn(tween(160))) togetherWith
-                        (slideOutHorizontally(tween(320)) { -it / 3 } + fadeOut(tween(320)))
+                        (slideOutHorizontally(tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.MEDIUM_MS)) { -it / 3 } + fadeOut(tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.MEDIUM_MS)))
             }
         },
         label = "settings pages",

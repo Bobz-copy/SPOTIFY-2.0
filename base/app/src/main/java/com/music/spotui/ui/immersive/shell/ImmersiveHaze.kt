@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.music.spotui.ui.immersive.Immersive
 import com.music.spotui.ui.immersive.shell.backdrop.backdrops.LayerBackdrop
@@ -89,6 +90,8 @@ internal fun Modifier.immersiveFrost(
  * instead: the page refracted through a lens, a rim of light and a soft shadow
  * ([immersiveLiquidGlass]). A [state] of your own keeps its frost; null keeps the plain fill.
  *
+ * @param interactionSource the surface's own press source: it scales a little under the finger
+ * and springs back, and the glass lens bulges (iOS 26). Null for a surface that is not tapped.
  * @param liquid false keeps the frost even while Liquid Glass is on (a surface that would cost
  * too much, or that must stay flat).
  */
@@ -97,13 +100,22 @@ internal fun Modifier.immersiveGlassSurface(
     shape: Shape,
     state: HazeState? = LocalImmersiveHaze.current,
     liquid: Boolean = true,
+    interactionSource: androidx.compose.foundation.interaction.InteractionSource? = null,
 ): Modifier {
     val page = LocalImmersiveBackdrop.current
+    val press = rememberGlassPress(interactionSource)
     if (liquid && page != null && state != null && state === LocalImmersiveHaze.current) {
         // Not clipped here: the glass clips itself, and its shadow falls outside the shape.
-        return this.immersiveLiquidGlass(shape, page)
+        return this.immersiveLiquidGlass(shape, page, press = press)
     }
     return this
+        .then(
+            if (press == null) Modifier else Modifier.graphicsLayer {
+                val s = 1f - 0.04f * press()
+                scaleX = s
+                scaleY = s
+            },
+        )
         .clip(shape)
         .then(if (state != null) Modifier.immersiveFrost(state) else Modifier.background(Immersive.GlassFill))
         .border(1.dp, Immersive.GlassEdge, shape)

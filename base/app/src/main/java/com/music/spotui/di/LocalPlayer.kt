@@ -43,6 +43,7 @@ object LocalPlayer {
     val contextUri: String get() = if (current()?.let { it in radioSongs } == true) "" else listUri
     private var listUri: String = ""
     private var exo: ExoPlayer? = null
+    private val errors = StreamErrors()
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun build(main: Boolean): ExoPlayer = ExoPlayer.Builder(Graph.app)
@@ -72,6 +73,7 @@ object LocalPlayer {
                 }
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     log("isPlaying $isPlaying at ${p.currentPosition} ms")
+                    if (isPlaying) errors.played()
                     if (isPlaying) tick.run()
                 }
                 override fun onPlaybackSuppressionReasonChanged(reason: Int) =
@@ -87,18 +89,39 @@ object LocalPlayer {
                 }
 
                 // A song whose audio an extension did not give or that would not play (audio-source
-                // hook) is never skipped silently: Spotify plays it, where it was, and goes on.
+                // hook) is never skipped silently: asked again once if the stream itself failed,
+                // then Spotify plays it, where it was, and goes on; a queue that keeps failing stops.
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     log("error ${error.errorCodeName}: ${generic(error.cause?.toString() ?: error.message.orEmpty())}")
                     val item = p.currentMediaItem?.localConfiguration?.uri ?: return
                     if (item.scheme != com.music.spotui.extensions.ExtensionAudio.SCHEME) return
                     val t = current() ?: return
+                    val noAudio = com.music.spotui.extensions.AudioRoute.isNoAudio(error)
+                    // No extension had it (the data source already asked twice): Spotify, no new ask.
+                    val again = errors.alreadyRetried(item.toString())
+                    if (!noAudio && !again) {
+                        log("${t.title}: the stream failed, the extensions are asked again once")
+                        val at = p.currentPosition
+                        prefetch.launch {
+                            runCatching { com.music.spotui.extensions.ExtensionAudio.resolve(item, again = true) }
+                            handler.post { if (exo === p && p.currentMediaItem?.localConfiguration?.uri == item) { p.prepare(); p.seekTo(at); p.play() } }
+                        }
+                        return
+                    }
                     if (SongPlayer.playUnavailableOnSpotify(t, p.currentPosition)) return
-                    if (!p.hasNextMediaItem()) return
-                    log("skipped ${t.title}: no extension had it and Spotify cannot play it now")
-                    p.seekToNextMediaItem()
-                    p.prepare()
-                    p.play()
+                    when (errors.failed(item.toString(), p.hasNextMediaItem())) {
+                        StreamErrors.Step.SKIP -> {
+                            log("skipped ${t.title}: no extension had it and Spotify cannot play it now")
+                            android.widget.Toast.makeText(Graph.app, Graph.app.getString(app.myspoti.engine.R.string.song_unavailable_skipped, t.title), android.widget.Toast.LENGTH_SHORT).show()
+                            p.seekToNextMediaItem()
+                            p.prepare()
+                            p.play()
+                        }
+                        else -> {
+                            log("stopped on ${t.title}: it cannot be played, and the songs after it failed too or none follows")
+                            android.widget.Toast.makeText(Graph.app, Graph.app.getString(app.myspoti.engine.R.string.song_unavailable, t.title), android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
             })
             exo = p
@@ -182,6 +205,8 @@ object LocalPlayer {
         if (!active.value) return
         endFade()
         active.value = false
+        // A page left muted by an extension's mirror must not stay silent once Spotify plays again.
+        SongPlayer.unmuteMirror()
         forgetRadio(); continues = false
         exo?.let { it.stop(); it.clearMediaItems() }
         tracks.clear(); unshuffled = null
@@ -347,27 +372,19 @@ object LocalPlayer {
      * queue (queued, or the list's songs), as a drag in the queue does.
      */
     fun moveBeside(from: Int, target: Int, after: Boolean) {
-        if (exo == null) return
-        if (from !in tracks.indices || target !in tracks.indices || from == target) return
+        val p = exo ?: return
+        val (order, toQueue) = LocalQueueOrder.moveBeside(tracks.toList(), p.currentMediaItemIndex, from, target, after, isQueued) ?: return
         val t = tracks[from]
-        if (tracks[target] in queued) queued += t else queued -= t
-        val order = tracks.toMutableList().apply { removeAt(from) }
-        val at = order.indexOfFirst { it === tracks[target] }
-        order.add(if (after) at + 1 else at, t)
-        val playing = current()
-        arrange(LocalQueueOrder.settle(order, order.indexOfFirst { it === playing }, isQueued))
+        if (toQueue) queued += t else queued -= t
+        arrange(order)
     }
 
     /** Moves the song at [from] into the queued songs: first ([target] null), else beside [target]. */
     fun moveIntoQueue(from: Int, target: Int?, after: Boolean) {
         val p = exo ?: return
-        if (from !in tracks.indices) return
         if (target != null) return moveBeside(from, target, after)
-        val t = tracks[from]
-        queued += t
-        val cur = p.currentMediaItemIndex
-        val order = tracks.toMutableList().apply { removeAt(from) }
-        order.add((if (from > cur) cur + 1 else cur).coerceIn(0, order.size), t)
+        val order = LocalQueueOrder.moveToFront(tracks.toList(), p.currentMediaItemIndex, from) ?: return
+        queued += tracks[from]
         arrange(order)
     }
 
@@ -406,10 +423,14 @@ object LocalPlayer {
     /** Puts the player's items in [target]'s order with moves only, so the current song keeps playing. */
     private fun arrange(target: List<LocalTrack>) {
         val p = exo ?: return
-        for (k in target.indices) {
-            val j = (k until tracks.size).firstOrNull { tracks[it] === target[k] } ?: continue
-            if (j != k) { p.moveMediaItem(j, k); tracks.add(k, tracks.removeAt(j)) }
-        }
+        // The player reports each single move: the queue shown would flicker through half-moved orders.
+        arranging = true
+        try {
+            for (k in target.indices) {
+                val j = (k until tracks.size).firstOrNull { tracks[it] === target[k] } ?: continue
+                if (j != k) { p.moveMediaItem(j, k); tracks.add(k, tracks.removeAt(j)) }
+            }
+        } finally { arranging = false }
         publish()
     }
 
@@ -515,8 +536,10 @@ object LocalPlayer {
     /** Player.PLAY_WHEN_READY_CHANGE_REASON_*, from 1. */
     private val PLAY_WHEN_READY_REASONS = listOf("asked", "audio focus lost", "audio becoming noisy", "remote", "end of item", "suppressed too long")
 
+    private var arranging = false
+
     private fun publish() {
-        if (!active.value) return
+        if (!active.value || arranging) return
         val t = current() ?: return
         // A queued song that started (or was skipped past) leaves the queue: it plays from there now.
         if (t in queued) playingQueued = t

@@ -36,7 +36,7 @@ fun Modifier.immersiveClickable(
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
-        animationSpec = spring(stiffness = 900f),
+        animationSpec = com.music.spotui.ui.immersive.motion.ImmersiveMotion.pressSpring(),
         label = "immersiveClickableScale",
     )
     val haptics = LocalHapticFeedback.current

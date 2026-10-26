@@ -128,11 +128,14 @@ fun ImmersiveLyricsPanel(modifier: Modifier = Modifier, contentPadding: PaddingV
     val song = Graph.currentSongState
     val title = song.title.value
     val artist = song.singer.value
-    LaunchedEffect(title, artist, SongPlayer.currentTrackId) {
+    // currentTrackId is plain data, not Compose state: a skip whose title and artist are the same
+    // (or that reports its id after them) would never re-run this. The playing item's uri is state.
+    val playingUri = SongPlayer.nowPlaying.value.uri
+    LaunchedEffect(title, artist, playingUri, SongPlayer.currentTrackId) {
         SongPlayer.currentLyricsTrack()?.let(vm::load)
     }
     val state by vm.state.collectAsState()
-    val trackKey = "${SongPlayer.currentTrackId}|$title|$artist"
+    val trackKey = "$playingUri|${SongPlayer.currentTrackId}|$title|$artist"
 
     when (val current = state) {
         is LyricsViewModel.State.Loading -> LyricsSkeleton(

@@ -244,7 +244,7 @@ private fun GroupRow(group: RecentGroup, expanded: Boolean, onToggle: () -> Unit
     val reduceMotion = rememberReduceMotion()
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
-        animationSpec = if (reduceMotion) snap() else spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = if (reduceMotion) snap() else com.music.spotui.ui.immersive.motion.ImmersiveMotion.placementSpring(),
         label = "recents chevron",
     )
     val artist = group.context.kind == MediaKind.ARTIST

@@ -31,8 +31,42 @@ object ImmersiveMotion {
      * The floating chrome folding and unfolding (the tab bar minimizing to a pill, the top bar's
      * controls shrinking): a soft spring with a hint of overshoot. Snaps under "reduce motion".
      */
-    fun <T> chromeSpring(reduce: Boolean = false): androidx.compose.animation.core.AnimationSpec<T> =
+    fun <T> chromeSpring(reduce: Boolean = false): androidx.compose.animation.core.FiniteAnimationSpec<T> =
         if (reduce) androidx.compose.animation.core.snap() else spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+
+    /**
+     * The one set of durations and springs of the Immersive look (iOS 26 feel): everything that
+     * moves on a finger uses a spring, everything that fades uses these. Screens pick from here
+     * instead of writing their own numbers.
+     */
+    const val FADE_MS = 150
+    const val SHORT_MS = 220
+    const val MEDIUM_MS = 320
+    const val LONG_MS = 420
+    const val TINT_MS = 600
+
+    /** Press feedback (scale under the finger): stiff and fully damped, it never wobbles. */
+    fun <T> pressSpring() = spring<T>(stiffness = 900f)
+
+    /**
+     * Glass objects that travel (the tab selection pill, a lens): one soft pass beyond the mark,
+     * then settled. Damping 0.72, stiffness 320.
+     */
+    fun <T> glassSpring() = spring<T>(dampingRatio = 0.72f, stiffness = 320f)
+
+    /** Release of a glass surface after a press: a touch of overshoot. */
+    fun <T> releaseSpring() = spring<T>(dampingRatio = 0.62f, stiffness = Spring.StiffnessMedium)
+
+    /** Content that resizes inside a floating container (controls opening in a pill). */
+    fun <T> sizeSpring() = spring<T>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+
+    /**
+     * The full player rising from the mini player and going back: critically damped with a long
+     * soft landing. Snaps under "reduce motion".
+     */
+    fun slideSpring(reduce: Boolean = false): androidx.compose.animation.core.AnimationSpec<Float> =
+        if (reduce) androidx.compose.animation.core.snap()
+        else spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 195f, visibilityThreshold = 0.5f)
 
     /** A page pushed or popped by the nav host. */
     private const val PAGE_MS = 380
@@ -44,20 +78,20 @@ object ImmersiveMotion {
      */
     object Pages {
         fun enter(reduce: Boolean): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-            if (reduce) fadeIn(tween(150)) else slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1))) { it } +
+            if (reduce) fadeIn(tween(FADE_MS)) else slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1))) { it } +
                 fadeIn(tween(PAGE_MS / 2))
         }
 
         fun exit(reduce: Boolean): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-            if (reduce) fadeOut(tween(150)) else slideOutHorizontally(tween(PAGE_MS)) { -it / 3 } + fadeOut(tween(PAGE_MS))
+            if (reduce) fadeOut(tween(FADE_MS)) else slideOutHorizontally(tween(PAGE_MS)) { -it / 3 } + fadeOut(tween(PAGE_MS))
         }
 
         fun popEnter(reduce: Boolean): AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-            if (reduce) fadeIn(tween(150)) else slideInHorizontally(tween(PAGE_MS)) { -it / 3 } + fadeIn(tween(PAGE_MS))
+            if (reduce) fadeIn(tween(FADE_MS)) else slideInHorizontally(tween(PAGE_MS)) { -it / 3 } + fadeIn(tween(PAGE_MS))
         }
 
         fun popExit(reduce: Boolean): AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-            if (reduce) fadeOut(tween(150)) else slideOutHorizontally(tween(PAGE_MS)) { it } + fadeOut(tween(PAGE_MS / 2))
+            if (reduce) fadeOut(tween(FADE_MS)) else slideOutHorizontally(tween(PAGE_MS)) { it } + fadeOut(tween(PAGE_MS / 2))
         }
     }
 }

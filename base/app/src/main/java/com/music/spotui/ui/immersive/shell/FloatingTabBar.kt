@@ -112,7 +112,7 @@ private val DefaultTabBarContentModifier: @Composable () -> Modifier = { Modifie
  * Damping 0.72 rather than half-damped: it settles on the second approach — one soft pass
  * beyond the mark and done — which is the difference between bouncy and alive.
  */
-private val GlassSpring = spring<Float>(dampingRatio = 0.72f, stiffness = 320f)
+private val GlassSpring = com.music.spotui.ui.immersive.motion.ImmersiveMotion.glassSpring<Float>()
 
 /**
  * A floating tab bar: a pill of tabs, and optionally one standalone tab in a circle of its own

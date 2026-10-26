@@ -104,6 +104,8 @@ import com.music.spotui.ui.look.rememberPauseScale
 // Sizes and gaps of the portrait layout, as the player this follows has them.
 private val THUMB_SIZE = 54.dp
 private val HEADER_HEIGHT = 60.dp
+// Covers.large is 640px: the cover is always decoded at that, whatever size the box has right now.
+private const val COVER_DECODE_PX = 640
 private val ART_TITLE_GAP = 20.dp
 private val ART_BOX_TOP_PAD = 8.dp
 private val DISMISS_STRIP_HEIGHT = 32.dp
@@ -118,7 +120,7 @@ internal val PLAYER_GUTTER = 30.dp
 internal val PLAYER_MAX_WIDTH = 560.dp
 
 /** How long the sleeve takes to travel between the full player and the header. */
-private const val PANEL_TRAVEL_MS = 420
+private const val PANEL_TRAVEL_MS = com.music.spotui.ui.immersive.motion.ImmersiveMotion.LONG_MS
 
 private val ArtCorner = RoundedCornerShape(8.dp)
 
@@ -192,7 +194,7 @@ fun ImmersivePlayer(
 ) {
     val context = LocalContext.current
     val palette = rememberArtworkColors(state.coverUrl.takeIf { it.isNotBlank() })
-    val tint by animateColorAsState(playerTintOf(palette), tween(600), label = "playerTint")
+    val tint by animateColorAsState(playerTintOf(palette), tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.TINT_MS), label = "playerTint")
 
     var panel by rememberSaveable { mutableIntStateOf(Panel.NONE) }
     var showMenu by remember { mutableStateOf(false) }
@@ -297,6 +299,10 @@ fun ImmersivePlayer(
                             loading = placeholder(R.drawable.placeholder),
                             failure = placeholder(R.drawable.placeholder),
                             modifier = Modifier.fillMaxSize(),
+                            // The box shrinks to the 60dp header thumbnail and grows back: Glide sizes the
+                            // request from the constraints it first sees, so without a fixed size a cover
+                            // first measured (or reloaded) while collapsed stays a small bitmap.
+                            requestBuilderTransform = { it.override(COVER_DECODE_PX) },
                         )
                     }
 

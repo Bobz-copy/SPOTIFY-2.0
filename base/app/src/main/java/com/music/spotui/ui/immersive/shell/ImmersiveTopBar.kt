@@ -197,13 +197,14 @@ fun ImmersiveTopBar(
                     .graphicsLayer { alpha = collapse() },
             )
             if (onBack != null) {
+                val backSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .padding(start = Immersive.Gutter)
                         .size(controlSize)
-                        .immersiveGlassSurface(CircleShape, hazeState)
-                        .clickable(role = Role.Button, onClick = onBack),
+                        .immersiveGlassSurface(CircleShape, hazeState, interactionSource = backSource)
+                        .clickable(interactionSource = backSource, indication = null, role = Role.Button, onClick = onBack),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -222,10 +223,7 @@ fun ImmersiveTopBar(
                         .immersiveGlassSurface(CircleShape, hazeState)
                         // Keep the right edge fixed while a new action opens room to its left.
                         .animateContentSize(
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMediumLow,
-                            ),
+                            animationSpec = ImmersiveMotion.sizeSpring(),
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

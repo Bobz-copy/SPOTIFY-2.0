@@ -54,7 +54,7 @@ fun rememberHeaderCollapse(listState: LazyListState): () -> Float {
 fun CoverGlow(coverUrl: String?, height: Dp, modifier: Modifier = Modifier) {
     val palette = rememberArtworkColors(coverUrl?.takeIf { it.isNotBlank() })
     val base = palette.colors.firstOrNull() ?: Color.DarkGray
-    val tint by animateColorAsState(lerp(base, Color.Black, 0.35f), tween(600), label = "coverGlow")
+    val tint by animateColorAsState(lerp(base, Color.Black, 0.35f), tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.TINT_MS), label = "coverGlow")
     Box(
         modifier
             .height(height)

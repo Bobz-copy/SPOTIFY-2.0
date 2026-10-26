@@ -23,6 +23,9 @@ sealed interface BackdropEffectScope : Density, RuntimeShaderCache {
 
     val size: Size
 
+    /** Vendored addition: the fraction of the surface resolution the effects run at ([size] is already scaled). */
+    val contentScale: Float
+
     val layoutDirection: LayoutDirection
 
     val shape: Shape
@@ -37,6 +40,7 @@ internal abstract class BackdropEffectScopeImpl : BackdropEffectScope, RuntimeSh
     override var density: Float = 1f
     override var fontScale: Float = 1f
     override var size: Size = Size.Unspecified
+    override var contentScale: Float = 1f
     override var layoutDirection: LayoutDirection = LayoutDirection.Ltr
     override var padding: Float = 0f
     override var renderEffect: RenderEffect? = null
@@ -57,11 +61,13 @@ internal abstract class BackdropEffectScopeImpl : BackdropEffectScope, RuntimeSh
         val newLayoutDirection = scope.layoutDirection
 
         val changed = newDensity != density ||
+                contentScale != this.contentScale ||
                 newFontScale != fontScale ||
                 newSize != size ||
                 newLayoutDirection != layoutDirection
 
         if (changed) {
+            this.contentScale = contentScale
             density = newDensity
             fontScale = newFontScale
             size = newSize
@@ -79,6 +85,7 @@ internal abstract class BackdropEffectScopeImpl : BackdropEffectScope, RuntimeSh
 
     fun reset() {
         density = 1f
+        contentScale = 1f
         fontScale = 1f
         size = Size.Unspecified
         layoutDirection = LayoutDirection.Ltr

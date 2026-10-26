@@ -5,6 +5,7 @@ import com.music.spotui.ui.theme.AppText
 import com.music.spotui.ui.theme.AppMuted
 
 import kotlinx.coroutines.launch
+import com.music.spotui.ui.components.SearchClearButton
 import com.music.spotui.ui.components.pressable
 import androidx.compose.ui.res.stringResource
 
@@ -865,6 +866,9 @@ fun SearchStickyBar(
     onTextChange: (String) -> Unit,
 ) {
 
+    // The field is always attached to a requester, so the clear button can put the cursor back in it.
+    val ownFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val fieldFocus = focusRequester ?: ownFocus
     Row(verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
@@ -882,7 +886,7 @@ fun SearchStickyBar(
         TextField(
             enabled = true,
             modifier = Modifier
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .focusRequester(fieldFocus)
                 .onFocusChanged { onFocusChange(it.isFocused) },
             value = text,
             textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
@@ -905,7 +909,10 @@ fun SearchStickyBar(
                     text = stringResource(R.string.search_header_field_hint)
 
                 )
-            }
+            },
+            trailingIcon = if (text.isEmpty()) null else {
+                { SearchClearButton(fieldFocus, Color.Black) { onTextChange("") } }
+            },
         )
     }
 }

@@ -54,7 +54,7 @@ fun ImmersiveBottomFade(
     val height by animateDpAsState(
         targetValue = inset + if (withMiniPlayer) FADE_HEIGHT_WITH_MINI_PLAYER else FADE_HEIGHT,
         // Matches the beat the mini player takes to appear.
-        animationSpec = tween(220),
+        animationSpec = tween(com.music.spotui.ui.immersive.motion.ImmersiveMotion.SHORT_MS),
         label = "immersiveBottomFadeHeight",
     )
     val brush = remember(pageColor) {

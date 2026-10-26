@@ -343,7 +343,7 @@ private val PILL_SEGMENT_WIDTH = 64.dp
 private val PILL_ICON_SIZE = 24.dp
 
 /** How long the capsule takes to cross from the middle of the row to the lyrics glyph's place as the queue opens, and back. */
-private const val PILL_SLIDE_MS = 320
+private const val PILL_SLIDE_MS = com.music.spotui.ui.immersive.motion.ImmersiveMotion.MEDIUM_MS
 
 /** How wide a capsule of [segments] comes out, dividers included. */
 private fun pillWidth(segments: Int): Dp = PILL_SEGMENT_WIDTH * segments + 1.dp * (segments - 1)
@@ -360,7 +360,7 @@ private fun Pill(content: @Composable androidx.compose.foundation.layout.RowScop
             .clip(CircleShape)
             .background(LocalPlayerTint.current.copy(alpha = 0.12f))
             .animateContentSize(
-                animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+                animationSpec = com.music.spotui.ui.immersive.motion.ImmersiveMotion.chromeSpring(),
             ),
         verticalAlignment = Alignment.CenterVertically,
         content = content,

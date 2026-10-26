@@ -297,6 +297,7 @@ object SpotifyMethods {
         typed("player", "moveInQueue", QUEUE, "reorder the queue") { a -> player.moveInQueue(a.queueItem(0, "item"), a.queueItem(1, "target"), a.bool(2, "after", false)) }
         typed("player", "setVolume", CONTROL, "change the volume") { a -> player.setVolume(a.double(0, "level")) }
         typed("player", "setSpeed", CONTROL, "change the playback speed") { a -> player.setSpeed(a.double(0, "speed")) }
+        typed("player", "setLocalMute", CONTROL, "keep playing unheard on this phone") { a -> player.setLocalMute(a.bool(0, "on")) }
 
         // ── search ──
         typed("search", "all", CATALOG) { a -> search.all(a.str(0, "query"), a.int(1, "limit", 10)) }

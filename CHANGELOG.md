@@ -2,6 +2,17 @@
 
 Each release on GitHub shows its section below. The app shows it too when it offers the update. Every detail: [docs/CHANGELOG-full.md](docs/CHANGELOG-full.md).
 
+## 2.0.2-beta.7
+
+- 💎 **Real Liquid Glass** (Immersive): lens refraction, specular rim and a live blur of what scrolls behind, now also on phones with system window blurs off (Android 13+; live blur on Android 12). Softer springs and press feedback across the look.
+- ⏭️ **Songs skipping on their own**: when Spotify drops several songs in a row, the app stops and tells you instead of chaining through your queue. Diagnostic reports now say why every song changed.
+- ↕️ **Immersive queue**: dragged songs stay where you drop them, move between "Next in queue" and "Next from", and the list scrolls at the edges.
+- 🖼️ **Sharp covers in Immersive** after opening the lyrics.
+- 🎨 **Accent colour** now applies to the Immersive look; no more click sound in its full-screen player; lyrics follow the song after a skip.
+- ⏮️ **Previous** goes back a song instead of restarting it when tapped right after a skip.
+- 🔁 **Reopening the app** brings back the song from an extension or a download, its queue and position.
+- ✖️ **Clear button** in search fields.
+
 ## 2.0.2-beta.6
 
 - 🔔 **Update popup fixed**: it shows as soon as the app knows about the update, a stray tap no longer closes it, and after "Later" the update stays in Settings, About.

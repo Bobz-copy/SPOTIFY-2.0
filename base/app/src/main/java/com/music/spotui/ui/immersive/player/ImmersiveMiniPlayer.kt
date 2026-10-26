@@ -91,6 +91,7 @@ fun ImmersiveMiniPlayer(navController: NavController, modifier: Modifier = Modif
     val adPlaying = SongPlayer.adPlaying
     val buffering = SongPlayer.isBuffering
     val shape = RoundedCornerShape(MINI_HEIGHT / 2)
+    val capsuleSource = remember { MutableInteractionSource() }
 
     Row(
         modifier = modifier
@@ -99,9 +100,9 @@ fun ImmersiveMiniPlayer(navController: NavController, modifier: Modifier = Modif
             // Where the Classic sheet rises from; kept up to date for the pages that read it.
             .onGloballyPositioned { PlayerSheet.miniTop = it.boundsInWindow().top }
             .miniPlayerGestures()
-            .immersiveGlassSurface(shape)
+            .immersiveGlassSurface(shape, interactionSource = capsuleSource)
             .clip(shape)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { PlayerSheet.show() }
+            .clickable(interactionSource = capsuleSource, indication = null) { PlayerSheet.show() }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
